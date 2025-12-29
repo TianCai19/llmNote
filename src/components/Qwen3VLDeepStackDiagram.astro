@@ -1,0 +1,38 @@
+---
+// DeepStack visual injection across layers
+---
+<div class="svg-container">
+    <svg width="620" height="260" viewBox="0 0 620 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DeepStack multi-layer injection">
+        <defs>
+            <marker id="deep-arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#475569" />
+            </marker>
+        </defs>
+
+        <rect x="40" y="30" width="180" height="200" rx="12" fill="#dbeafe" stroke="#2563eb" stroke-width="2" />
+        <text x="130" y="55" text-anchor="middle" font-weight="700" fill="#1e40af">Vision Encoder</text>
+
+        <rect x="70" y="80" width="120" height="30" rx="6" fill="#bfdbfe" />
+        <rect x="70" y="120" width="120" height="30" rx="6" fill="#93c5fd" />
+        <rect x="70" y="160" width="120" height="30" rx="6" fill="#60a5fa" />
+        <text x="130" y="100" text-anchor="middle" font-size="11" fill="#1e40af">Layer L1</text>
+        <text x="130" y="140" text-anchor="middle" font-size="11" fill="#1e40af">Layer L2</text>
+        <text x="130" y="180" text-anchor="middle" font-size="11" fill="#1e40af">Layer L3</text>
+
+        <rect x="400" y="30" width="180" height="200" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="2" />
+        <text x="490" y="55" text-anchor="middle" font-weight="700" fill="#92400e">Qwen3 LLM</text>
+
+        <rect x="430" y="80" width="120" height="30" rx="6" fill="#fde68a" />
+        <rect x="430" y="120" width="120" height="30" rx="6" fill="#fcd34d" />
+        <rect x="430" y="160" width="120" height="30" rx="6" fill="#fbbf24" />
+        <text x="490" y="100" text-anchor="middle" font-size="11" fill="#92400e">LLM Layer 1</text>
+        <text x="490" y="140" text-anchor="middle" font-size="11" fill="#92400e">LLM Layer 2</text>
+        <text x="490" y="180" text-anchor="middle" font-size="11" fill="#92400e">LLM Layer 3</text>
+
+        <path d="M 190 95 L 400 95" stroke="#475569" stroke-width="2" marker-end="url(#deep-arrow)" />
+        <path d="M 190 135 L 400 135" stroke="#475569" stroke-width="2" marker-end="url(#deep-arrow)" />
+        <path d="M 190 175 L 400 175" stroke="#475569" stroke-width="2" marker-end="url(#deep-arrow)" />
+
+        <text x="310" y="240" text-anchor="middle" font-size="12" fill="#64748b">多层特征同时注入，保留纹理与语义</text>
+    </svg>
+</div>

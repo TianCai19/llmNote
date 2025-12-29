@@ -1,0 +1,30 @@
+---
+// 2x2 visual feature merge into one token
+---
+<div class="svg-container">
+    <svg width="520" height="220" viewBox="0 0 520 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="2x2 visual token compression">
+        <defs>
+            <marker id="merge-arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#475569" />
+            </marker>
+        </defs>
+
+        <rect x="30" y="40" width="140" height="140" rx="12" fill="#eef2ff" stroke="#6366f1" stroke-width="2" />
+        <rect x="44" y="54" width="48" height="48" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5" />
+        <rect x="104" y="54" width="48" height="48" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5" />
+        <rect x="44" y="114" width="48" height="48" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5" />
+        <rect x="104" y="114" width="48" height="48" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.5" />
+
+        <text x="100" y="32" text-anchor="middle" font-size="12" fill="#4338ca">2×2 特征块</text>
+
+        <path d="M 180 110 L 260 110" stroke="#475569" stroke-width="2" marker-end="url(#merge-arrow)" />
+        <text x="220" y="92" text-anchor="middle" font-size="12" fill="#64748b">MLP 压缩</text>
+
+        <rect x="300" y="65" width="160" height="90" rx="14" fill="#fef3c7" stroke="#d97706" stroke-width="2" />
+        <circle cx="380" cy="110" r="20" fill="#fdba74" stroke="#c2410c" stroke-width="2" />
+        <text x="380" y="115" text-anchor="middle" font-weight="700" fill="#7c2d12">v</text>
+        <text x="380" y="145" text-anchor="middle" font-size="12" fill="#92400e">1 token</text>
+
+        <text x="380" y="45" text-anchor="middle" font-size="12" fill="#c2410c">视觉 token</text>
+    </svg>
+</div>

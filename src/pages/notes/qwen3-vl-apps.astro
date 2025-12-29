@@ -1,0 +1,256 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Qwen3VLInferencePipeline from '../../components/Qwen3VLInferencePipeline.astro';
+---
+
+<BaseLayout title="Qwen3-VL：能力、评测与落地（Part 3）" description="学生向落地指南：能力地图、评测理解、Prompt 设计与部署细节">
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Qwen3-VL：能力、评测与落地（学生版）</h1>
+        <p class="text-xl text-gray-500">这部分回答两个问题：能做什么？怎么用得好？</p>
+    </header>
+
+    <div class="note-box">
+        <strong>系列导航：</strong>
+        <div class="mt-3 flex flex-wrap gap-3">
+            <a class="chip" href="/notes/qwen-vl">Part 1: 架构与原理</a>
+            <a class="chip" href="/notes/qwen3-vl-training">Part 2: 训练与数据</a>
+            <a class="chip" href="/notes/qwen3-vl-apps">Part 3: 能力、评测与落地</a>
+        </div>
+    </div>
+
+    <nav class="toc" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#ch1">1. 能力地图（学生版）</a></li>
+            <li><a href="#ch2">2. 推理流程与输出格式</a></li>
+            <li><a href="#ch3">3. 视觉 token 预算</a></li>
+            <li><a href="#ch4">4. 调用与部署示例</a></li>
+            <li><a href="#ch5">5. 评测与阅读方式</a></li>
+            <li><a href="#ch6">6. Prompt 设计与常见问题</a></li>
+            <li><a href="#ch7">7. 小结与练习</a></li>
+        </ul>
+    </nav>
+
+    <article class="chapter" id="ch1">
+        <header class="chapter-header">
+            <h2>第 1 章：能力地图（学生版）</h2>
+        </header>
+        <p>官方 README 强调 Qwen3-VL 在视觉、视频、Agent 与推理能力上的升级。<a href="https://github.com/QwenLM/Qwen3-VL" class="text-emerald-700">[1]</a></p>
+        <ul class="list-disc pl-6">
+            <li><strong>Visual Agent：</strong>不仅“看懂界面”，还能执行操作。</li>
+            <li><strong>视觉编程：</strong>把截图变成 HTML/CSS/SVG。</li>
+            <li><strong>空间感知：</strong>2D/3D 定位更稳定。</li>
+            <li><strong>长视频理解：</strong>上下文 256K，可扩展 1M。</li>
+            <li><strong>STEM 推理：</strong>从“看懂图”到“解题推理”。</li>
+            <li><strong>OCR 扩展：</strong>32 语言、多场景鲁棒。</li>
+        </ul>
+        <div class="note-box">
+            <strong>学生版理解：</strong>这相当于把“视觉感知 + 语言推理 + 工具执行”合成一个大脑。
+        </div>
+    </article>
+
+    <article class="chapter" id="ch2">
+        <header class="chapter-header">
+            <h2>第 2 章：推理流程与输出格式</h2>
+        </header>
+
+        <h3>2.1 一次推理流程</h3>
+        <p>推理流程可以拆成：输入 → Processor → 模型生成。Processor 的作用是把图像/视频转成视觉 token。<a href="https://github.com/QwenLM/Qwen3-VL" class="text-emerald-700">[1]</a></p>
+        <Qwen3VLInferencePipeline />
+
+        <h3>2.2 任务类型 × 输出格式</h3>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">任务</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">学生场景</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">输出</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-sm">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">OCR</td>
+                        <td class="px-4 py-3">作业截图文字整理</td>
+                        <td class="px-4 py-3">文本 / JSON</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">Grounding</td>
+                        <td class="px-4 py-3">标出图表关键区域</td>
+                        <td class="px-4 py-3">坐标 / bbox</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">视频理解</td>
+                        <td class="px-4 py-3">找出关键步骤时间点</td>
+                        <td class="px-4 py-3">时间戳 + 描述</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">多模态编程</td>
+                        <td class="px-4 py-3">截图 → HTML/SVG</td>
+                        <td class="px-4 py-3">代码</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>2.3 坐标输出的规范</h3>
+        <p>定位任务通常用“归一化坐标”。如果图像宽高为 $W, H$，像素坐标 $(x, y)$ 的归一化是：</p>
+        <div class="bg-gray-50 p-4 rounded-xl font-mono text-sm">
+            $$x' = \frac&#123;x&#125;&#123;W&#125;, \quad y' = \frac&#123;y&#125;&#123;H&#125;$$
+        </div>
+        <div class="note-box text-sm">
+            <p><strong>示例：</strong></p>
+            <p>User: 把折线图区域标出来，输出 bbox（归一化坐标）。</p>
+            <p>Assistant: bbox=[0.12, 0.22, 0.78, 0.65]</p>
+        </div>
+
+        <h3>2.4 时间戳输出的规范</h3>
+        <p>视频任务建议要求“只输出秒数”，更稳定、可解析。</p>
+        <div class="note-box text-sm">
+            <p>User: 视频中“装置启动”的时间点是什么？只输出秒数。</p>
+            <p>Assistant: 42.7 seconds</p>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-xl font-mono text-sm">
+            规范化输出：&#123;"event": "start", "time": 42.7&#125;
+        </div>
+    </article>
+
+    <article class="chapter" id="ch3">
+        <header class="chapter-header">
+            <h2>第 3 章：视觉 token 预算</h2>
+        </header>
+        <p>视觉 token 数和像素预算成正比，压缩比约为 32。<a href="https://github.com/QwenLM/Qwen3-VL" class="text-emerald-700">[1]</a></p>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm">
+            $$N_&#123;vision&#125; \approx \frac&#123;H \times W&#125;&#123;32^2&#125;$$
+        </div>
+        <p>直觉理解：图像越大，token 越多，注意力计算就越慢。</p>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto mt-4">
+            <pre><code class="language-python">processor.image_processor.size = &#123;
+    "longest_edge": 1280 * 32 * 32,
+    "shortest_edge": 256 * 32 * 32,
+&#125;</code></pre>
+        </div>
+    </article>
+
+    <article class="chapter" id="ch4">
+        <header class="chapter-header">
+            <h2>第 4 章：调用与部署示例</h2>
+        </header>
+
+        <h3>4.1 Transformers 推理调用</h3>
+        <p>官方 README 提供了标准调用方式。建议 transformers >= 4.57。<a href="https://github.com/QwenLM/Qwen3-VL" class="text-emerald-700">[1]</a></p>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-python">from transformers import AutoModelForImageTextToText, AutoProcessor
+
+model = AutoModelForImageTextToText.from_pretrained(
+    "Qwen/Qwen3-VL-235B-A22B-Instruct", dtype="auto", device_map="auto"
+)
+processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-235B-A22B-Instruct")
+
+messages = [
+    &#123;
+        "role": "user",
+        "content": [
+            &#123;"type": "image", "image": "https://.../demo.jpeg"&#125;,
+            &#123;"type": "text", "text": "Describe this image."&#125;,
+        ],
+    &#125;
+]
+
+inputs = processor.apply_chat_template(
+    messages,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+    return_tensors="pt"
+)
+inputs = inputs.to(model.device)
+
+output_ids = model.generate(**inputs, max_new_tokens=128)
+output_text = processor.batch_decode(output_ids, skip_special_tokens=True)</code></pre>
+        </div>
+
+        <h3>4.2 vLLM 部署示例</h3>
+        <p>官方推荐 vLLM 进行高效部署。以下为 FP8/H100 示例。<a href="https://github.com/QwenLM/Qwen3-VL" class="text-emerald-700">[1]</a></p>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-shell">vllm serve Qwen/Qwen3-VL-235B-A22B-Instruct-FP8 \
+  --tensor-parallel-size 8 \
+  --mm-encoder-tp-mode data \
+  --enable-expert-parallel \
+  --async-scheduling \
+  --media-io-kwargs '&#123;"video": &#123;"num_frames": -1&#125;&#125;' \
+  --host 0.0.0.0 \
+  --port 22002</code></pre>
+        </div>
+    </article>
+
+    <article class="chapter" id="ch5">
+        <header class="chapter-header">
+            <h2>第 5 章：评测与阅读方式</h2>
+        </header>
+        <p>官方评测基于 VLMEvalKit 与 lmms-eval，并对部分 benchmark 调整了提示模板。<a href="https://github.com/QwenLM/Qwen3-VL" class="text-emerald-700">[1]</a></p>
+        <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="https://qianwen-res.oss-accelerate.aliyuncs.com/Qwen3-VL/table_nothinking_vl.jpg"
+                alt="Qwen3-VL evaluation tables"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-xs text-gray-500 mt-3">
+                官方评测表格截图（来源：Qwen3-VL 仓库）<a href="https://github.com/QwenLM/Qwen3-VL" class="text-emerald-700">[1]</a>
+            </figcaption>
+        </figure>
+        <div class="note-box">
+            <strong>怎么读这些表：</strong>不要只看分数高低，要看“任务类型”是否与你的场景匹配。
+        </div>
+    </article>
+
+    <article class="chapter" id="ch6">
+        <header class="chapter-header">
+            <h2>第 6 章：Prompt 设计与常见问题</h2>
+        </header>
+        <h3>6.1 Prompt 设计原则</h3>
+        <ul class="list-disc pl-6">
+            <li><strong>可解析输出优先：</strong>要求 JSON / 表格 / 坐标。</li>
+            <li><strong>分步骤提问：</strong>先识别，再推理，再汇总。</li>
+            <li><strong>给定格式：</strong>让模型“按格式填空”。</li>
+        </ul>
+        <div class="note-box text-sm">
+            <p>User: 识别这张发票，输出 JSON：&#123;company, total, date&#125;。</p>
+            <p>Assistant: &#123;"company": "...", "total": "...", "date": "..."&#125;</p>
+        </div>
+
+        <h3>6.2 学生常见问题（Q&A）</h3>
+        <div class="note-box text-sm">
+            <p><strong>Q：</strong>OCR 为什么会漏字？</p>
+            <p><strong>A：</strong>图像模糊/字体太小/倾斜会导致漏字。建议裁剪或提高分辨率，并要求逐行输出。</p>
+            <p class="mt-4"><strong>Q：</strong>多图输入时为什么混淆？</p>
+            <p><strong>A：</strong>可以给图片编号，让模型先描述再回答问题。</p>
+            <p class="mt-4"><strong>Q：</strong>定位结果不稳定怎么办？</p>
+            <p><strong>A：</strong>明确坐标格式（归一化 + bbox），并要求只输出坐标。</p>
+        </div>
+    </article>
+
+    <article class="chapter" id="ch7">
+        <header class="chapter-header">
+            <h2>第 7 章：小结与练习</h2>
+        </header>
+        <div class="chapter-summary">
+            <p><strong>小结：</strong>落地核心是“输出可解析、token 可控、任务可拆分”。</p>
+        </div>
+        <h3>思考题（自测）</h3>
+        <ol class="list-decimal pl-6">
+            <li>为什么多模态任务更需要结构化输出？</li>
+            <li>如何用 prompt 提升 OCR 的稳定性？</li>
+            <li>视觉 token 预算公式告诉你什么？</li>
+        </ol>
+    </article>
+
+    <div class="card">
+        <h2>参考与引用</h2>
+        <ol class="list-decimal pl-6 text-sm text-gray-600 space-y-2">
+            <li><a href="https://github.com/QwenLM/Qwen3-VL">Qwen3-VL GitHub Repository</a></li>
+            <li><a href="https://arxiv.org/pdf/2511.21631">Qwen3-VL Technical Report (arXiv:2511.21631)</a></li>
+        </ol>
+    </div>
+</BaseLayout>

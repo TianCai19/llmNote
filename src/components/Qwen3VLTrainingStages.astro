@@ -1,0 +1,34 @@
+---
+// Training stages timeline
+---
+<div class="svg-container">
+    <svg width="640" height="220" viewBox="0 0 640 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Qwen3-VL training stages">
+        <defs>
+            <marker id="stage-arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#475569" />
+            </marker>
+        </defs>
+
+        <rect x="40" y="100" width="110" height="60" rx="12" fill="#ecfdf3" stroke="#10b981" stroke-width="2" />
+        <text x="95" y="130" text-anchor="middle" font-weight="700" fill="#047857">S0</text>
+        <text x="95" y="148" text-anchor="middle" font-size="10" fill="#047857">对齐</text>
+
+        <rect x="190" y="90" width="110" height="70" rx="12" fill="#dbeafe" stroke="#2563eb" stroke-width="2" />
+        <text x="245" y="125" text-anchor="middle" font-weight="700" fill="#1e40af">S1</text>
+        <text x="245" y="145" text-anchor="middle" font-size="10" fill="#1e40af">多模态</text>
+
+        <rect x="340" y="80" width="110" height="80" rx="12" fill="#fef9c3" stroke="#eab308" stroke-width="2" />
+        <text x="395" y="120" text-anchor="middle" font-weight="700" fill="#a16207">S2</text>
+        <text x="395" y="142" text-anchor="middle" font-size="10" fill="#a16207">长上下文</text>
+
+        <rect x="490" y="70" width="110" height="90" rx="12" fill="#ffe4e6" stroke="#fb7185" stroke-width="2" />
+        <text x="545" y="115" text-anchor="middle" font-weight="700" fill="#be123c">S3</text>
+        <text x="545" y="138" text-anchor="middle" font-size="10" fill="#be123c">超长</text>
+
+        <path d="M 150 130 L 190 130" stroke="#475569" stroke-width="2" marker-end="url(#stage-arrow)" />
+        <path d="M 300 130 L 340 130" stroke="#475569" stroke-width="2" marker-end="url(#stage-arrow)" />
+        <path d="M 450 130 L 490 130" stroke="#475569" stroke-width="2" marker-end="url(#stage-arrow)" />
+
+        <text x="320" y="190" text-anchor="middle" font-size="12" fill="#64748b">从对齐到超长：逐级放大难度与序列长度</text>
+    </svg>
+</div>

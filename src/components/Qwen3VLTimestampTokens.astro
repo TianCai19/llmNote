@@ -1,0 +1,43 @@
+---
+// Video frame groups with timestamp tokens
+---
+<div class="svg-container">
+    <svg width="620" height="220" viewBox="0 0 620 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Timestamp tokens for video frames">
+        <defs>
+            <marker id="time-arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#475569" />
+            </marker>
+        </defs>
+
+        <rect x="30" y="50" width="120" height="120" rx="12" fill="#ecfeff" stroke="#06b6d4" stroke-width="2" />
+        <text x="90" y="115" text-anchor="middle" font-weight="700" fill="#0e7490">Video</text>
+        <text x="90" y="135" text-anchor="middle" font-size="11" fill="#0e7490">frames</text>
+
+        <path d="M 160 110 L 230 110" stroke="#475569" stroke-width="2" marker-end="url(#time-arrow)" />
+
+        <rect x="240" y="50" width="340" height="120" rx="12" fill="#f1f5f9" stroke="#94a3b8" />
+        <text x="410" y="70" text-anchor="middle" font-size="12" fill="#475569">序列中的时间戳 token</text>
+
+        <rect x="260" y="90" width="110" height="24" rx="6" fill="#fde68a" />
+        <text x="315" y="106" text-anchor="middle" font-size="11" fill="#92400e">&lt;3.0s&gt;</text>
+
+        <rect x="382" y="90" width="28" height="24" rx="4" fill="#bfdbfe" />
+        <rect x="416" y="90" width="28" height="24" rx="4" fill="#bfdbfe" />
+        <rect x="450" y="90" width="28" height="24" rx="4" fill="#bfdbfe" />
+        <text x="396" y="106" text-anchor="middle" font-size="10" fill="#1e40af">v</text>
+        <text x="430" y="106" text-anchor="middle" font-size="10" fill="#1e40af">v</text>
+        <text x="464" y="106" text-anchor="middle" font-size="10" fill="#1e40af">v</text>
+
+        <rect x="260" y="125" width="110" height="24" rx="6" fill="#fde68a" />
+        <text x="315" y="141" text-anchor="middle" font-size="11" fill="#92400e">&lt;01:02:15&gt;</text>
+
+        <rect x="382" y="125" width="28" height="24" rx="4" fill="#bfdbfe" />
+        <rect x="416" y="125" width="28" height="24" rx="4" fill="#bfdbfe" />
+        <rect x="450" y="125" width="28" height="24" rx="4" fill="#bfdbfe" />
+        <text x="396" y="141" text-anchor="middle" font-size="10" fill="#1e40af">v</text>
+        <text x="430" y="141" text-anchor="middle" font-size="10" fill="#1e40af">v</text>
+        <text x="464" y="141" text-anchor="middle" font-size="10" fill="#1e40af">v</text>
+
+        <text x="410" y="184" text-anchor="middle" font-size="11" fill="#64748b">显式时间 token = 更好定位</text>
+    </svg>
+</div>

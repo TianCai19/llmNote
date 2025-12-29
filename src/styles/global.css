@@ -170,3 +170,90 @@ main > header h1 {
 main > header p {
   @apply text-xl leading-relaxed text-slate-500;
 }
+
+.toc {
+  @apply mb-10 rounded-3xl border border-white/70 bg-white/85 p-6 sm:p-8;
+  box-shadow: var(--shadow);
+}
+
+.toc h2 {
+  @apply text-xl font-bold;
+  color: var(--accent-strong);
+}
+
+.toc ul {
+  @apply mt-4 grid gap-2 text-sm;
+  list-style: none;
+  padding-left: 0;
+}
+
+.toc a {
+  color: var(--accent);
+}
+
+.toc a:hover {
+  color: var(--accent-strong);
+}
+
+.chapter {
+  @apply mb-16;
+}
+
+.chapter-header {
+  @apply mb-6;
+}
+
+.chapter h2 {
+  @apply mb-4 text-3xl font-bold;
+  border-left: 5px solid var(--accent);
+  padding-left: 1rem;
+}
+
+.chapter h3 {
+  @apply mb-3 mt-8 text-2xl font-semibold;
+  color: var(--accent-strong);
+}
+
+.chapter h4 {
+  @apply mb-2 mt-6 text-xl font-semibold;
+  color: var(--ink);
+}
+
+.chapter p {
+  @apply mb-4 leading-loose text-slate-600;
+}
+
+.chapter ul,
+.chapter ol {
+  @apply mb-6 space-y-3 text-slate-600;
+}
+
+.chapter li {
+  @apply leading-relaxed;
+}
+
+.note-box {
+  @apply rounded-2xl border border-white/70 bg-white/85 p-5;
+  box-shadow: var(--shadow);
+}
+
+.note-box strong {
+  color: var(--accent-strong);
+}
+
+.chapter-summary {
+  @apply mt-8 rounded-2xl border border-white/70 bg-white/80 p-5;
+}
+
+.quote-block {
+  @apply my-6 rounded-2xl border border-white/70 bg-white/80 p-5 text-sm text-slate-700;
+  border-left: 4px solid var(--accent);
+}
+
+.quote-block p {
+  @apply mb-2 leading-relaxed;
+}
+
+.quote-block span {
+  color: var(--muted);
+}

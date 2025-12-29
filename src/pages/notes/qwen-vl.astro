@@ -1,0 +1,220 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Qwen3VLArchitectureDiagram from '../../components/Qwen3VLArchitectureDiagram.astro';
+import Qwen3VLTokenFlow from '../../components/Qwen3VLTokenFlow.astro';
+import Qwen3VLTokenCompression from '../../components/Qwen3VLTokenCompression.astro';
+import Qwen3VLInterleavedMRoPE from '../../components/Qwen3VLInterleavedMRoPE.astro';
+import Qwen3VLDeepStackDiagram from '../../components/Qwen3VLDeepStackDiagram.astro';
+import Qwen3VLTimestampTokens from '../../components/Qwen3VLTimestampTokens.astro';
+---
+
+<BaseLayout title="Qwen3-VL：技术报告精读（Part 1 架构与核心原理）" description="面向学生的底层讲解：从视觉 token 到 Qwen3-VL 三大创新的完整逻辑链">
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Qwen3-VL：从零理解架构与核心原理</h1>
+        <p class="text-xl text-gray-500">底向上、口语化、可理解：先搞懂 token，再看 Qwen3-VL 的三大创新</p>
+    </header>
+
+    <div class="note-box">
+        <strong>系列导航：</strong>
+        <div class="mt-3 flex flex-wrap gap-3">
+            <a class="chip" href="/notes/qwen-vl">Part 1: 架构与原理</a>
+            <a class="chip" href="/notes/qwen3-vl-training">Part 2: 训练与数据</a>
+            <a class="chip" href="/notes/qwen3-vl-apps">Part 3: 能力、评测与落地</a>
+        </div>
+    </div>
+
+    <nav class="toc" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#ch1">1. 多模态的第一道门槛</a></li>
+            <li><a href="#ch2">2. 视觉 token 的生成流水线</a></li>
+            <li><a href="#ch3">3. Qwen3-VL 的三段式架构</a></li>
+            <li><a href="#ch4">4. 三大创新的底层逻辑</a></li>
+            <li><a href="#ch5">5. 学生常见疑问</a></li>
+            <li><a href="#ch6">6. 小结与练习</a></li>
+        </ul>
+    </nav>
+
+    <article class="chapter" id="ch1">
+        <header class="chapter-header">
+            <h2>第 1 章：多模态的第一道门槛</h2>
+        </header>
+
+        <h3>1.1 LLM 的基本假设：输入是一串 token</h3>
+        <p>LLM 的世界观很简单：输入必须是离散 token 序列。每个 token 会被查表变成向量：</p>
+        <div class="bg-gray-50 p-4 rounded-xl font-mono text-sm overflow-x-auto">
+            $$e_i = W_&#123;token_i&#125;$$
+        </div>
+        <p>换句话说，LLM 只会读“词表里的编号”。如果你给它一张图片，它会说：这不是编号序列。</p>
+
+        <h3>1.2 图像是连续网格，不是序列</h3>
+        <p>图像是一个连续的像素网格 $H \times W \times C$。每个像素是连续值，不在词表里。多模态的第一道门槛就是：<strong>如何把图像翻译成 token 序列</strong>。</p>
+
+        <h3>1.3 统一 token 空间：多模态的核心思想</h3>
+        <p>只要把图像变成 token，LLM 就能用同一套注意力机制理解它。多模态的本质其实很朴素：<strong>让不同模态都“说同一种语言”</strong>。</p>
+
+        <div class="note-box">
+            <strong>学生版结论：</strong>多模态的真正难点不是“有没有大模型”，而是“如何对齐 token 空间”。
+        </div>
+    </article>
+
+    <article class="chapter" id="ch2">
+        <header class="chapter-header">
+            <h2>第 2 章：视觉 token 的生成流水线</h2>
+        </header>
+
+        <h3>2.1 Patch：把图片切成“小词”</h3>
+        <p>经典做法是把图片切成 Patch，每个 Patch 展平后变成一个向量。Patch 数量近似为：</p>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            $$N = \frac&#123;H&#125;&#123;P&#125; \times \frac&#123;W&#125;&#123;P&#125;$$
+        </div>
+        <p>例如 $H=W=224, P=16$，则 $N=14\times 14=196$。所以一张图片就变成了 196 个 token。</p>
+
+        <h3>2.2 Patch Embedding：从像素到向量</h3>
+        <p>切完 Patch 后，每个 Patch 展平成向量，再乘一个线性投影矩阵：</p>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            $$X_p \in \mathbb&#123;R&#125;^&#123;N \times (P^2 C)&#125;$$
+            $$E = X_p W + b$$
+        </div>
+        <p>这一步就是“让图片说人话”：把像素维度投影到 LLM 能接受的隐藏维度。</p>
+
+        <h3>2.3 2×2 合并：让 token 数更少</h3>
+        <p>Qwen3-VL 进一步把 2×2 的视觉特征合并成 1 个 token，以减少序列长度。这样能显著降低推理成本。<a href="https://arxiv.org/pdf/2511.21631" class="text-emerald-700">[2]</a></p>
+        <Qwen3VLTokenCompression />
+        <div class="note-box">
+            <strong>直觉理解：</strong>像把 4 个相邻像素块合成一个“更浓缩的词”。
+        </div>
+
+        <h3>2.4 视觉 token 和文本 token 如何拼接</h3>
+        <p>只要视觉特征变成 token，就能和文本 token 拼接成一个序列，交给 LLM 注意力处理。</p>
+        <div class="bg-gray-50 p-4 rounded-xl font-mono text-sm">
+            [文本 token] + [视觉 token] + [问题 token]
+        </div>
+        <Qwen3VLTokenFlow />
+    </article>
+
+    <article class="chapter" id="ch3">
+        <header class="chapter-header">
+            <h2>第 3 章：Qwen3-VL 的三段式架构</h2>
+        </header>
+
+        <h3>3.1 三模块架构</h3>
+        <div class="quote-block">
+            <p>“Qwen3-VL adopts a three-module architecture comprising a vision encoder, an MLP-based vision–language merger, and a large language model (LLM).”</p>
+            <span>— Qwen3-VL Technical Report</span>
+        </div>
+        <p>简单说：视觉编码器负责“看”，融合器负责“翻译”，LLM 负责“说话”。</p>
+
+        <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="https://qianwen-res.oss-accelerate.aliyuncs.com/Qwen3-VL/qwen3vl_arc.jpg"
+                alt="Qwen3-VL architecture overview"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-xs text-gray-500 mt-3">
+                官方架构图（来源：Qwen3-VL 技术报告/仓库）
+                <a href="https://github.com/QwenLM/Qwen3-VL" class="text-emerald-700">[1]</a>
+                <a href="https://arxiv.org/pdf/2511.21631" class="text-emerald-700">[2]</a>
+            </figcaption>
+        </figure>
+        <Qwen3VLArchitectureDiagram />
+
+        <h3>3.2 视觉编码器：SigLIP-2 + 动态分辨率</h3>
+        <div class="quote-block">
+            <p>“We utilize the SigLIP-2 architecture ... To accommodate dynamic resolutions effectively, we employ 2D-RoPE and interpolate absolute position embeddings based on input size.”</p>
+            <span>— Qwen3-VL Technical Report</span>
+        </div>
+        <p>这意味着模型能适配不同分辨率图片，而不是强行缩放到固定尺寸。</p>
+
+        <h3>3.3 视觉语言融合器：MLP Merger</h3>
+        <div class="quote-block">
+            <p>“We use a two-layer MLP to compress 2 × 2 visual features ... aligned with the LLM’s hidden dimension.”</p>
+            <span>— Qwen3-VL Technical Report</span>
+        </div>
+        <p>这解释了为什么 Qwen3-VL 会把 2×2 的视觉特征合并成 1 个 token：为了在保持语义的同时降低序列长度。</p>
+
+        <h3>3.4 LLM：Dense 与 MoE 版本</h3>
+        <p>Qwen3-VL 同时提供 Dense 和 MoE 版本，旗舰模型 Qwen3-VL-235B-A22B 总参数 235B、每 token 激活 22B。<a href="https://arxiv.org/pdf/2511.21631" class="text-emerald-700">[2]</a></p>
+    </article>
+
+    <article class="chapter" id="ch4">
+        <header class="chapter-header">
+            <h2>第 4 章：三大创新的底层逻辑</h2>
+        </header>
+
+        <h3>4.1 Interleaved MRoPE：让频谱更均匀</h3>
+        <p>RoPE 是“把位置编码变成旋转”的方法：</p>
+        <div class="bg-gray-50 p-4 rounded-xl font-mono text-sm overflow-x-auto">
+            $$\text&#123;RoPE&#125;(x_&#123;2i&#125;, x_&#123;2i+1&#125;) = (x_&#123;2i&#125;\cos\theta - x_&#123;2i+1&#125;\sin\theta,\; x_&#123;2i&#125;\sin\theta + x_&#123;2i+1&#125;\cos\theta)$$
+        </div>
+        <p>多模态里有三个轴：时间 t、水平 h、垂直 w。原始 MRoPE 把三者分配到不同频段，但会导致频谱不均衡。</p>
+        <div class="quote-block">
+            <p>“We adopt an interleaved MRoPE that distributes t, h, and w uniformly across low- and high-frequency bands.”</p>
+            <span>— Qwen3-VL Technical Report</span>
+        </div>
+        <Qwen3VLInterleavedMRoPE />
+        <div class="note-box">
+            <strong>类比：</strong>就像乐曲里高低音要均匀分布，时间/空间信息也要均匀分布在频段里。
+        </div>
+
+        <h3>4.2 DeepStack：把细节送进 LLM</h3>
+        <p>只用最后一层视觉特征会丢掉纹理与局部细节。DeepStack 从多层抽特征，并注入 LLM 前几层。</p>
+        <div class="quote-block">
+            <p>“We incorporate the pioneering DeepStack mechanism, which injects visual tokens from multiple layers of the vision encoder into corresponding layers of the LLM.”</p>
+            <span>— Qwen3-VL Technical Report</span>
+        </div>
+        <Qwen3VLDeepStackDiagram />
+
+        <h3>4.3 时间戳 token：视频定位更直接</h3>
+        <p>Qwen2.5-VL 使用时间同步位置编码，但长视频会出现巨大位置 ID。Qwen3-VL 直接把时间戳作为文本 token。</p>
+        <div class="quote-block">
+            <p>“Each video temporal patch is prefixed with a timestamp expressed as a formatted text string.”</p>
+            <span>— Qwen3-VL Technical Report</span>
+        </div>
+        <Qwen3VLTimestampTokens />
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm">
+            $$[\text&#123;&lt;1.5 seconds&gt;&#125;, v_1, v_2, v_3, \ldots]$$
+            $$[\text&#123;&lt;01:02:15&gt;&#125;, v_&#123;t&#125;, v_&#123;t+1&#125;, \ldots]$$
+        </div>
+    </article>
+
+    <article class="chapter" id="ch5">
+        <header class="chapter-header">
+            <h2>第 5 章：学生常见疑问（Q&A）</h2>
+        </header>
+        <div class="note-box text-sm">
+            <p><strong>Q：</strong>为什么不直接用每帧图像作为输入？</p>
+            <p><strong>A：</strong>可以，但 token 会爆炸，显存和速度都扛不住。时间戳 token 是更省的方案。</p>
+            <p class="mt-4"><strong>Q：</strong>DeepStack 只注入前几层，不注入后面，合理吗？</p>
+            <p><strong>A：</strong>前几层决定注意力的“底层结构”，后层偏语义推理。先让底层充满视觉信息最关键。</p>
+            <p class="mt-4"><strong>Q：</strong>Interleaved MRoPE 看起来只是排列变化，真的重要吗？</p>
+            <p><strong>A：</strong>频谱分配决定长距离关系的感知。长视频里如果频谱不均衡，模型会“记不住”。</p>
+        </div>
+    </article>
+
+    <article class="chapter" id="ch6">
+        <header class="chapter-header">
+            <h2>第 6 章：小结与练习</h2>
+        </header>
+        <div class="chapter-summary">
+            <p><strong>小结：</strong>Qwen3-VL 的核心是“把视觉变成 token”，再用三大创新强化时空编码与细节对齐。</p>
+        </div>
+        <h3>思考题（自测）</h3>
+        <ol class="list-decimal pl-6">
+            <li>为什么多模态必须先解决“token 对齐”？</li>
+            <li>2×2 合并会带来哪些优势与风险？</li>
+            <li>Interleaved MRoPE 解决了什么频谱问题？</li>
+            <li>DeepStack 为什么要注入 LLM 前几层？</li>
+            <li>时间戳 token 对视频定位有什么帮助？</li>
+        </ol>
+    </article>
+
+    <div class="card">
+        <h2>参考与引用</h2>
+        <ol class="list-decimal pl-6 text-sm text-gray-600 space-y-2">
+            <li><a href="https://github.com/QwenLM/Qwen3-VL">Qwen3-VL GitHub Repository</a></li>
+            <li><a href="https://arxiv.org/pdf/2511.21631">Qwen3-VL Technical Report (arXiv:2511.21631)</a></li>
+        </ol>
+    </div>
+</BaseLayout>

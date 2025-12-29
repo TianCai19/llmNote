@@ -1,0 +1,196 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import Qwen3VLTrainingStages from '../../components/Qwen3VLTrainingStages.astro';
+---
+
+<BaseLayout title="Qwen3-VL：训练与数据配方（Part 2）" description="面向学生的训练全流程拆解：四阶段预训练 + 后训练 + 数据工程细节">
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Qwen3-VL：训练与数据配方（学生版）</h1>
+        <p class="text-xl text-gray-500">从“对齐”到“超长上下文”的完整训练路线图</p>
+    </header>
+
+    <div class="note-box">
+        <strong>系列导航：</strong>
+        <div class="mt-3 flex flex-wrap gap-3">
+            <a class="chip" href="/notes/qwen-vl">Part 1: 架构与原理</a>
+            <a class="chip" href="/notes/qwen3-vl-training">Part 2: 训练与数据</a>
+            <a class="chip" href="/notes/qwen3-vl-apps">Part 3: 能力、评测与落地</a>
+        </div>
+    </div>
+
+    <nav class="toc" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#ch1">1. 为什么要分阶段训练</a></li>
+            <li><a href="#ch2">2. 四阶段预训练路线</a></li>
+            <li><a href="#ch3">3. 数据工程：清洗与构造</a></li>
+            <li><a href="#ch4">4. 后训练：SFT / 蒸馏 / RL</a></li>
+            <li><a href="#ch5">5. 学生常见疑问</a></li>
+            <li><a href="#ch6">6. 小结与练习</a></li>
+        </ul>
+    </nav>
+
+    <article class="chapter" id="ch1">
+        <header class="chapter-header">
+            <h2>第 1 章：为什么要分阶段训练</h2>
+        </header>
+        <p>多模态训练最难的不是“算力”，而是“对齐”。如果一开始就全参数训练，视觉信号会把语言模型带偏，反而退化。</p>
+        <p>因此 Qwen3-VL 采用“四阶段递进策略”：先对齐，再规模化，再拉长上下文，最后才冲刺超长序列。<a href="https://arxiv.org/pdf/2511.21631" class="text-emerald-700">[1]</a></p>
+        <Qwen3VLTrainingStages />
+        <div class="note-box">
+            <strong>课堂直觉：</strong>就像学英语先学单词，再学长句子，最后才能读整本书。
+        </div>
+    </article>
+
+    <article class="chapter" id="ch2">
+        <header class="chapter-header">
+            <h2>第 2 章：四阶段预训练路线</h2>
+        </header>
+
+        <h3>2.1 总览表（课表式）</h3>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">阶段</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">目标</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">训练参数</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Token 规模</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">序列长度</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-sm">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">S0</td>
+                        <td class="px-4 py-3">视觉-语言对齐</td>
+                        <td class="px-4 py-3">仅训练 Merger</td>
+                        <td class="px-4 py-3">≈67B</td>
+                        <td class="px-4 py-3">8,192</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">S1</td>
+                        <td class="px-4 py-3">多模态规模化预训练</td>
+                        <td class="px-4 py-3">全参数训练</td>
+                        <td class="px-4 py-3">≈1T</td>
+                        <td class="px-4 py-3">8,192</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">S2</td>
+                        <td class="px-4 py-3">长上下文能力扩展</td>
+                        <td class="px-4 py-3">全参数训练</td>
+                        <td class="px-4 py-3">≈1T</td>
+                        <td class="px-4 py-3">32,768</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">S3</td>
+                        <td class="px-4 py-3">超长上下文适配</td>
+                        <td class="px-4 py-3">全参数训练</td>
+                        <td class="px-4 py-3">≈100B</td>
+                        <td class="px-4 py-3">262,144</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-sm text-gray-500">数据与长度来自技术报告。<a href="https://arxiv.org/pdf/2511.21631" class="text-emerald-700">[1]</a></p>
+
+        <h3>2.2 S0：先“翻译”，再“训练”</h3>
+        <p>冻结视觉编码器和 LLM，只训练 Merger。目标是让视觉 token 对齐语言空间，避免语言能力被噪声拖偏。<a href="https://arxiv.org/pdf/2511.21631" class="text-emerald-700">[1]</a></p>
+
+        <h3>2.3 S1：规模化多模态预训练</h3>
+        <p>解冻全参数，加入 VQA、grounding、STEM、多图文档等任务，让模型真正学会“看懂世界”。</p>
+
+        <h3>2.4 S2：拉长上下文</h3>
+        <p>把序列长度提升到 32K，并增加视频与 Agent 数据比例，训练“长输入理解能力”。</p>
+
+        <h3>2.5 S3：冲击 256K 超长上下文</h3>
+        <p>最终阶段专门训练超长文档与长视频任务，强化极限上下文能力。</p>
+    </article>
+
+    <article class="chapter" id="ch3">
+        <header class="chapter-header">
+            <h2>第 3 章：数据工程——为什么“干净”比“多”重要</h2>
+        </header>
+
+        <h3>3.1 图像-文本与交错文档</h3>
+        <ul class="list-disc pl-6">
+            <li>用 Qwen2.5-VL-32B 对原始 caption 再描述（recaption），提升细节和语言质量。</li>
+            <li>对 recaption 文本做语义去重，保持视觉多样性。</li>
+            <li>对书籍级数据构建 256K token 的长序列，保留页面顺序。<a href="https://arxiv.org/pdf/2511.21631" class="text-emerald-700">[1]</a></li>
+        </ul>
+
+        <h3>3.2 OCR 与文档解析</h3>
+        <ul class="list-disc pl-6">
+            <li>OCR 数据约 3000 万样本，覆盖 30+ 语言。</li>
+            <li>文档解析包含 Common Crawl PDF + 内部文档，建立统一布局标注框架。<a href="https://arxiv.org/pdf/2511.21631" class="text-emerald-700">[1]</a></li>
+        </ul>
+
+        <h3>3.3 视频数据（最昂贵的部分）</h3>
+        <ul class="list-disc pl-6">
+            <li>长视频用“短 → 长字幕合成”，生成时间戳 + 事件级描述。</li>
+            <li>时空 grounding 数据强化“动作发生在哪个时刻、哪个区域”。</li>
+            <li>动态调整 fps / frame 数，避免采样过稀。<a href="https://arxiv.org/pdf/2511.21631" class="text-emerald-700">[1]</a></li>
+        </ul>
+
+        <h3>3.4 STEM 与推理数据</h3>
+        <ul class="list-disc pl-6">
+            <li>合成几何图形数据（点定位、图形问答、图形 caption）。</li>
+            <li>60M K-12/本科题目 + 12M multimodal 长 CoT。<a href="https://arxiv.org/pdf/2511.21631" class="text-emerald-700">[1]</a></li>
+        </ul>
+
+        <h3>3.5 Agent 与工具调用</h3>
+        <ul class="list-disc pl-6">
+            <li>GUI 数据覆盖桌面/移动/Web，包含元素描述、定位与任务轨迹。</li>
+            <li>Function Calling 通过合成轨迹构建，不依赖真实函数执行。</li>
+            <li>引入搜索轨迹，让模型学会“遇到陌生实体就去查”。<a href="https://arxiv.org/pdf/2511.21631" class="text-emerald-700">[1]</a></li>
+        </ul>
+    </article>
+
+    <article class="chapter" id="ch4">
+        <header class="chapter-header">
+            <h2>第 4 章：后训练——从“会做题”到“好用”</h2>
+        </header>
+        <p>预训练给的是“基础能力”，但真正好用还要靠后训练。Qwen3-VL 的后训练流程：SFT → 蒸馏 → RL。<a href="https://arxiv.org/pdf/2511.21631" class="text-emerald-700">[1]</a></p>
+        <ul class="list-disc pl-6">
+            <li><strong>SFT：</strong>先 32K 再 256K，强化指令遵循，Think/Non-think 数据分开训练。</li>
+            <li><strong>Strong-to-Weak Distillation：</strong>让强模型“教”弱模型，提升推理能力。</li>
+            <li><strong>RL：</strong>覆盖 math/OCR/grounding/指令跟随，修复边角问题。</li>
+        </ul>
+        <p class="text-sm text-gray-500">SFT 数据约 120 万样本，1/3 纯文本，2/3 多模态，多轮对话比例高。<a href="https://arxiv.org/pdf/2511.21631" class="text-emerald-700">[1]</a></p>
+    </article>
+
+    <article class="chapter" id="ch5">
+        <header class="chapter-header">
+            <h2>第 5 章：学生常见疑问（Q&A）</h2>
+        </header>
+        <div class="note-box text-sm">
+            <p><strong>Q：</strong>为什么 S0 不训练视觉编码器？</p>
+            <p><strong>A：</strong>视觉编码器已经很强，问题在“对齐”。先让 Merger 学会翻译，再一起训练更稳。</p>
+            <p class="mt-4"><strong>Q：</strong>为什么要混入大量 text-only 数据？</p>
+            <p><strong>A：</strong>多模态训练可能让语言能力退化，文本数据能“保住语言功力”。</p>
+            <p class="mt-4"><strong>Q：</strong>为什么长上下文要放到后面？</p>
+            <p><strong>A：</strong>长上下文训练成本高，基础没打好就拉长会让优化崩溃。</p>
+        </div>
+    </article>
+
+    <article class="chapter" id="ch6">
+        <header class="chapter-header">
+            <h2>第 6 章：小结与练习</h2>
+        </header>
+        <div class="chapter-summary">
+            <p><strong>小结：</strong>训练路线的核心逻辑是“对齐 → 规模 → 长上下文 → 超长上下文”。</p>
+        </div>
+        <h3>思考题（自测）</h3>
+        <ol class="list-decimal pl-6">
+            <li>为什么 S0 要冻结视觉编码器和 LLM？</li>
+            <li>S2 阶段为什么一定要增加视频数据比例？</li>
+            <li>后训练的蒸馏和 RL 分别解决什么问题？</li>
+        </ol>
+    </article>
+
+    <div class="card">
+        <h2>参考与引用</h2>
+        <ol class="list-decimal pl-6 text-sm text-gray-600 space-y-2">
+            <li><a href="https://arxiv.org/pdf/2511.21631">Qwen3-VL Technical Report (arXiv:2511.21631)</a></li>
+        </ol>
+    </div>
+</BaseLayout>
