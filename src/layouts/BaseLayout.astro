@@ -1,0 +1,50 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = 'LLM 学习笔记' } = Astro.props;
+---
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content={description}>
+    <title>{title} | LLM Note</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@500;600;700&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
+    <script is:inline>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            }
+        };
+    </script>
+    <script is:inline src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+</head>
+<body class="min-h-screen antialiased text-[color:var(--ink)]">
+    <nav class="sticky top-0 z-50 border-b border-white/70 bg-white/70 backdrop-blur">
+        <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4 sm:px-8">
+            <a href="/" class="font-display text-2xl tracking-wide">
+                <span class="brand-text">LLM</span> Note
+            </a>
+            <div class="flex items-center gap-4 text-xs uppercase tracking-[0.2em] text-[color:var(--muted)]">
+                <a href="/" class="transition-colors hover:text-[color:var(--accent)]">首页</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="mx-auto w-full max-w-5xl px-6 py-12 sm:px-8 sm:py-16">
+        <slot />
+    </main>
+
+    <footer class="border-t border-white/70 bg-white/60 py-10 text-center text-sm text-[color:var(--muted)]">
+        <p>LLM Note - 现代化学习笔记</p>
+    </footer>
+</body>
+</html>

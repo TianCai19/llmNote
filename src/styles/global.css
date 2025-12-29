@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+:root {
+  --page-bg: #f8f4ef;
+  --page-bg-alt: #eef6f4;
+  --surface: #ffffff;
+  --ink: #1e2932;
+  --muted: #5f6b6a;
+  --accent: #0f766e;
+  --accent-strong: #0c4a46;
+  --accent-warm: #f97316;
+  --ring: rgba(15, 118, 110, 0.18);
+  --shadow: 0 24px 60px -40px rgba(15, 118, 110, 0.65);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Noto Sans SC", "Noto Sans", sans-serif;
+  background:
+    radial-gradient(900px circle at 12% -10%, rgba(15, 118, 110, 0.15), transparent 55%),
+    radial-gradient(900px circle at 88% 12%, rgba(249, 115, 22, 0.18), transparent 55%),
+    linear-gradient(120deg, var(--page-bg) 0%, var(--page-bg-alt) 100%);
+  color: var(--ink);
+  position: relative;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(rgba(15, 118, 110, 0.12) 1px, transparent 1px);
+  background-size: 26px 26px;
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.font-display {
+  font-family: "ZCOOL XiaoWei", "Noto Serif SC", serif;
+  letter-spacing: 0.02em;
+}
+
+.brand-text {
+  background: linear-gradient(120deg, var(--accent), var(--accent-warm));
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.glass-panel {
+  @apply border border-white/70 bg-white/80 shadow-sm;
+  backdrop-filter: blur(14px);
+}
+
+.chip {
+  @apply rounded-full border border-white/70 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.18em];
+  color: var(--muted);
+}
+
+.note-card {
+  @apply relative overflow-hidden rounded-3xl border border-white/70 bg-white/85 p-6 transition-all duration-300 sm:p-8;
+  box-shadow: var(--shadow);
+}
+
+.note-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(700px circle at top left, rgba(15, 118, 110, 0.2), transparent 55%),
+    radial-gradient(600px circle at bottom right, rgba(249, 115, 22, 0.18), transparent 55%);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.note-card:hover {
+  transform: translateY(-4px);
+}
+
+.note-card:hover::before {
+  opacity: 1;
+}
+
+.note-number {
+  @apply flex h-12 w-12 items-center justify-center rounded-full text-lg font-semibold;
+  font-family: "ZCOOL XiaoWei", "Noto Serif SC", serif;
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--accent);
+}
+
+.note-meta {
+  @apply flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.16em];
+  color: var(--muted);
+}
+
+.reveal {
+  animation: rise 0.7s ease both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.gradient-text {
+  background: linear-gradient(120deg, var(--accent), var(--accent-warm));
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.card {
+  @apply mb-8 rounded-3xl border border-white/70 bg-white/85 p-8 shadow-sm transition-shadow hover:shadow-md sm:p-10;
+  box-shadow: var(--shadow);
+}
+
+.card h2 {
+  @apply mb-6 text-2xl font-bold;
+  border-left: 4px solid var(--accent);
+  padding-left: 1rem;
+}
+
+.card h3 {
+  @apply mb-3 mt-8 text-xl font-semibold text-slate-700;
+}
+
+.card p {
+  @apply mb-5 leading-loose text-slate-600;
+}
+
+.highlight {
+  @apply rounded-lg px-2 py-1 font-medium;
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--accent-strong);
+}
+
+.svg-container {
+  @apply my-10 flex justify-center overflow-x-auto rounded-2xl border border-white/70 bg-white/70 p-6;
+}
+
+.card ul,
+.card ol {
+  @apply mb-6 space-y-3 text-slate-600;
+}
+
+.card li {
+  @apply leading-relaxed;
+}
+
+.card table {
+  @apply my-6;
+}
+
+main > header {
+  @apply mb-16 text-center;
+}
+
+main > header h1 {
+  @apply mb-6 text-5xl font-bold;
+}
+
+main > header p {
+  @apply text-xl leading-relaxed text-slate-500;
+}

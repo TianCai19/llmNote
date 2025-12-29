@@ -1,0 +1,144 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import TransformerArchitecture from '../../components/TransformerArchitecture.astro';
+import SelfAttention from '../../components/SelfAttention.astro';
+---
+
+<BaseLayout title="Transformer 架构详解">
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Transformer 架构</h1>
+        <p class="text-xl text-gray-500">现代 AI 的基石：注意力机制与序列建模</p>
+    </header>
+
+    <div class="card">
+        <h2>什么是 Transformer？</h2>
+        <p>Transformer 是 2017 年由 Google 在论文 <em>"Attention Is All You Need"</em> 中提出的革命性架构。它彻底改变了 NLP 领域，并成为 GPT、BERT、LLaMA 等现代大模型的基础。</p>
+        <div class="bg-violet-50 p-4 rounded-lg border border-violet-100">
+            <strong>核心突破：</strong> 抛弃了 RNN 的循环结构，完全依靠<span class="highlight">注意力机制</span>来建模序列中的依赖关系，实现了真正的并行计算。
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>1. 自注意力机制 (Self-Attention)</h2>
+        <p>自注意力是 Transformer 的灵魂。它让序列中的每个位置都能"看到"其他所有位置，从而捕捉长距离依赖。</p>
+
+        <h3 class="text-violet-600">核心概念：Q、K、V</h3>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>Query (查询)：</strong> "我想找什么信息？"</li>
+            <li><strong>Key (键)：</strong> "我有什么信息可以提供？"</li>
+            <li><strong>Value (值)：</strong> "我的实际内容是什么？"</li>
+        </ul>
+        <p>每个词都会生成 Q、K、V 三个向量。通过 Q 和 K 的点积计算注意力权重，再用权重对 V 加权求和。</p>
+
+        <SelfAttention />
+
+        <h3 class="text-violet-600">为什么要除以 √d？</h3>
+        <p>当维度 (d) 很大时，点积结果也会很大，导致 softmax 梯度趋近于 0。除以 &radic;d 可以稳定训练。</p>
+    </div>
+
+    <div class="card">
+        <h2>2. 多头注意力 (Multi-Head Attention)</h2>
+        <p>单个注意力头只能捕捉一种关联模式。多头注意力让模型同时关注不同的表示子空间。</p>
+
+        <div class="bg-blue-50 p-4 rounded-lg my-4">
+            <p class="text-sm text-blue-800">
+                <strong>直觉理解：</strong> 就像不同的人读同一句话会关注不同的重点。有的头关注语法结构，有的头关注语义关系，有的头关注位置信息。
+            </p>
+        </div>
+
+        <p>公式：</p>
+        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm overflow-x-auto">
+            MultiHead(Q, K, V) = Concat(head₁, ..., headₕ) · W<sup>O</sup><br/>
+            where headᵢ = Attention(QW<sub>i</sub><sup>Q</sup>, KW<sub>i</sub><sup>K</sup>, VW<sub>i</sub><sup>V</sup>)
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>3. 位置编码 (Positional Encoding)</h2>
+        <p>Transformer 没有循环结构，对位置信息是"盲"的。位置编码让模型知道每个词在序列中的位置。</p>
+
+        <h3 class="text-violet-600">正弦位置编码</h3>
+        <p>原始论文使用正弦和余弦函数：</p>
+        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm overflow-x-auto my-4">
+            PE(pos, 2i) = sin(pos / 10000<sup>2i/d</sup>)<br/>
+            PE(pos, 2i+1) = cos(pos / 10000<sup>2i/d</sup>)
+        </div>
+        <p>这种编码的优点：可以处理任意长度的序列，且相对位置关系可以通过线性变换获得。</p>
+    </div>
+
+    <div class="card">
+        <h2>4. 完整架构</h2>
+        <p>Transformer 由 Encoder 和 Decoder 两部分组成，每部分都包含多层堆叠的模块。</p>
+
+        <TransformerArchitecture />
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+            <div class="bg-blue-50 p-4 rounded-lg">
+                <h4 class="font-bold text-blue-800 mb-2">Encoder</h4>
+                <ul class="text-sm text-blue-700 space-y-1">
+                    <li>• 处理输入序列</li>
+                    <li>• 自注意力 + FFN</li>
+                    <li>• 输出上下文表示</li>
+                </ul>
+            </div>
+            <div class="bg-amber-50 p-4 rounded-lg">
+                <h4 class="font-bold text-amber-800 mb-2">Decoder</h4>
+                <ul class="text-sm text-amber-700 space-y-1">
+                    <li>• 自回归生成输出</li>
+                    <li>• Masked Self-Attention</li>
+                    <li>• Cross-Attention 连接 Encoder</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>5. 关键组件：Add & Norm</h2>
+        <p>每个子层后都有残差连接和层归一化，这对于训练深层网络至关重要。</p>
+
+        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm">
+            output = LayerNorm(x + Sublayer(x))
+        </div>
+
+        <ul class="list-disc pl-6 mt-4 space-y-2 text-gray-600">
+            <li><strong>残差连接：</strong> 缓解梯度消失，允许梯度直接流向浅层</li>
+            <li><strong>层归一化：</strong> 稳定训练，加速收敛</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>6. 模型变体</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">模型</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">架构</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">典型应用</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-sm">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-blue-600">BERT</td>
+                        <td class="px-4 py-3">仅 Encoder</td>
+                        <td class="px-4 py-3">文本分类、NER、问答</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-green-600">GPT</td>
+                        <td class="px-4 py-3">仅 Decoder</td>
+                        <td class="px-4 py-3">文本生成、对话</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-purple-600">T5 / BART</td>
+                        <td class="px-4 py-3">Encoder-Decoder</td>
+                        <td class="px-4 py-3">翻译、摘要、多任务</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="mt-8 text-center text-gray-500">
+        <p>Transformer 证明了：Attention is all you need.</p>
+    </div>
+</BaseLayout>
