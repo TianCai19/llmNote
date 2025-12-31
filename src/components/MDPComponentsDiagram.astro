@@ -1,0 +1,121 @@
+---
+// MDP 五元组组件图
+---
+
+<div class="svg-container">
+  <svg width="900" height="450" viewBox="0 0 900 450" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="compGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#0f766e;stop-opacity:0.2" />
+        <stop offset="100%" style="stop-color:#0f766e;stop-opacity:0.05" />
+      </linearGradient>
+      <filter id="shadow">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+        <feOffset dx="0" dy="2" result="offsetblur"/>
+        <feComponentTransfer>
+          <feFuncA type="linear" slope="0.3"/>
+        </feComponentTransfer>
+        <feMerge>
+          <feMergeNode/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
+
+    <!-- 标题 -->
+    <text x="450" y="30" text-anchor="middle" font-size="26" font-weight="bold" fill="#1e293b">MDP 五元组 (S, A, P, R, γ)</text>
+    <text x="450" y="55" text-anchor="middle" font-size="16" fill="#64748b">马尔可夫决策过程的五个核心组件</text>
+
+    <!-- S: 状态集合 -->
+    <g transform="translate(50, 80)">
+      <rect width="150" height="120" rx="15" fill="url(#compGrad)" stroke="#0f766e" stroke-width="2" filter="url(#shadow)"/>
+      <text x="75" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#0f766e">S</text>
+      <text x="75" y="55" text-anchor="middle" font-size="14" fill="#64748b">状态集合</text>
+      <text x="75" y="75" text-anchor="middle" font-size="12" fill="#64748b">State Space</text>
+      <text x="75" y="95" text-anchor="middle" font-size="11" fill="#1e293b">所有可能的</text>
+      <text x="75" y="108" text-anchor="middle" font-size="11" fill="#1e293b">环境状态</text>
+    </g>
+
+    <!-- A: 动作集合 -->
+    <g transform="translate(250, 80)">
+      <rect width="150" height="120" rx="15" fill="url(#compGrad)" stroke="#f97316" stroke-width="2" filter="url(#shadow)"/>
+      <text x="75" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#f97316">A</text>
+      <text x="75" y="55" text-anchor="middle" font-size="14" fill="#64748b">动作集合</text>
+      <text x="75" y="75" text-anchor="middle" font-size="12" fill="#64748b">Action Space</text>
+      <text x="75" y="95" text-anchor="middle" font-size="11" fill="#1e293b">智能体可执行</text>
+      <text x="75" y="108" text-anchor="middle" font-size="11" fill="#1e293b">的所有动作</text>
+    </g>
+
+    <!-- P: 转移概率 -->
+    <g transform="translate(450, 80)">
+      <rect width="150" height="120" rx="15" fill="url(#compGrad)" stroke="#8b5cf6" stroke-width="2" filter="url(#shadow)"/>
+      <text x="75" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#8b5cf6">P</text>
+      <text x="75" y="55" text-anchor="middle" font-size="14" fill="#64748b">转移概率</text>
+      <text x="75" y="75" text-anchor="middle" font-size="12" fill="#64748b">Transition</text>
+      <text x="75" y="88" text-anchor="middle" font-size="12" fill="#64748b">Probability</text>
+      <text x="75" y="108" text-anchor="middle" font-size="11" fill="#1e293b">P(s'|s,a)</text>
+    </g>
+
+    <!-- R: 奖励函数 -->
+    <g transform="translate(650, 80)">
+      <rect width="150" height="120" rx="15" fill="url(#compGrad)" stroke="#22c55e" stroke-width="2" filter="url(#shadow)"/>
+      <text x="75" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#22c55e">R</text>
+      <text x="75" y="55" text-anchor="middle" font-size="14" fill="#64748b">奖励函数</text>
+      <text x="75" y="75" text-anchor="middle" font-size="12" fill="#64748b">Reward</text>
+      <text x="75" y="88" text-anchor="middle" font-size="12" fill="#64748b">Function</text>
+      <text x="75" y="108" text-anchor="middle" font-size="11" fill="#1e293b">R(s,a,s')</text>
+    </g>
+
+    <!-- γ: 折扣因子 -->
+    <g transform="translate(350, 240)">
+      <rect width="150" height="120" rx="15" fill="url(#compGrad)" stroke="#ec4899" stroke-width="2" filter="url(#shadow)"/>
+      <text x="75" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="#ec4899">γ</text>
+      <text x="75" y="55" text-anchor="middle" font-size="14" fill="#64748b">折扣因子</text>
+      <text x="75" y="75" text-anchor="middle" font-size="12" fill="#64748b">Discount</text>
+      <text x="75" y="88" text-anchor="middle" font-size="12" fill="#64748b">Factor</text>
+      <text x="75" y="108" text-anchor="middle" font-size="11" fill="#1e293b">γ ∈ [0,1]</text>
+    </g>
+
+    <!-- 连接线 -->
+    <g>
+      <!-- S 到 A -->
+      <path d="M 200 140 L 250 140" stroke="#0f766e" stroke-width="2" marker-end="url(#arrowhead1)"/>
+      <text x="225" y="130" text-anchor="middle" font-size="11" fill="#0f766e">选择</text>
+
+      <!-- A 到 P -->
+      <path d="M 400 140 L 450 140" stroke="#f97316" stroke-width="2" marker-end="url(#arrowhead1)"/>
+      <text x="425" y="130" text-anchor="middle" font-size="11" fill="#f97316">导致</text>
+
+      <!-- P 到 R -->
+      <path d="M 600 140 L 650 140" stroke="#8b5cf6" stroke-width="2" marker-end="url(#arrowhead1)"/>
+      <text x="625" y="130" text-anchor="middle" font-size="11" fill="#8b5cf6">产生</text>
+
+      <!-- A 到 γ -->
+      <path d="M 325 200 L 375 240" stroke="#f97316" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrowhead2)"/>
+      <text x="340" y="215" text-anchor="middle" font-size="11" fill="#f97316">影响</text>
+    </g>
+
+    <!-- 详细说明框 -->
+    <g transform="translate(50, 330)">
+      <rect x="0" y="0" width="800" height="100" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+
+      <g transform="translate(20, 20)">
+        <text x="0" y="0" font-size="14" fill="#64748b">• S: 描述智能体所处的所有可能情况（如棋盘位置、迷宫格子等）</text>
+        <text x="0" y="20" font-size="14" fill="#64748b">• A: 智能体可以采取的行动（如移动方向、按键选择等）</text>
+        <text x="0" y="40" font-size="14" fill="#64748b">• P: 环境的行为规则，定义状态转移的概率分布</text>
+        <text x="0" y="60" font-size="14" fill="#64748b">• R: 环境的反馈信号，指导智能体的学习方向</text>
+        <text x="0" y="80" font-size="14" fill="#64748b">• γ: 平衡即时奖励与未来奖励的重要性，通常设为 0.9-0.99</text>
+      </g>
+    </g>
+
+    <!-- 箭头定义 -->
+    <defs>
+      <marker id="arrowhead1" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+        <polygon points="0 0, 10 3, 0 6" fill="#64748b" />
+      </marker>
+      <marker id="arrowhead2" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+        <polygon points="0 0, 10 3, 0 6" fill="#f97316" />
+      </marker>
+    </defs>
+  </svg>
+</div>
