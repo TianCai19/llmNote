@@ -6,12 +6,16 @@ import Qwen3VLTokenCompression from '../../components/Qwen3VLTokenCompression.as
 import Qwen3VLInterleavedMRoPE from '../../components/Qwen3VLInterleavedMRoPE.astro';
 import Qwen3VLDeepStackDiagram from '../../components/Qwen3VLDeepStackDiagram.astro';
 import Qwen3VLTimestampTokens from '../../components/Qwen3VLTimestampTokens.astro';
+import { yesterdayYmd } from '../../utils/date';
+
+const createdAt = yesterdayYmd();
 ---
 
 <BaseLayout title="Qwen3-VL：技术报告精读（Part 1 架构与核心原理）" description="面向学生的底层讲解：从视觉 token 到 Qwen3-VL 三大创新的完整逻辑链">
     <header class="text-center mb-12">
         <h1 class="text-4xl font-bold mb-4 gradient-text">Qwen3-VL：从零理解架构与核心原理</h1>
         <p class="text-xl text-gray-500">底向上、口语化、可理解：先搞懂 token，再看 Qwen3-VL 的三大创新</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
     </header>
 
     <div class="note-box">

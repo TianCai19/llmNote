@@ -1,12 +1,16 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Qwen3VLTrainingStages from '../../components/Qwen3VLTrainingStages.astro';
+import { yesterdayYmd } from '../../utils/date';
+
+const createdAt = yesterdayYmd();
 ---
 
 <BaseLayout title="Qwen3-VL：训练与数据配方（Part 2）" description="面向学生的训练全流程拆解：四阶段预训练 + 后训练 + 数据工程细节">
     <header class="text-center mb-12">
         <h1 class="text-4xl font-bold mb-4 gradient-text">Qwen3-VL：训练与数据配方（学生版）</h1>
         <p class="text-xl text-gray-500">从“对齐”到“超长上下文”的完整训练路线图</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
     </header>
 
     <div class="note-box">

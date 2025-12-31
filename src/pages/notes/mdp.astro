@@ -4,6 +4,9 @@ import MDPProcessDiagram from '../../components/MDPProcessDiagram.astro';
 import MDPComponentsDiagram from '../../components/MDPComponentsDiagram.astro';
 import BellmanEquationDiagram from '../../components/BellmanEquationDiagram.astro';
 import ValueFunctionDiagram from '../../components/ValueFunctionDiagram.astro';
+import { yesterdayYmd } from '../../utils/date';
+
+const createdAt = yesterdayYmd();
 ---
 
 <BaseLayout title="马尔可夫决策过程 (MDP) | LLM Note" description="深入理解马尔可夫决策过程的数学原理和可视化解释">
@@ -11,6 +14,7 @@ import ValueFunctionDiagram from '../../components/ValueFunctionDiagram.astro';
     <header>
       <h1 class="gradient-text">马尔可夫决策过程 (MDP)</h1>
       <p>强化学习的数学基础 - 智能体与环境的交互模型</p>
+      <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
     </header>
 
     <div class="toc">

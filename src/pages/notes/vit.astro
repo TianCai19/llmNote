@@ -3,12 +3,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import CnnVsVitDiagram from '../../components/CnnVsVitDiagram.astro';
 import ViTArchitecture from '../../components/ViTArchitecture.astro';
 import VLMArchitecture from '../../components/VLMArchitecture.astro';
+import { yesterdayYmd } from '../../utils/date';
+
+const createdAt = yesterdayYmd();
 ---
 
 <BaseLayout title="深入理解 Vision Transformer (ViT)">
     <header class="text-center mb-12">
         <h1 class="text-4xl font-bold mb-4 gradient-text">为什么 AI 能看懂图片？</h1>
         <p class="text-xl text-gray-500">深入解析 Vision Transformer (ViT) 及其在现代 VLM 中的核心地位</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
     </header>
 
     <div class="card">

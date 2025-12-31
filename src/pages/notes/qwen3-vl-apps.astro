@@ -1,12 +1,16 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import Qwen3VLInferencePipeline from '../../components/Qwen3VLInferencePipeline.astro';
+import { yesterdayYmd } from '../../utils/date';
+
+const createdAt = yesterdayYmd();
 ---
 
 <BaseLayout title="Qwen3-VL：能力、评测与落地（Part 3）" description="学生向落地指南：能力地图、评测理解、Prompt 设计与部署细节">
     <header class="text-center mb-12">
         <h1 class="text-4xl font-bold mb-4 gradient-text">Qwen3-VL：能力、评测与落地（学生版）</h1>
         <p class="text-xl text-gray-500">这部分回答两个问题：能做什么？怎么用得好？</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
     </header>
 
     <div class="note-box">

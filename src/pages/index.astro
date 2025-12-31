@@ -1,13 +1,24 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { todayYmd, yesterdayYmd } from '../utils/date';
 
 const notes = [
+    {
+        number: '00',
+        title: 'YOLO 原理解析',
+        description: '密集预测、正样本匹配、loss 与 NMS：把一阶段检测的链条串起来',
+        href: '/notes/yolo',
+        tags: ['CV', 'Detection', 'Quickstart'],
+        date: todayYmd(),
+        readTime: '8 min'
+    },
     {
         number: '01',
         title: '马尔可夫决策过程 (MDP)',
         description: '强化学习的数学基础：智能体与环境的交互模型',
         href: '/notes/mdp',
         tags: ['RL', '基础', '数学'],
+        date: yesterdayYmd(),
         readTime: '18 min'
     },
     {
@@ -16,6 +27,7 @@ const notes = [
         description: '深入理解 ViT 如何让 AI 看懂图片',
         href: '/notes/vit',
         tags: ['Vision', 'Transformer', 'VLM'],
+        date: yesterdayYmd(),
         readTime: '15 min'
     },
     {
@@ -24,6 +36,7 @@ const notes = [
         description: '现代 AI 的基石：注意力机制与序列建模',
         href: '/notes/transformer',
         tags: ['NLP', 'Attention', '基础'],
+        date: yesterdayYmd(),
         readTime: '12 min'
     },
     {
@@ -32,6 +45,7 @@ const notes = [
         description: '架构与关键创新：Interleaved MRoPE、DeepStack、时间戳 token',
         href: '/notes/qwen-vl',
         tags: ['VLM', 'Qwen3', '架构'],
+        date: yesterdayYmd(),
         readTime: '35 min'
     },
     {
@@ -40,6 +54,7 @@ const notes = [
         description: '四阶段预训练与数据配方全解析',
         href: '/notes/qwen3-vl-training',
         tags: ['Pretrain', 'Data', '多模态'],
+        date: yesterdayYmd(),
         readTime: '40 min'
     },
     {
@@ -48,6 +63,7 @@ const notes = [
         description: '能力、评测与落地：从 prompt 到部署',
         href: '/notes/qwen3-vl-apps',
         tags: ['Inference', 'Deploy', '应用'],
+        date: yesterdayYmd(),
         readTime: '30 min'
     }
 ];
@@ -73,6 +89,20 @@ const totalMinutes = notes.reduce((sum, note) => sum + Number.parseInt(note.read
                 <span class="chip">多模态</span>
                 <span class="chip">工程视角</span>
             </div>
+            <div class="flex flex-wrap gap-3 pt-2">
+                <a
+                    href="/notes/yolo"
+                    class="inline-flex items-center justify-center rounded-full bg-[color:var(--accent)] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[color:var(--accent-strong)] focus:outline-none focus:ring-2 focus:ring-[color:var(--ring)]"
+                >
+                    YOLO 原理解析
+                </a>
+                <a
+                    href="#notes"
+                    class="inline-flex items-center justify-center rounded-full border border-white/70 bg-white/70 px-6 py-3 text-sm font-semibold text-[color:var(--accent-strong)] transition hover:bg-white/90 focus:outline-none focus:ring-2 focus:ring-[color:var(--ring)]"
+                >
+                    浏览全部笔记
+                </a>
+            </div>
         </div>
         <div class="glass-panel rounded-3xl p-6 sm:p-8">
             <div class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">学习仪表</div>
@@ -93,7 +123,7 @@ const totalMinutes = notes.reduce((sum, note) => sum + Number.parseInt(note.read
         </div>
     </header>
 
-    <section class="space-y-6">
+    <section id="notes" class="space-y-6">
         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <h2 class="font-display text-2xl sm:text-3xl">最新笔记</h2>
             <p class="text-sm text-[color:var(--muted)]">持续更新，聚焦关键概念与工程落地。</p>
@@ -119,6 +149,10 @@ const totalMinutes = notes.reduce((sum, note) => sum + Number.parseInt(note.read
                                     {note.tags.map(tag => (
                                         <span class="chip">{tag}</span>
                                     ))}
+                                    <span class="note-meta">
+                                        <span class="h-1 w-1 rounded-full bg-[color:var(--accent)]"></span>
+                                        {note.date}
+                                    </span>
                                     <span class="note-meta">
                                         <span class="h-1 w-1 rounded-full bg-[color:var(--accent)]"></span>
                                         {note.readTime}

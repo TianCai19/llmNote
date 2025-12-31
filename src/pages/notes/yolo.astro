@@ -1,0 +1,121 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import YOLOPipelineDiagram from '../../components/YOLOPipelineDiagram.astro';
+import NMSDiagram from '../../components/NMSDiagram.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+---
+
+<BaseLayout title="YOLO 原理解析">
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">YOLO 原理解析</h1>
+        <p class="text-xl text-gray-500">一句话：把检测变成“单次前向的密集预测”，再用后处理筛出最终框</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>1. 目标检测到底在学什么？</h2>
+        <p>目标检测的输出不是一句分类标签，而是一组“结构化预测”：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>位置：</strong>边界框 <code>(x, y, w, h)</code>（常用中心点 + 宽高，归一化或像素坐标）。</li>
+            <li><strong>类别：</strong>每个框属于哪个类。</li>
+            <li><strong>置信度：</strong>这个框像不像“一个物体”（objectness）以及类别置信度。</li>
+        </ul>
+        <div class="bg-emerald-50 p-4 rounded-lg border border-emerald-100">
+            <strong>YOLO 的核心思想：</strong>不先“提候选框”再分类（两阶段），而是直接在特征图上做密集预测（单阶段）。
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>2. 一阶段 vs 两阶段：YOLO 为什么快？</h2>
+        <p>两阶段检测器（典型如 Faster R-CNN）通常是“先找可能有物体的区域（proposal），再对每个区域分类 + 回归”。</p>
+        <p>YOLO 把它合成一次前向：网络输出一堆候选框的参数与分数，后处理只做“筛选 + 去重”。</p>
+        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm overflow-x-auto">
+            Input Image → Backbone → Neck(FPN/PAN) → Head(密集预测) → NMS → Final Boxes
+        </div>
+        <YOLOPipelineDiagram />
+        <p class="text-sm text-gray-500">“快”的来源：共享特征、少分支、少 ROI 级别的逐框计算。</p>
+    </div>
+
+    <div class="card">
+        <h2>3. 密集预测：网格、特征图与多尺度</h2>
+        <p>直觉上，YOLO 在“特征图的每个位置”都预测一些框。问题是：物体大小不一，靠单一尺度会很吃亏。</p>
+        <p>因此现代 YOLO 通常用 FPN/PAN 之类的多尺度特征：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>高分辨率特征：</strong>更适合小目标。</li>
+            <li><strong>低分辨率特征：</strong>更适合大目标。</li>
+            <li><strong>融合：</strong>把语义（深层）与细节（浅层）拼在一起。</li>
+        </ul>
+        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm overflow-x-auto">
+            P3(小目标) / P4(中目标) / P5(大目标) → 每层输出一组候选框与分数
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>4. 框怎么“参数化”？（bbox 回归的关键）</h2>
+        <p>检测头不是直接输出绝对坐标，而是输出<strong>相对参数</strong>，方便学习、稳定训练：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>中心点：</strong>通常用 sigmoid 约束到 cell/像素附近，再加上网格偏移。</li>
+            <li><strong>宽高：</strong>可以预测对数空间（或用分布式回归），确保为正且梯度更平滑。</li>
+            <li><strong>与尺度绑定：</strong>不同尺度头的“默认感受野”不同，更匹配目标大小。</li>
+        </ul>
+        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm overflow-x-auto">
+            Head 输出：bbox(4) + objectness(1) + class(C)
+        </div>
+        <p class="text-sm text-gray-500">历史版本常用 anchor；近年很多 YOLO 走向 anchor-free 或弱化 anchor 的作用。</p>
+    </div>
+
+    <div class="card">
+        <h2>5. 训练时如何“分配正样本”？</h2>
+        <p>密集预测会产生海量候选框。训练的关键问题是：哪些位置/哪些框算“正样本”？</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>IoU 匹配：</strong>与 GT 框的 IoU 高于阈值的候选框作为正样本。</li>
+            <li><strong>中心先验：</strong>只在 GT 中心附近的网格点参与匹配（减少歧义）。</li>
+            <li><strong>动态匹配：</strong>根据质量自适应选 top-k（常见于新一代检测头）。</li>
+        </ul>
+        <div class="bg-amber-50 p-4 rounded-lg border border-amber-100">
+            <strong>直觉：</strong>匹配策略决定了“谁来负责预测这个物体”，它对收敛速度与小目标表现影响很大。
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>6. Loss：YOLO 在优化什么？</h2>
+        <p>检测训练常见是多任务优化：定位 + 置信度 + 分类。一个简化版可以写成：</p>
+        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm overflow-x-auto">
+            L = λ_box · L_box + λ_obj · L_obj + λ_cls · L_cls
+        </div>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>L_box：</strong>IoU 系列（GIoU/DIoU/CIoU）或更现代的分布式回归（如 DFL 思路）。</li>
+            <li><strong>L_obj：</strong>目标存在概率（常用 BCE），解决“有无物体”。</li>
+            <li><strong>L_cls：</strong>类别概率（BCE/CE），解决“是什么”。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>7. 推理与 NMS：为什么需要“去重”？</h2>
+        <p>密集预测天然会对同一目标输出多个相近框。NMS（Non-Maximum Suppression）负责把它们合并成一个。</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>先过滤：</strong>低置信度框直接丢弃，减少计算。</li>
+            <li><strong>再抑制：</strong>按分数从高到低取框，删除与其 IoU 高于阈值的重叠框。</li>
+            <li><strong>变体：</strong>Soft-NMS、DIoU-NMS 等在拥挤目标上更稳。</li>
+        </ul>
+        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm overflow-x-auto">
+            score = obj × cls  → sort → select → suppress(overlap)
+        </div>
+        <NMSDiagram />
+    </div>
+
+    <div class="card">
+        <h2>8. YOLO 迭代路线（抓住“变的是什么”）</h2>
+        <p>不同版本 YOLO 的名字很多，但你可以用三个问题来理解它们的演进：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>Backbone/Neck：</strong>特征提取与多尺度融合怎么做，是否更轻、更强。</li>
+            <li><strong>Head/Label Assign：</strong>anchor-based 还是 anchor-free，正样本怎么分配。</li>
+            <li><strong>Loss/Tricks：</strong>IoU loss、分布式回归、数据增强与训练策略。</li>
+        </ul>
+        <div class="bg-emerald-50 p-4 rounded-lg border border-emerald-100">
+            <strong>学习建议：</strong>不要死记版本号，先把“密集预测 + 匹配 + loss + NMS”这条链条吃透。
+        </div>
+    </div>
+</BaseLayout>
