@@ -31,25 +31,23 @@ src/
 └── styles/          # Global CSS
 ```
 
-## Important: Astro Template Syntax Conflicts
+## MathJax Usage Notes
 
-**Critical**: Astro's `$...$` expression syntax conflicts with MathJax inline math.
+MathJax v3 is enabled in `src/layouts/BaseLayout.astro`. To ensure formulas render, wrap expressions with delimiters:
+- Inline: `$...$` or `\(...\)`
+- Display: `$$...$$` or `\[...\]`
 
-**Solution**: When writing mathematical expressions in Astro files, avoid using `$` delimiters. Use plain HTML entities or Unicode symbols instead:
-- Use `&#8730;d` or `√d` instead of `$\sqrt{d}$`
-- Use `(d)` instead of `$d$`
-- Or use MathJax's `\(...\)` delimiters carefully (still risky with `{}` braces)
+If you see raw formulas on the page, it usually means the text wasn't wrapped in a MathJax delimiter. Use LaTeX inside the delimiters and keep plain text outside.
 
-**Example of what breaks**:
+**Astro escaping tip**: backslashes in `.astro` text can break builds. For LaTeX that needs backslashes (e.g. `\pi`, `\gamma`, `\mathbb{E}`), prefer `set:html` with a string literal and escape the backslash:
 ```astro
-<!-- This will error - Astro tries to evaluate 'd' as a variable -->
-<p>当维度 $d$ 很大时...</p>
+<p set:html={"$$V^{\\pi}(s) = \\mathbb{E}_{\\pi}[\\sum_{t} \\gamma^t R_t]$$"}></p>
 ```
+Also wrap superscripts/subscripts with braces (e.g. `V^{\\pi}`, `\\pi_{\\theta}`) to avoid MathJax warnings.
 
-**Example of what works**:
+**Example**:
 ```astro
-<!-- Use HTML entities or Unicode -->
-<p>当维度 (d) 很大时，除以 &#8730;d 可以稳定训练</p>
+<p>长期回报：$G_t = R_{t+1} + \gamma R_{t+2} + \cdots$</p>
 ```
 
 ## Design System

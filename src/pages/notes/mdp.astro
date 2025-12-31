@@ -21,6 +21,7 @@ import ValueFunctionDiagram from '../../components/ValueFunctionDiagram.astro';
         <li><a href="#goal">3. MDP 的目标</a></li>
         <li><a href="#bellman">4. 贝尔曼方程</a></li>
         <li><a href="#value">5. 价值函数</a></li>
+        <li><a href="#paths">6. 求解路径</a></li>
       </ul>
     </div>
 
@@ -46,6 +47,7 @@ import ValueFunctionDiagram from '../../components/ValueFunctionDiagram.astro';
         <h3>马尔可夫性质 (The Markov Property)</h3>
         <p>这是理解 MDP 的关键。它指的是"<strong>未来只取决于当前</strong>"。</p>
         <p>换句话说，当你处在状态 S 时，你下一步会去哪里、会得到什么奖励，<strong>只和 S 以及你将要采取的动作 A 有关</strong>，而与你如何到达 S 的历史路径无关。</p>
+        <p set:html={"$$P(S_{t+1} \\mid S_t) = P(S_{t+1} \\mid S_t, S_{t-1}, \\dots)$$"}></p>
       </div>
 
       <div class="quote-block">
@@ -85,7 +87,7 @@ import ValueFunctionDiagram from '../../components/ValueFunctionDiagram.astro';
       <div class="card">
         <h3>3. P: 转移概率 (Transition Probability)</h3>
         <p>这是环境的"物理规则"。它定义了不确定性。</p>
-        <p>P(s' | s, a) = P[S_next = s' | S = s, A = a]</p>
+        <p set:html={"$P(s' \\mid s, a) = P(S_{t+1} = s' \\mid S_t = s, A_t = a)$"}></p>
         <ul>
           <li><strong>含义：</strong> 当在状态 s 执行动作 a 后，转移到下一个状态 s' 的概率是多少。</li>
           <li><strong>例子：</strong> 如果你"掷骰子"（动作 a），从当前位置（状态 s）移动到 6 个不同新位置（状态 s'）的概率都是 1/6。如果环境是确定的（比如国际象棋），那么这个概率 P 将是 1。</li>
@@ -95,7 +97,7 @@ import ValueFunctionDiagram from '../../components/ValueFunctionDiagram.astro';
       <div class="card">
         <h3>4. R: 奖励函数 (Reward Function)</h3>
         <p>这是环境的"目标信号"。</p>
-        <p>R(s, a, s') = E[R_next | S = s, A = a, S_next = s']</p>
+        <p set:html={"$R(s, a, s') = \\mathbb{E}[R_{t+1} \\mid S_t = s, A_t = a, S_{t+1} = s']$"}></p>
         <ul>
           <li><strong>含义：</strong> 当在状态 s 执行动作 a 并转移到 s' 后，智能体能获得的<strong>即时奖励</strong>的期望值。</li>
           <li><strong>例子：</strong> 游戏中吃到金币（+10），碰到敌人（-50），游戏胜利（+1000）。</li>
@@ -126,7 +128,7 @@ import ValueFunctionDiagram from '../../components/ValueFunctionDiagram.astro';
 
       <div class="card">
         <h3>策略 (Policy, π)</h3>
-        <p>π(a|s) = P[A = a | S = s]</p>
+        <p set:html={"$\\pi(a \\mid s) = P(A_t = a \\mid S_t = s)$"}></p>
         <p>它是一个函数，告诉你在状态 s 时，应该以多大概率选择动作 a。</p>
       </div>
 
@@ -134,13 +136,13 @@ import ValueFunctionDiagram from '../../components/ValueFunctionDiagram.astro';
 
       <div class="card">
         <h3>状态价值函数 V^π(s)</h3>
-        <p>V^π(s) = Eπ [ Σ(k=0 to infinity) γ^k R_future(k) | S = s ]</p>
+        <p set:html={"$$V^{\\pi}(s) = \\mathbb{E}_{\\pi}\\left[\\sum_{k=0}^{\\infty} \\gamma^k R_{t+k+1} \\mid S_t = s \\right]$$"}></p>
         <p><strong>含义：</strong> 从状态 s 出发，并<strong>终生遵循</strong>策略 π，所能获得的<strong>未来总折扣奖励</strong>的期望值。</p>
       </div>
 
       <div class="card">
         <h3>动作价值函数 Q^π(s, a)</h3>
-        <p>Q^π(s, a) = Eπ [ Σ(k=0 to infinity) γ^k R_future(k) | S = s, A = a ]</p>
+        <p set:html={"$$Q^{\\pi}(s, a) = \\mathbb{E}_{\\pi}\\left[\\sum_{k=0}^{\\infty} \\gamma^k R_{t+k+1} \\mid S_t = s, A_t = a \\right]$$"}></p>
         <p><strong>含义：</strong> 在状态 s <strong>强行</strong>执行动作 a，<strong>然后</strong>再遵循策略 π，所能获得的未来总折扣奖励。</p>
         <p>Q 函数是 Q-Learning 等算法的核心。</p>
       </div>
@@ -178,9 +180,37 @@ import ValueFunctionDiagram from '../../components/ValueFunctionDiagram.astro';
 
       <div class="note-box">
         <h3>关键区别</h3>
-        <p><strong>V^π(s)：</strong> 评估状态的好坏 - "在这个状态，我预期能获得多少总奖励？"</p>
-        <p><strong>Q^π(s,a)：</strong> 评估动作的好坏 - "在这个状态执行这个动作，我预期能获得多少总奖励？"</p>
+        <p><strong><span set:html={"$V^{\\pi}(s)$"}></span>：</strong> 评估状态的好坏 - "在这个状态，我预期能获得多少总奖励？"</p>
+        <p><strong><span set:html={"$Q^{\\pi}(s,a)$"}></span>：</strong> 评估动作的好坏 - "在这个状态执行这个动作，我预期能获得多少总奖励？"</p>
         <p>注意：Q 函数提供了更细粒度的信息，因为它不仅考虑状态，还考虑了具体的动作。</p>
+      </div>
+    </div>
+
+    <div class="chapter" id="paths">
+      <div class="chapter-header">
+        <h2>6. 求解 MDP 的两条路：价值法与策略法</h2>
+      </div>
+
+      <p>强化学习的核心目标是最大化长期累积奖励：</p>
+      <p set:html={"$$G_t = R_{t+1} + \\gamma R_{t+2} + \\gamma^2 R_{t+3} + \\cdots$$"}></p>
+      <p>为达成这个目标，算法通常走两条路线：基于价值的 Q-Learning 与基于策略的 Policy Gradients。</p>
+
+      <div class="grid gap-6 md:grid-cols-2">
+        <div class="card">
+          <h3>路径 A：基于价值 (Value-Based)</h3>
+          <p><strong>核心思想：</strong> 先学一个“评分表”$Q(s,a)$，再从中选最高分的动作。</p>
+          <p>策略通常是确定性的：</p>
+          <p set:html={"$$a = \\arg\\max_a Q(s,a)$$"}></p>
+          <p>优势是样本效率高，适合离散动作空间（比如上/下/左/右）。</p>
+        </div>
+
+        <div class="card">
+          <h3>路径 B：基于策略 (Policy-Based)</h3>
+          <p><strong>核心思想：</strong> 直接优化策略函数 <span set:html={"$\\pi_{\\theta}(a \\mid s)$"}></span>，输出动作分布。</p>
+          <p>策略通常是随机性的：</p>
+          <p set:html={"$$a \\sim \\pi_{\\theta}(a \\mid s)$$"}></p>
+          <p>优势是更适合连续动作空间（比如力的大小、角度），更新更稳定。</p>
+        </div>
       </div>
     </div>
 
