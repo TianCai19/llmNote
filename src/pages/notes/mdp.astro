@@ -1,0 +1,205 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import MDPProcessDiagram from '../../components/MDPProcessDiagram.astro';
+import MDPComponentsDiagram from '../../components/MDPComponentsDiagram.astro';
+import BellmanEquationDiagram from '../../components/BellmanEquationDiagram.astro';
+import ValueFunctionDiagram from '../../components/ValueFunctionDiagram.astro';
+---
+
+<BaseLayout title="马尔可夫决策过程 (MDP) | LLM Note" description="深入理解马尔可夫决策过程的数学原理和可视化解释">
+  <main>
+    <header>
+      <h1 class="gradient-text">马尔可夫决策过程 (MDP)</h1>
+      <p>强化学习的数学基础 - 智能体与环境的交互模型</p>
+    </header>
+
+    <div class="toc">
+      <h2>目录</h2>
+      <ul>
+        <li><a href="#concept">1. 抽象理解</a></li>
+        <li><a href="#components">2. 数学表示：五元组</a></li>
+        <li><a href="#goal">3. MDP 的目标</a></li>
+        <li><a href="#bellman">4. 贝尔曼方程</a></li>
+        <li><a href="#value">5. 价值函数</a></li>
+      </ul>
+    </div>
+
+    <div class="chapter" id="concept">
+      <div class="chapter-header">
+        <h2>1. 抽象理解：它在描述一个什么故事？</h2>
+      </div>
+
+      <p>马尔可夫决策过程 (MDP) 是<strong>强化学习 (Reinforcement Learning)</strong>的数学模型。它描述了一个"智能体" (Agent) 与"环境" (Environment) 交互的完整过程。</p>
+
+      <p>你可以把它想象成一个"<strong>有规则的、可学习的循环游戏</strong>"：</p>
+
+      <ol>
+        <li><strong>观察 (Observe):</strong> 智能体（比如你）在某个<strong>状态 S</strong>（比如在十字路口）。</li>
+        <li><strong>决策 (Decide):</strong> 你根据当前状态，选择一个<strong>动作 A</strong>（比如"向左转"）。</li>
+        <li><strong>反馈 (Feedback):</strong> 环境（比如交通系统）根据你的动作给你一个<strong>奖励 R</strong>（比如"安全通过，+1 分"），并把你带到一个<strong>新的状态 S'</strong>（比如"在另一条街上"）。</li>
+        <li><strong>循环 (Loop):</strong> 回到第1步，游戏继续。</li>
+      </ol>
+
+      <MDPProcessDiagram />
+
+      <div class="note-box">
+        <h3>马尔可夫性质 (The Markov Property)</h3>
+        <p>这是理解 MDP 的关键。它指的是"<strong>未来只取决于当前</strong>"。</p>
+        <p>换句话说，当你处在状态 S 时，你下一步会去哪里、会得到什么奖励，<strong>只和 S 以及你将要采取的动作 A 有关</strong>，而与你如何到达 S 的历史路径无关。</p>
+      </div>
+
+      <div class="quote-block">
+        <p><strong>例子：</strong> 在国际象棋中，棋盘的当前布局（状态）完全决定了下一步所有可能的变化。你不需要知道棋子是"如何"走到这个位置的，只需要看当前的棋盘就能做出最佳决策。</p>
+      </div>
+    </div>
+
+    <div class="chapter" id="components">
+      <div class="chapter-header">
+        <h2>2. 必要的数学表示：五元组 (S, A, P, R, γ)</h2>
+      </div>
+
+      <p>一个 MDP 过程在数学上被严格定义为一个五元组：<strong>(S, A, P, R, γ)</strong></p>
+
+      <MDPComponentsDiagram />
+
+      <div class="card">
+        <h3>1. S: 状态集合 (State Space)</h3>
+        <p>所有可能情况的集合。</p>
+        <ul>
+          <li>S 表示所有可能状态的集合</li>
+          <li>例如：棋盘的每一种布局、迷宫中的每一个格子。</li>
+          <li>S 表示<strong>状态变量</strong>。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>2. A: 动作集合 (Action Space)</h3>
+        <p>智能体可以执行的所有动作的集合。</p>
+        <ul>
+          <li>A 表示所有可能动作的集合</li>
+          <li>例如：围棋的每一个落子点、游戏中"上、下、左、右"按钮。</li>
+          <li>A 表示<strong>动作变量</strong>。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>3. P: 转移概率 (Transition Probability)</h3>
+        <p>这是环境的"物理规则"。它定义了不确定性。</p>
+        <p>P(s' | s, a) = P[S_next = s' | S = s, A = a]</p>
+        <ul>
+          <li><strong>含义：</strong> 当在状态 s 执行动作 a 后，转移到下一个状态 s' 的概率是多少。</li>
+          <li><strong>例子：</strong> 如果你"掷骰子"（动作 a），从当前位置（状态 s）移动到 6 个不同新位置（状态 s'）的概率都是 1/6。如果环境是确定的（比如国际象棋），那么这个概率 P 将是 1。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>4. R: 奖励函数 (Reward Function)</h3>
+        <p>这是环境的"目标信号"。</p>
+        <p>R(s, a, s') = E[R_next | S = s, A = a, S_next = s']</p>
+        <ul>
+          <li><strong>含义：</strong> 当在状态 s 执行动作 a 并转移到 s' 后，智能体能获得的<strong>即时奖励</strong>的期望值。</li>
+          <li><strong>例子：</strong> 游戏中吃到金币（+10），碰到敌人（-50），游戏胜利（+1000）。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>5. γ: 折扣因子 (Discount Factor)</h3>
+        <ul>
+          <li>γ ∈ [0, 1]</li>
+          <li><strong>含义：</strong> 它衡量了智能体对"未来奖励"的重视程度。
+            <ul>
+              <li>如果 γ = 0，智能体只关心眼前的即时奖励（极度"短视"）。</li>
+              <li>如果 γ = 1，智能体认为未来的奖励和现在的奖励一样重要（极度"远视"）。</li>
+              <li>通常取 0.9 到 0.99 之间，表示"未来的奖励很重要，但不如眼前的奖励那么确定"。</li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="chapter" id="goal">
+      <div class="chapter-header">
+        <h2>3. MDP 的目标：求解最优策略</h2>
+      </div>
+
+      <p>我们有了这个模型，目标是什么？目标是找到一个最优的"行动指南"，即<strong>最优策略 (Optimal Policy, π*)</strong>。</p>
+
+      <div class="card">
+        <h3>策略 (Policy, π)</h3>
+        <p>π(a|s) = P[A = a | S = s]</p>
+        <p>它是一个函数，告诉你在状态 s 时，应该以多大概率选择动作 a。</p>
+      </div>
+
+      <p>为了评估一个策略的好坏，我们引入了<strong>价值函数 (Value Function)</strong>：</p>
+
+      <div class="card">
+        <h3>状态价值函数 V^π(s)</h3>
+        <p>V^π(s) = Eπ [ Σ(k=0 to infinity) γ^k R_future(k) | S = s ]</p>
+        <p><strong>含义：</strong> 从状态 s 出发，并<strong>终生遵循</strong>策略 π，所能获得的<strong>未来总折扣奖励</strong>的期望值。</p>
+      </div>
+
+      <div class="card">
+        <h3>动作价值函数 Q^π(s, a)</h3>
+        <p>Q^π(s, a) = Eπ [ Σ(k=0 to infinity) γ^k R_future(k) | S = s, A = a ]</p>
+        <p><strong>含义：</strong> 在状态 s <strong>强行</strong>执行动作 a，<strong>然后</strong>再遵循策略 π，所能获得的未来总折扣奖励。</p>
+        <p>Q 函数是 Q-Learning 等算法的核心。</p>
+      </div>
+    </div>
+
+    <div class="chapter" id="bellman">
+      <div class="chapter-header">
+        <h2>4. 核心方程：贝尔曼方程 (Bellman Equation)</h2>
+      </div>
+
+      <p>贝尔曼方程是 MDP 中最重要的数学工具，它将当前状态的价值与其后续状态的价值联系起来，形成了一个递归关系：</p>
+
+      <BellmanEquationDiagram />
+
+      <div class="quote-block">
+        <p><strong>通俗解释：</strong></p>
+        <p>状态 s 的价值 = 遵循策略 π 选择<strong>所有可能动作 a</strong> 的期望，这个期望等于...</p>
+        <p>...（<strong>即时奖励 R</strong> + <strong>折扣后的下一个状态 s' 的价值 V^π(s')</strong>）在<strong>所有可能环境变化 s'</strong> 下的期望。</p>
+      </div>
+
+      <div class="chapter-summary">
+        <p><strong>总结：</strong></p>
+        <p>MDP (S, A, P, R, γ) 提供了一个<strong>描述问题</strong>的框架。而强化学习的目标就是<strong>求解</strong>这个 MDP，即找到一个策略 π 来最大化价值函数（V 或 Q）。</p>
+      </div>
+    </div>
+
+    <div class="chapter" id="value">
+      <div class="chapter-header">
+        <h2>5. 价值函数可视化</h2>
+      </div>
+
+      <p>让我们通过可视化来理解 V 函数和 Q 函数的区别：</p>
+
+      <ValueFunctionDiagram />
+
+      <div class="note-box">
+        <h3>关键区别</h3>
+        <p><strong>V^π(s)：</strong> 评估状态的好坏 - "在这个状态，我预期能获得多少总奖励？"</p>
+        <p><strong>Q^π(s,a)：</strong> 评估动作的好坏 - "在这个状态执行这个动作，我预期能获得多少总奖励？"</p>
+        <p>注意：Q 函数提供了更细粒度的信息，因为它不仅考虑状态，还考虑了具体的动作。</p>
+      </div>
+    </div>
+
+    <div class="chapter">
+      <div class="chapter-header">
+        <h2>结语</h2>
+      </div>
+
+      <p>这个回顾是否清晰？我们接下来可以深入探讨如何使用 Q-Learning 或 Policy Gradients 等算法来"求解"这个 MDP 吗？</p>
+
+      <div class="highlight">
+        <p>🎯 <strong>下一步学习：</strong></p>
+        <ul>
+          <li>动态规划 (Dynamic Programming)</li>
+          <li>Q-Learning 算法</li>
+          <li>策略梯度 (Policy Gradient)</li>
+          <li>Actor-Critic 方法</li>
+        </ul>
+      </div>
+    </div>
+  </main>
+</BaseLayout>

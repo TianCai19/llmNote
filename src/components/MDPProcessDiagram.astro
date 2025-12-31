@@ -1,0 +1,106 @@
+---
+// 马尔可夫决策过程流程图
+---
+
+<div class="svg-container">
+  <svg width="900" height="500" viewBox="0 0 900 500" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="stateGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#0f766e;stop-opacity:0.3" />
+        <stop offset="100%" style="stop-color:#0f766e;stop-opacity:0.1" />
+      </linearGradient>
+      <linearGradient id="actionGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#f97316;stop-opacity:0.3" />
+        <stop offset="100%" style="stop-color:#f97316;stop-opacity:0.1" />
+      </linearGradient>
+      <linearGradient id="rewardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:0.3" />
+        <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:0.1" />
+      </linearGradient>
+      <filter id="shadow">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+        <feOffset dx="0" dy="2" result="offsetblur"/>
+        <feComponentTransfer>
+          <feFuncA type="linear" slope="0.3"/>
+        </feComponentTransfer>
+        <feMerge>
+          <feMergeNode/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
+
+    <!-- 状态 S -->
+    <g transform="translate(100, 200)">
+      <rect width="140" height="100" rx="15" fill="url(#stateGrad)" stroke="#0f766e" stroke-width="2" filter="url(#shadow)"/>
+      <text x="70" y="40" text-anchor="middle" font-size="18" font-weight="bold" fill="#0f766e">状态 S</text>
+      <text x="70" y="65" text-anchor="middle" font-size="14" fill="#334155">观察环境</text>
+    </g>
+
+    <!-- 动作 A -->
+    <g transform="translate(350, 200)">
+      <rect width="140" height="100" rx="15" fill="url(#actionGrad)" stroke="#f97316" stroke-width="2" filter="url(#shadow)"/>
+      <text x="70" y="40" text-anchor="middle" font-size="18" font-weight="bold" fill="#f97316">动作 A</text>
+      <text x="70" y="65" text-anchor="middle" font-size="14" fill="#334155">做出决策</text>
+    </g>
+
+    <!-- 奖励 R -->
+    <g transform="translate(600, 100)">
+      <rect width="140" height="100" rx="15" fill="url(#rewardGrad)" stroke="#8b5cf6" stroke-width="2" filter="url(#shadow)"/>
+      <text x="70" y="40" text-anchor="middle" font-size="18" font-weight="bold" fill="#8b5cf6">奖励 R</text>
+      <text x="70" y="65" text-anchor="middle" font-size="14" fill="#334155">获得反馈</text>
+    </g>
+
+    <!-- 新状态 S_next -->
+    <g transform="translate(600, 300)">
+      <rect width="140" height="100" rx="15" fill="url(#stateGrad)" stroke="#0f766e" stroke-width="2" filter="url(#shadow)"/>
+      <text x="70" y="40" text-anchor="middle" font-size="18" font-weight="bold" fill="#0f766e">状态 S_next</text>
+      <text x="70" y="65" text-anchor="middle" font-size="14" fill="#334155">新状态</text>
+    </g>
+
+    <!-- 箭头：S -> A -->
+    <g>
+      <path d="M 240 250 L 350 250" stroke="#0f766e" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+      <text x="295" y="240" text-anchor="middle" font-size="14" fill="#0f766e">执行动作</text>
+    </g>
+
+    <!-- 箭头：A -> R -->
+    <g>
+      <path d="M 420 200 L 640 150" stroke="#f97316" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+      <text x="520" y="160" text-anchor="middle" font-size="14" fill="#f97316">得到奖励</text>
+    </g>
+
+    <!-- 箭头：A -> S_next -->
+    <g>
+      <path d="M 420 300 L 640 350" stroke="#0f766e" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+      <text x="520" y="340" text-anchor="middle" font-size="14" fill="#0f766e">状态转移</text>
+    </g>
+
+    <!-- 循环箭头：S_next -> S -->
+    <g>
+      <path d="M 600 350 C 300 450, 100 450, 100 300" stroke="#64748b" stroke-width="2" stroke-dasharray="5,5" fill="none" marker-end="url(#arrowhead-dashed)"/>
+      <text x="300" y="420" text-anchor="middle" font-size="14" fill="#64748b" font-style="italic">马尔可夫性质：</text>
+      <text x="300" y="440" text-anchor="middle" font-size="14" fill="#64748b" font-style="italic">未来只取决于当前状态</text>
+    </g>
+
+    <!-- 转移概率 P -->
+    <g transform="translate(420, 380)">
+      <text x="0" y="0" font-size="16" font-weight="bold" fill="#0f766e">P(s'|s, a)</text>
+      <text x="0" y="20" font-size="14" fill="#64748b">转移概率</text>
+    </g>
+
+    <!-- 箭头定义 -->
+    <defs>
+      <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+        <polygon points="0 0, 10 3, 0 6" fill="#0f766e" />
+      </marker>
+      <marker id="arrowhead-dashed" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+        <polygon points="0 0, 10 3, 0 6" fill="#64748b" />
+      </marker>
+    </defs>
+
+    <!-- 标题 -->
+    <text x="450" y="40" text-anchor="middle" font-size="24" font-weight="bold" fill="#1e293b">马尔可夫决策过程 (MDP)</text>
+    <text x="450" y="70" text-anchor="middle" font-size="16" fill="#64748b">智能体与环境的交互循环</text>
+  </svg>
+</div>

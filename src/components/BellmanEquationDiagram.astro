@@ -1,0 +1,152 @@
+---
+// 贝尔曼方程图解
+---
+
+<div class="svg-container">
+  <svg width="900" height="600" viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="eqGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:0.2" />
+        <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:0.05" />
+      </linearGradient>
+      <filter id="shadow">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+        <feOffset dx="0" dy="2" result="offsetblur"/>
+        <feComponentTransfer>
+          <feFuncA type="linear" slope="0.3"/>
+        </feComponentTransfer>
+        <feMerge>
+          <feMergeNode/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
+
+    <!-- 标题 -->
+    <text x="450" y="40" text-anchor="middle" font-size="26" font-weight="bold" fill="#1e293b">贝尔曼方程 (Bellman Equation)</text>
+    <text x="450" y="70" text-anchor="middle" font-size="16" fill="#64748b">价值函数的递归定义</text>
+
+    <!-- 方程主体 -->
+    <g transform="translate(50, 120)">
+      <rect width="800" height="200" rx="20" fill="url(#eqGrad)" stroke="#8b5cf6" stroke-width="2" filter="url(#shadow)"/>
+
+      <!-- 左侧：V^π(s) -->
+      <g transform="translate(30, 100)">
+        <text x="0" y="0" font-size="32" font-weight="bold" fill="#8b5cf6">V</text>
+        <text x="25" y="0" font-size="20" fill="#8b5cf6">π</text>
+        <text x="45" y="0" font-size="32" fill="#1e293b">(s)</text>
+        <text x="0" y="35" font-size="18" fill="#64748b">当前状态价值</text>
+      </g>
+
+      <!-- 等号 -->
+      <g transform="translate(180, 90)">
+        <text x="0" y="0" font-size="40" fill="#64748b">=</text>
+        <text x="0" y="35" font-size="16" fill="#64748b">等于</text>
+      </g>
+
+      <!-- 右侧：求和公式 -->
+      <g transform="translate(250, 30)">
+        <text x="0" y="0" font-size="24" fill="#1e293b">Σ</text>
+        <text x="25" y="0" font-size="20" fill="#64748b">a∈A</text>
+        <text x="0" y="35" font-size="24" fill="#1e293b">π(a|s)</text>
+
+        <text x="90" y="0" font-size="24" fill="#1e293b">Σ</text>
+        <text x="115" y="0" font-size="20" fill="#64748b">s'∈S</text>
+        <text x="90" y="35" font-size="24" fill="#1e293b">P(s'|s,a)</text>
+
+        <text x="210" y="50" font-size="32" fill="#f97316">[</text>
+        <text x="230" y="50" font-size="24" fill="#0f766e">R</text>
+        <text x="250" y="50" font-size="18" fill="#64748b">(s,a,s')</text>
+        <text x="350" y="50" font-size="32" fill="#f97316">+</text>
+        <text x="375" y="50" font-size="24" fill="#8b5cf6">γ</text>
+        <text x="400" y="50" font-size="24" fill="#1e293b">V</text>
+        <text x="425" y="50" font-size="20" fill="#8b5cf6">π</text>
+        <text x="445" y="50" font-size="24" fill="#1e293b">(s')</text>
+        <text x="475" y="50" font-size="32" fill="#f97316">]</text>
+      </g>
+
+      <!-- 说明文字 -->
+      <g transform="translate(250, 140)">
+        <text x="0" y="0" font-size="14" fill="#64748b">策略概率 × 转移概率 × (即时奖励 + 折扣的未来价值)</text>
+      </g>
+    </g>
+
+    <!-- 可视化示例 -->
+    <g transform="translate(50, 360)">
+      <text x="0" y="0" font-size="20" font-weight="bold" fill="#1e293b">可视化理解：</text>
+
+      <!-- 状态 s -->
+      <g transform="translate(20, 30)">
+        <circle cx="60" cy="60" r="45" fill="#0f766e" fill-opacity="0.3" stroke="#0f766e" stroke-width="2"/>
+        <text x="60" y="55" text-anchor="middle" font-size="18" font-weight="bold" fill="#0f766e">状态 s</text>
+        <text x="60" y="75" text-anchor="middle" font-size="14" fill="#64748b">当前价值 V^π(s)</text>
+      </g>
+
+      <!-- 可能动作 -->
+      <g transform="translate(200, 30)">
+        <circle cx="60" cy="60" r="40" fill="#f97316" fill-opacity="0.3" stroke="#f97316" stroke-width="2"/>
+        <text x="60" y="55" text-anchor="middle" font-size="16" font-weight="bold" fill="#f97316">动作 a₁</text>
+        <text x="60" y="75" text-anchor="middle" font-size="14" fill="#64748b">π(a₁|s)</text>
+      </g>
+
+      <g transform="translate(320, 30)">
+        <circle cx="60" cy="60" r="40" fill="#f97316" fill-opacity="0.3" stroke="#f97316" stroke-width="2"/>
+        <text x="60" y="55" text-anchor="middle" font-size="16" font-weight="bold" fill="#f97316">动作 a₂</text>
+        <text x="60" y="75" text-anchor="middle" font-size="14" fill="#64748b">π(a₂|s)</text>
+      </g>
+
+      <g transform="translate(440, 30)">
+        <circle cx="60" cy="60" r="40" fill="#f97316" fill-opacity="0.3" stroke="#f97316" stroke-width="2"/>
+        <text x="60" y="55" text-anchor="middle" font-size="16" font-weight="bold" fill="#f97316">动作 a₃</text>
+        <text x="60" y="75" text-anchor="middle" font-size="14" fill="#64748b">π(a₃|s)</text>
+      </g>
+
+      <!-- 可能状态转移 -->
+      <g transform="translate(600, 20)">
+        <circle cx="60" cy="40" r="35" fill="#8b5cf6" fill-opacity="0.3" stroke="#8b5cf6" stroke-width="2"/>
+        <text x="60" y="35" text-anchor="middle" font-size="14" font-weight="bold" fill="#8b5cf6">s'₁</text>
+        <text x="60" y="50" text-anchor="middle" font-size="12" fill="#64748b">P(s'₁|s,a)</text>
+      </g>
+
+      <g transform="translate(720, 20)">
+        <circle cx="60" cy="40" r="35" fill="#8b5cf6" fill-opacity="0.3" stroke="#8b5cf6" stroke-width="2"/>
+        <text x="60" y="35" text-anchor="middle" font-size="14" font-weight="bold" fill="#8b5cf6">s'₂</text>
+        <text x="60" y="50" text-anchor="middle" font-size="12" fill="#64748b">P(s'₂|s,a)</text>
+      </g>
+
+      <g transform="translate(840, 20)">
+        <circle cx="60" cy="40" r="35" fill="#8b5cf6" fill-opacity="0.3" stroke="#8b5cf6" stroke-width="2"/>
+        <text x="60" y="35" text-anchor="middle" font-size="14" font-weight="bold" fill="#8b5cf6">s'₃</text>
+        <text x="60" y="50" text-anchor="middle" font-size="12" fill="#64748b">P(s'₃|s,a)</text>
+      </g>
+
+      <!-- 箭头连接 -->
+      <g>
+        <!-- s -> a_i -->
+        <path d="M 105 60 L 200 60" stroke="#0f766e" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+        <path d="M 105 60 L 320 60" stroke="#0f766e" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+        <path d="M 105 60 L 440 60" stroke="#0f766e" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+
+        <!-- a_i -> s'_j -->
+        <path d="M 260 60 L 600 40" stroke="#f97316" stroke-width="2" fill="none" marker-end="url(#arrow-orange)"/>
+        <path d="M 380 60 L 720 40" stroke="#f97316" stroke-width="2" fill="none" marker-end="url(#arrow-orange)"/>
+        <path d="M 500 60 L 840 40" stroke="#f97316" stroke-width="2" fill="none" marker-end="url(#arrow-orange)"/>
+      </g>
+
+      <!-- 标注 -->
+      <g transform="translate(50, 170)">
+        <text x="0" y="0" font-size="16" fill="#1e293b">当前状态的价值 = 所有可能动作的加权和 × 所有可能状态转移的加权和 × (奖励 + 折扣的未来价值)</text>
+      </g>
+    </g>
+
+    <!-- 箭头定义 -->
+    <defs>
+      <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+        <polygon points="0 0, 10 3, 0 6" fill="#0f766e" />
+      </marker>
+      <marker id="arrow-orange" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+        <polygon points="0 0, 10 3, 0 6" fill="#f97316" />
+      </marker>
+    </defs>
+  </svg>
+</div>
