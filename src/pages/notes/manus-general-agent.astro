@@ -1,0 +1,149 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { yesterdayYmd } from '../../utils/date';
+
+const createdAt = yesterdayYmd();
+const videoUrl = 'https://www.bilibili.com/video/BV1knvYBDEjs/?spm_id_from=333.1007.top_right_bar_window_history.content.click&vd_source=9fb20b8980dcac4c3a58ad290349b972';
+---
+
+<BaseLayout title="Manus 深度访谈：通用 Agent 的技术突破与行业洞察">
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Manus 联合创始人季超（Pick）深度访谈</h1>
+        <p class="text-xl text-gray-500">通用 Agent 的技术判断、产品哲学与行业格局</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>背景：通用 Agent 为何在 2025 年初引发关注？</h2>
+        <p>Manus 在 2025 年初以“通用 Agent（General Purpose Agent）”的身份被全球关注。季超（Pick）回顾了从 0 到 1 的创业路径，并解释了为什么他认为应用层仍然存在巨大机会。</p>
+        <div class="bg-amber-50 p-4 rounded-lg border border-amber-100">
+            <strong>一句话概括：</strong> Manus 不是一个垂直工具，而是把“模型 + 计算机”组合成可以执行现实任务的“手”。
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>第一部分：非典型成长路径与早期创业</h2>
+        <h3 class="text-amber-700">1.1 第一桶金：Mammoth Browser</h3>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>时间：</strong>高中时期（约 2009 年）。</li>
+            <li><strong>产品：</strong>第三方 iOS 浏览器，朴素 Buy-Copy 模式。</li>
+            <li><strong>结果：</strong>赚了 30 多万美金，验证了 App Store 的红利。</li>
+        </ul>
+
+        <h3 class="text-amber-700">1.2 NLP 启蒙与 Maggie 的失败</h3>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>启蒙：</strong>2013 年 Word2Vec 论文打开了 NLP 新世界。</li>
+            <li><strong>第二次创业：</strong>基于知识图谱的搜索引擎（LSTM + Attention）。</li>
+            <li><strong>转折：</strong>2019 年 GPT-3 Early Access 出现“降维打击”。</li>
+        </ul>
+        <blockquote class="border-l-4 border-amber-200 pl-4 text-gray-600 italic">
+            “GPT-3 出来之后，其实它印证了一件事，就是好像我们做的不同任务是能够大一统的。”
+        </blockquote>
+    </div>
+
+    <div class="card">
+        <h2>第二部分：Manus 诞生——从 AI 浏览器到通用 Agent</h2>
+        <h3 class="text-blue-600">2.1 为什么加入肖弘（Red）的团队？</h3>
+        <p>季超强调自己并不擅长做 CEO，而肖弘具备“正常”的稀缺特质：身心健康、相信常识、尊重团队。</p>
+        <div class="bg-blue-50 p-4 rounded-lg">
+            <p class="text-sm text-blue-800"><strong>打动他的提问：</strong>“你想不想在一个产品里把浏览器、搜索引擎和语言模型都重新做一遍？”</p>
+        </div>
+
+        <h3 class="text-blue-600">2.2 被放弃的 AI 浏览器</h3>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>体验割裂：</strong>GUI Agent 与用户抢鼠标，AI 决策慢。</li>
+            <li><strong>价值存疑：</strong>浏览器迁移成本极高。</li>
+            <li><strong>不够酷：</strong>“自己都不觉得酷就别发。”</li>
+        </ul>
+
+        <h3 class="text-blue-600">2.3 Project Airbnb：Browser in Browser</h3>
+        <p>团队观察到非程序员员工用 Cursor 做非代码任务，于是转向将“编程能力”搬到云端，让任务异步并发。</p>
+        <div class="bg-gray-50 p-4 rounded-lg">
+            <strong>核心形态：</strong>每个 Session 背后是独立隔离的虚拟机，通用模型 + 计算环境构成“通用 Agent”。
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>第三部分：产品哲学——为什么坚持通用 Agent？</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-emerald-50 p-4 rounded-lg">
+                <h3 class="font-semibold text-emerald-800">通用 vs. 垂直</h3>
+                <ul class="mt-2 space-y-2 text-sm text-emerald-800">
+                    <li>垂直模型容易被“大一统模型”吞并。</li>
+                    <li>通用 Agent 可覆盖长尾高价值需求。</li>
+                    <li>垂直任务频次低，难形成用户心智。</li>
+                </ul>
+            </div>
+            <div class="bg-emerald-50 p-4 rounded-lg">
+                <h3 class="font-semibold text-emerald-800">Manus 的定位</h3>
+                <ul class="mt-2 space-y-2 text-sm text-emerald-800">
+                    <li>Manus = “手”：连接心智与现实世界。</li>
+                    <li>不是工具，而是“助理型人设”。</li>
+                    <li>连接现有软件生态，而非替代。</li>
+                </ul>
+            </div>
+        </div>
+        <blockquote class="mt-4 border-l-4 border-emerald-200 pl-4 text-gray-600 italic">
+            “我们永远不以替换人的思路来想这个事，而是 Enhance People（增强人）。”
+        </blockquote>
+    </div>
+
+    <div class="card">
+        <h2>第四部分：技术架构与生态位</h2>
+        <h3 class="text-purple-600">4.1 不做模型训练，做“甲方的甲方”</h3>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>策略：</strong>不训练基座模型，而是成为顶级 Token 客户。</li>
+            <li><strong>合作：</strong>帮助模型厂商构建评估体系与新能力。</li>
+            <li><strong>模型特点：</strong>Anthropic 擅长 Coding，Gemini 强多模态与搜索，OpenAI 强推理。</li>
+        </ul>
+
+        <h3 class="text-purple-600">4.2 Pure-Blood Agent vs. Workflow</h3>
+        <ul class="list-disc pl-6 space-y-2 text-gray-600">
+            <li><strong>拒绝 Workflow：</strong>稳定性换来的是上限降低。</li>
+            <li><strong>Context Engineering：</strong>模型具备压缩意识，记忆外化到文件系统。</li>
+            <li><strong>Interleaved Thinking：</strong>观察-思考-行动交错循环，避免推理模型指令遵循下降。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>第五部分：商业化与争议回应</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-rose-50 p-4 rounded-lg">
+                <h3 class="font-semibold text-rose-700">邀请码争议</h3>
+                <p class="mt-2 text-sm text-rose-700">不是饥饿营销，而是算力供应不足。云厂商上线初期需要“插卡救火”。</p>
+            </div>
+            <div class="bg-rose-50 p-4 rounded-lg">
+                <h3 class="font-semibold text-rose-700">出海与营收</h3>
+                <p class="mt-2 text-sm text-rose-700">坚决出海面向 Prosumer，母公司 ARR 已超过 1 亿美元。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>第六部分：组织文化与未来展望</h2>
+        <h3 class="text-slate-700">6.1 组织结构</h3>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>Sandbox Team：</strong>维护 Agent 专用操作系统（基于 Firecracker）。</li>
+            <li><strong>Agent Team：</strong>负责架构与评估，保持“弱到强”的衡量标准。</li>
+        </ul>
+
+        <h3 class="text-slate-700">6.2 关键 Bet</h3>
+        <p>季超认为下一阶段的进步依赖用户参与，Agent 场景下的反馈会成为关键训练数据。</p>
+        <blockquote class="border-l-4 border-slate-200 pl-4 text-gray-600 italic">
+            “只要问题能够被定义，问题一定能解决。”
+        </blockquote>
+    </div>
+
+    <div class="card">
+        <h2>原视频链接</h2>
+        <p>完整访谈视频请见：</p>
+        <a
+            class="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 underline"
+            href={videoUrl}
+            target="_blank"
+            rel="noreferrer"
+        >
+            Bilibili - Manus 联合创始人兼首席科学家季超（Pick）深度访谈
+        </a>
+    </div>
+</BaseLayout>
