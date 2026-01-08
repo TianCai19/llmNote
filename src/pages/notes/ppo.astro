@@ -1,0 +1,223 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PPOTrainingLoopDiagram from '../../components/PPOTrainingLoopDiagram.astro';
+import PPOClipObjectiveDiagram from '../../components/PPOClipObjectiveDiagram.astro';
+import PPOClipAnimationDiagram from '../../components/PPOClipAnimationDiagram.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+---
+
+<BaseLayout title="PPO (Proximal Policy Optimization) | LLM Note" description="PPO 的目标函数、训练流程与在 LLM 对齐中的实践要点">
+    <main>
+        <header>
+            <h1 class="gradient-text">PPO（Proximal Policy Optimization）</h1>
+            <p>稳定、可扩展的策略梯度算法：从核心公式到 LLM 对齐</p>
+            <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+        </header>
+
+        <div class="toc">
+            <h2>目录</h2>
+            <ul>
+                <li><a href="#why">1. 为什么需要 PPO</a></li>
+                <li><a href="#scenarios">2. PPO 直观场景</a></li>
+                <li><a href="#objective">3. 核心目标函数：Clipped Surrogate</a></li>
+                <li><a href="#advantage">4. 优势函数与 GAE</a></li>
+                <li><a href="#loop">5. 训练流程与伪代码</a></li>
+                <li><a href="#llm">6. LLM 对齐中的 PPO</a></li>
+                <li><a href="#tips">7. 实战超参与稳定性</a></li>
+                <li><a href="#learn">8. 学习资源与延伸阅读</a></li>
+            </ul>
+        </div>
+
+        <div class="chapter" id="why">
+            <div class="chapter-header">
+                <h2>1. 为什么需要 PPO</h2>
+            </div>
+            <p>PPO 是一种<strong>近端策略优化</strong>方法，它在策略梯度基础上加入"更新幅度"的限制，解决了两类问题：</p>
+            <div class="card">
+                <h3>传统策略梯度的痛点</h3>
+                <ul>
+                    <li><strong>更新不稳定：</strong>策略一步走太远，性能反而崩溃。</li>
+                    <li><strong>调参困难：</strong>学习率过大易发散，过小收敛很慢。</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3>TRPO 的思路，但更易实现</h3>
+                <p>TRPO 通过 KL 约束限制更新，但实现复杂、计算昂贵。PPO 采用更简单的<strong>剪切目标函数</strong>，获得类似的稳定性。</p>
+            </div>
+        </div>
+
+        <div class="chapter" id="scenarios">
+            <div class="chapter-header">
+                <h2>2. PPO 直观场景：把抽象变成故事</h2>
+            </div>
+            <div class="card">
+                <h3>1) 游戏控制：按键力度别过猛</h3>
+                <p>智能体在街机游戏中学会"跳跃"与"闪避"。如果一次更新让跳跃概率暴涨，下一局可能会乱跳导致失分。</p>
+                <p>PPO 的 clip 就像"刹车"：允许改进，但不让策略突然变成另一个人。</p>
+            </div>
+            <div class="card">
+                <h3>2) 机器人抓取：动作要稳</h3>
+                <p>机械臂学习抓杯子。一次策略更新过大可能导致手臂抖动、抓取失败。</p>
+                <p>PPO 会让每次更新保持小步，逐渐提高抓取成功率。</p>
+            </div>
+            <div class="card">
+                <h3>3) 推荐系统：别突然大改推荐风格</h3>
+                <p>系统在试探"多样性"与"点击率"的平衡。如果策略一下子倾向冷门内容，用户体验会急剧下滑。</p>
+                <p>clip 机制让策略偏好变化可控，保证平滑过渡。</p>
+            </div>
+            <div class="card">
+                <h3>4) LLM 对齐：输出质量稳步提升</h3>
+                <p>模型学会更礼貌、更符合偏好，但不能突然偏离原始能力。</p>
+            <p>通过 KL 约束 + clip，PPO 在奖励提升与稳定输出之间找到平衡。</p>
+            </div>
+        </div>
+
+        <div class="chapter" id="objective">
+            <div class="chapter-header">
+                <h2>3. 核心目标函数：Clipped Surrogate</h2>
+            </div>
+            <PPOClipObjectiveDiagram />
+            <p>PPO 使用重要性采样比率：</p>
+            <p set:html={"$$r_t(\\theta) = \\frac{\\pi_\\theta(a_t \\mid s_t)}{\\pi_{\\theta_{old}}(a_t \\mid s_t)}$$"}></p>
+            <div class="note-box">
+                <h3>公式含义</h3>
+                <p><strong>分子：</strong>当前策略在状态 s_t 选择动作 a_t 的概率。</p>
+                <p><strong>分母：</strong>旧策略（采样时使用的策略）给出的概率。</p>
+                <p>当 $r_t &gt; 1$ 表示新策略更偏好该动作，$r_t &lt; 1$ 则表示降低了偏好。</p>
+            </div>
+            <p>并引入裁剪项限制更新幅度：</p>
+            <p set:html={"$$L^{CLIP}(\\theta) = \\mathbb{E}_t\\left[\\min\\left(r_t(\\theta) \\hat{A}_t, \\; \\text{clip}(r_t(\\theta), 1-\\epsilon, 1+\\epsilon) \\hat{A}_t\\right)\\right]$$"}></p>
+            <div class="note-box">
+                <h3>为什么取 min</h3>
+                <p><strong>正优势 (Â_t &gt; 0)：</strong>限制过度提升概率，避免一步走太远。</p>
+                <p><strong>负优势 (Â_t &lt; 0)：</strong>限制过度降低概率，避免性能崩溃。</p>
+            </div>
+            <div class="card">
+                <h3>分步骤拆解这个公式</h3>
+                <ol>
+                    <li><strong>先算比率：</strong><span set:html={"$r_t = \\pi_\\theta(a_t \\mid s_t) / \\pi_{\\theta_{old}}(a_t \\mid s_t)$"}></span>。</li>
+                    <li><strong>得到原始目标：</strong><span set:html={"$r_t \\cdot \\hat{A}_t$"}></span>，表示"按照新策略放大或缩小优势"。</li>
+                    <li><strong>裁剪比率：</strong>把 <span set:html={"$r_t$"}></span> 限制在 <span set:html={"$[1-\\epsilon, 1+\\epsilon]$"}></span> 区间内。</li>
+                    <li><strong>得到裁剪目标：</strong><span set:html={"$\\text{clip}(r_t) \\cdot \\hat{A}_t$"}></span>。</li>
+                    <li><strong>取较小者：</strong><span set:html={"$\\min(\\text{原始目标}, \\text{裁剪目标})$"}></span>，避免收益被极端放大。</li>
+                    <li><strong>对批次求平均：</strong>最后对所有时间步取期望 <span set:html={"$\\mathbb{E}_t$"}></span>。</li>
+                </ol>
+            </div>
+            <div class="note-box">
+                <h3>参数与符号补充</h3>
+                <p><strong>ε：</strong>剪切幅度，控制"允许偏离 1 的范围"，越小越保守。</p>
+                <p><strong>期望 <span set:html={"$\\mathbb{E}_t$"}></span>：</strong>在一批采样轨迹上取平均，实践中通常是 mini-batch。</p>
+                <p><strong>$r_t$ 约束：</strong>等价于限制单步 KL 过大，常与 KL 监控配合。</p>
+            </div>
+            <PPOClipAnimationDiagram />
+            <div class="note-box">
+                <h3>直觉理解</h3>
+                <p>如果新策略让比率偏离 1 太多，就<strong>截断收益</strong>，避免一次更新过猛。</p>
+            </div>
+        </div>
+
+        <div class="chapter" id="advantage">
+            <div class="chapter-header">
+                <h2>4. 优势函数与 GAE</h2>
+            </div>
+            <p>PPO 通常使用<strong>广义优势估计 (GAE)</strong> 来降低方差并提升稳定性：</p>
+            <p set:html={"$$\\hat{A}_t^{GAE(\\gamma,\\lambda)} = \\sum_{l=0}^{\\infty} (\\gamma\\lambda)^l \\delta_{t+l}$$"}></p>
+            <p set:html={"$$\\delta_t = r_t + \\gamma V(s_{t+1}) - V(s_t)$$"}></p>
+            <div class="note-box">
+                <h3>直觉拆解</h3>
+                <p><strong><span set:html={"$\\delta_t$"}></span>：</strong>一步 TD 误差，衡量价值函数的偏差。</p>
+                <p><strong><span set:html={"$\\gamma\\lambda$"}></span>：</strong>控制多步回报的权重衰减，值越大越偏向长程估计。</p>
+            </div>
+            <div class="note-box">
+                <h3>常见误区</h3>
+                <p><strong><span set:html={"$\\hat{A}_t$"}></span> 不是回报：</strong>优势是相对价值的"好多少"，需要减去 <span set:html={"$V(s_t)$"}></span>。</p>
+                <p><strong>GAE 不是越大越好：</strong><span set:html={"$\\lambda$"}></span> 太大时方差会上升，训练变抖。</p>
+            </div>
+            <div class="card">
+                <h3>取值建议</h3>
+                <ul>
+                    <li><strong>γ：</strong>通常在 0.99 左右，强调长期回报。</li>
+                    <li><strong>λ：</strong>0.95 是常用折中，平衡偏差与方差。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter" id="loop">
+            <div class="chapter-header">
+                <h2>5. 训练流程与伪代码</h2>
+            </div>
+            <PPOTrainingLoopDiagram />
+            <div class="card">
+                <ol>
+                    <li><strong>采样轨迹：</strong>用当前策略与环境交互，收集 (s, a, r, s')。</li>
+                    <li><strong>计算优势：</strong>估计 V(s)，得到 GAE 优势。</li>
+                    <li><strong>多轮更新：</strong>对同一批数据做 K 次小步更新。</li>
+                    <li><strong>同步策略：</strong>更新 old policy 为当前策略。</li>
+                </ol>
+            </div>
+            <div class="quote-block">
+                <p><strong>关键实践：</strong>一批数据多次更新 + 裁剪目标 + KL 监控，让 PPO 在工程上更稳。</p>
+            </div>
+        </div>
+
+        <div class="chapter" id="llm">
+            <div class="chapter-header">
+                <h2>6. LLM 对齐中的 PPO</h2>
+            </div>
+            <p>在 RLHF/RLAIF 中，PPO 常用于<strong>提升模型输出质量并对齐人类偏好</strong>。</p>
+            <div class="card">
+                <h3>常见组成</h3>
+                <ul>
+                    <li><strong>Policy：</strong>待优化的语言模型。</li>
+                    <li><strong>Reference：</strong>冻结的对照模型，用于 KL 约束。</li>
+                    <li><strong>Reward Model：</strong>给出偏好分数或奖励信号。</li>
+                </ul>
+            </div>
+            <div class="note-box">
+                <h3>KL 惩罚</h3>
+                <p>LLM 的 PPO 往往在奖励中加入 <strong><span set:html={"$KL(\\pi \\Vert \\pi_{ref})$"}></span></strong>，避免输出偏离基座模型太远。</p>
+            </div>
+        </div>
+
+        <div class="chapter" id="tips">
+            <div class="chapter-header">
+                <h2>7. 实战超参与稳定性</h2>
+            </div>
+            <div class="card">
+                <ul>
+                    <li><strong>clip ε：</strong>常见 0.1~0.3，越小越稳但收敛慢。</li>
+                    <li><strong>更新轮数 K：</strong>3~10，配合小 batch。</li>
+                    <li><strong>早停策略：</strong>监控 KL 超过阈值就停止当前 epoch。</li>
+                    <li><strong>价值函数损失：</strong>与策略损失加权平衡，避免 value collapse。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter" id="learn">
+            <div class="chapter-header">
+                <h2>8. 学习资源与延伸阅读</h2>
+            </div>
+            <div class="card">
+                <ul>
+                    <li>
+                        <a href="https://huggingface.co/learn/deep-rl-course/unit7/ppo" target="_blank" rel="noreferrer">
+                            Hugging Face 深度强化学习课程：PPO 单元
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://huggingface.co/docs/trl/index" target="_blank" rel="noreferrer">
+                            Hugging Face TRL 文档：PPO/RLHF 工具链
+                        </a>
+                    </li>
+                    <li>
+                        <a href="https://docs.unsloth.ai/" target="_blank" rel="noreferrer">
+                            Unsloth 文档：高效微调与 RLHF 实践
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </main>
+</BaseLayout>

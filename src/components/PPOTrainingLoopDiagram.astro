@@ -1,0 +1,79 @@
+---
+// PPO 训练流程示意图
+---
+
+<div class="svg-container">
+    <svg width="900" height="420" viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <linearGradient id="ppoPolicyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#0f766e;stop-opacity:0.25" />
+                <stop offset="100%" style="stop-color:#0f766e;stop-opacity:0.1" />
+            </linearGradient>
+            <linearGradient id="ppoRolloutGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#2563eb;stop-opacity:0.25" />
+                <stop offset="100%" style="stop-color:#2563eb;stop-opacity:0.1" />
+            </linearGradient>
+            <linearGradient id="ppoAdvGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#f97316;stop-opacity:0.25" />
+                <stop offset="100%" style="stop-color:#f97316;stop-opacity:0.1" />
+            </linearGradient>
+            <linearGradient id="ppoUpdateGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:0.25" />
+                <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:0.1" />
+            </linearGradient>
+            <filter id="ppoShadow">
+                <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+                <feOffset dx="0" dy="2" result="offsetblur"/>
+                <feComponentTransfer>
+                    <feFuncA type="linear" slope="0.25"/>
+                </feComponentTransfer>
+                <feMerge>
+                    <feMergeNode/>
+                    <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+            </filter>
+            <marker id="ppoArrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                <polygon points="0 0, 10 3, 0 6" fill="#1f2937" />
+            </marker>
+            <marker id="ppoArrowMuted" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                <polygon points="0 0, 10 3, 0 6" fill="#64748b" />
+            </marker>
+        </defs>
+
+        <text x="450" y="32" text-anchor="middle" font-size="22" font-weight="bold" fill="#1e293b">PPO 训练循环</text>
+        <text x="450" y="56" text-anchor="middle" font-size="14" fill="#64748b">采样 → 优势估计 → 剪切更新 → 监控 KL → 继续迭代</text>
+
+        <g transform="translate(60, 120)">
+            <rect width="180" height="90" rx="16" fill="url(#ppoPolicyGrad)" stroke="#0f766e" stroke-width="2" filter="url(#ppoShadow)"/>
+            <text x="90" y="40" text-anchor="middle" font-size="16" font-weight="bold" fill="#0f766e">当前策略 π</text>
+            <text x="90" y="62" text-anchor="middle" font-size="13" fill="#334155">Policy 模型</text>
+        </g>
+
+        <g transform="translate(300, 120)">
+            <rect width="180" height="90" rx="16" fill="url(#ppoRolloutGrad)" stroke="#2563eb" stroke-width="2" filter="url(#ppoShadow)"/>
+            <text x="90" y="40" text-anchor="middle" font-size="16" font-weight="bold" fill="#2563eb">采样轨迹</text>
+            <text x="90" y="62" text-anchor="middle" font-size="13" fill="#334155">Rollout / Buffer</text>
+        </g>
+
+        <g transform="translate(540, 120)">
+            <rect width="180" height="90" rx="16" fill="url(#ppoAdvGrad)" stroke="#f97316" stroke-width="2" filter="url(#ppoShadow)"/>
+            <text x="90" y="40" text-anchor="middle" font-size="16" font-weight="bold" fill="#f97316">优势估计</text>
+            <text x="90" y="62" text-anchor="middle" font-size="13" fill="#334155">GAE / Value</text>
+        </g>
+
+        <g transform="translate(300, 260)">
+            <rect width="300" height="100" rx="18" fill="url(#ppoUpdateGrad)" stroke="#8b5cf6" stroke-width="2" filter="url(#ppoShadow)"/>
+            <text x="150" y="40" text-anchor="middle" font-size="16" font-weight="bold" fill="#8b5cf6">Clipped 更新</text>
+            <text x="150" y="62" text-anchor="middle" font-size="13" fill="#334155">多轮小步更新 (K 次)</text>
+            <text x="150" y="82" text-anchor="middle" font-size="12" fill="#64748b">监控 KL / Early Stop</text>
+        </g>
+
+        <path d="M 240 165 L 300 165" stroke="#1f2937" stroke-width="2.5" fill="none" marker-end="url(#ppoArrow)"/>
+        <path d="M 480 165 L 540 165" stroke="#1f2937" stroke-width="2.5" fill="none" marker-end="url(#ppoArrow)"/>
+        <path d="M 630 210 L 520 260" stroke="#1f2937" stroke-width="2.5" fill="none" marker-end="url(#ppoArrow)"/>
+        <path d="M 330 210 L 410 260" stroke="#1f2937" stroke-width="2.5" fill="none" marker-end="url(#ppoArrow)"/>
+
+        <path d="M 450 360 C 120 360, 80 260, 80 210" stroke="#64748b" stroke-width="2" stroke-dasharray="6,6" fill="none" marker-end="url(#ppoArrowMuted)"/>
+        <text x="180" y="330" text-anchor="middle" font-size="12" fill="#64748b">更新后的策略 → 下一轮采样</text>
+    </svg>
+</div>

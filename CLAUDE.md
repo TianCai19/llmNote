@@ -45,6 +45,16 @@ If you see raw formulas on the page, it usually means the text wasn't wrapped in
 ```
 Also wrap superscripts/subscripts with braces (e.g. `V^{\\pi}`, `\\pi_{\\theta}`) to avoid MathJax warnings.
 
+**Important**: When using inline LaTeX formulas outside of `set:html` (e.g., `$r_t = \\pi_\\theta(a_t \\mid s_t)$` in regular text), you MUST escape backslashes with additional backslashes. For complex formulas, it's recommended to wrap the entire formula in `set:html`:
+```astro
+<!-- Avoid: -->
+<p>比率：$r_t = \\pi_\\theta(a_t \\mid s_t)$。</p>
+
+<!-- Prefer: -->
+<p>比率：<span set:html={"$r_t = \\pi_\\theta(a_t \\mid s_t)$"}></span>。</p>
+```
+This prevents build errors like `Syntax error "\"` in `.astro` files.
+
 **Example**:
 ```astro
 <p>长期回报：$G_t = R_{t+1} + \gamma R_{t+2} + \cdots$</p>
