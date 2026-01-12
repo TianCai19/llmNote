@@ -19,6 +19,14 @@ This is an Astro site using Tailwind CSS. Source code lives in `src/`, with rout
 ## Testing Guidelines
 There are no automated tests configured in this repository. If you add tests, update `package.json` with a test script and document the chosen runner (e.g., Vitest). Use clear naming such as `ComponentName.test.ts`.
 
+## Note Authoring Guidelines (General, Reusable)
+- Aim for research-friendly depth: include key formulas, define parameters, and state assumptions clearly.
+- Use a clear structure: background -> core concepts -> formulas/derivations -> training or inference flow -> practical tips.
+- Embed visuals inline with the text to explain concepts; avoid separate image galleries.
+- Prefer diagrams that show real relationships (parameters, layers, data flow) over generic process flowcharts.
+- Keep sections substantial with meaningful explanations; use subheadings to organize.
+- Ensure formulas are centered, readable, and sized consistently with body text.
+
 ## Commit & Pull Request Guidelines
 No Git history is available in this workspace (no `.git`), so there is no established commit convention to reference. If you initialize Git, use short, imperative commit subjects (e.g., `Add hero layout`) and include scope where helpful.
 
