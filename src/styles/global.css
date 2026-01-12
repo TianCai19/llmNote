@@ -197,6 +197,53 @@ main > header p {
   color: var(--accent-strong);
 }
 
+.layout-grid {
+  display: block;
+}
+
+.toc-shell {
+  position: fixed;
+  left: 2rem;
+  top: 6.5rem;
+  z-index: 40;
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .toc-shell {
+    display: block;
+  }
+}
+
+.toc-toggle {
+  @apply inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/85 px-4 py-2 text-xs uppercase tracking-[0.2em] text-[color:var(--accent-strong)] transition;
+  box-shadow: 0 12px 30px -20px rgba(15, 118, 110, 0.6);
+}
+
+.toc-toggle:hover {
+  background: white;
+  transform: translateY(-1px);
+}
+
+.toc-icon {
+  height: 16px;
+  width: 16px;
+}
+
+.toc-sidebar {
+  margin-top: 1rem;
+  max-height: calc(100vh - 10rem);
+  overflow: auto;
+}
+
+.toc-sidebar .toc {
+  width: 260px;
+}
+
+.toc-list {
+  margin-bottom: 0;
+}
+
 .chapter {
   @apply mb-16;
 }

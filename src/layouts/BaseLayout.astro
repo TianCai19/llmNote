@@ -18,14 +18,14 @@ const { title, description = 'LLM 学习笔记' } = Astro.props;
     <title>{title} | LLM Note</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@500;600;700&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
     <script is:inline>
-        MathJax = {
+        window.MathJax = {
             tex: {
                 inlineMath: [['$', '$'], ['\\(', '\\)']],
                 displayMath: [['$$', '$$'], ['\\[', '\\]']]
             }
         };
     </script>
-    <script is:inline src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
 </head>
 <body class="min-h-screen antialiased text-[color:var(--ink)]">
     <nav class="sticky top-0 z-50 border-b border-white/70 bg-white/70 backdrop-blur">
@@ -39,12 +39,128 @@ const { title, description = 'LLM 学习笔记' } = Astro.props;
         </div>
     </nav>
 
-    <main class="mx-auto w-full max-w-5xl px-6 py-12 sm:px-8 sm:py-16">
-        <slot />
-    </main>
+    <div class="mx-auto w-full max-w-6xl px-6 py-12 sm:px-8 sm:py-16">
+        <div class="layout-grid">
+            <main class="min-w-0">
+                <slot />
+            </main>
+            <aside class="toc-shell">
+                <button class="toc-toggle" type="button" aria-expanded="false">
+                    <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M4 6h16M4 12h10M4 18h13"></path>
+                    </svg>
+                    目录
+                </button>
+                <div class="toc-sidebar" hidden></div>
+            </aside>
+        </div>
+    </div>
 
     <footer class="border-t border-white/70 bg-white/60 py-10 text-center text-sm text-[color:var(--muted)]">
         <p>LLM Note - 现代化学习笔记</p>
     </footer>
+    <script is:inline>
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.MathJax?.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+
+            const main = document.querySelector('main');
+            if (!main) {
+                return;
+            }
+
+            const contentRoot = main.querySelector('main') ?? main;
+
+            const usedIds = new Set();
+            const slugify = (text, index) => {
+                const base = text
+                    .toLowerCase()
+                    .trim()
+                    .replace(/[^a-z0-9]+/g, '-')
+                    .replace(/^-+|-+$/g, '');
+                const fallback = `section-${index + 1}`;
+                let slug = base || fallback;
+                let suffix = 1;
+                while (usedIds.has(slug)) {
+                    slug = `${base || fallback}-${suffix}`;
+                    suffix += 1;
+                }
+                usedIds.add(slug);
+                return slug;
+            };
+
+            let tocNav = contentRoot.querySelector('.toc');
+            if (tocNav) {
+                tocNav.classList.add('toc-list');
+            } else {
+                const headings = Array.from(contentRoot.querySelectorAll('h2, h3'));
+                if (headings.length < 3) {
+                    return;
+                }
+
+                tocNav = document.createElement('nav');
+                tocNav.className = 'toc toc-list';
+                const tocTitle = document.createElement('h2');
+                tocTitle.textContent = '目录';
+                tocNav.appendChild(tocTitle);
+                const tocList = document.createElement('ul');
+
+                headings.forEach((heading, index) => {
+                    const title = heading.textContent?.trim();
+                    if (!title) {
+                        return;
+                    }
+
+                    if (!heading.id) {
+                        heading.id = slugify(title, index);
+                    } else {
+                        usedIds.add(heading.id);
+                    }
+
+                    const listItem = document.createElement('li');
+                    if (heading.tagName.toLowerCase() === 'h3') {
+                        listItem.className = 'ml-4 text-sm';
+                    }
+                    const link = document.createElement('a');
+                    link.href = `#${heading.id}`;
+                    link.textContent = title;
+                    listItem.appendChild(link);
+                    tocList.appendChild(listItem);
+                });
+
+                if (!tocList.children.length) {
+                    return;
+                }
+
+                tocNav.appendChild(tocList);
+            }
+
+            const tocShell = document.querySelector('.toc-shell');
+            const tocSidebar = tocShell?.querySelector('.toc-sidebar');
+            const useSidebar = window.matchMedia('(min-width: 1024px)').matches;
+
+            if (tocSidebar && useSidebar) {
+                tocSidebar.appendChild(tocNav);
+                const toggle = tocShell.querySelector('.toc-toggle');
+                toggle?.addEventListener('click', () => {
+                    const isHidden = tocSidebar.hasAttribute('hidden');
+                    if (isHidden) {
+                        tocSidebar.removeAttribute('hidden');
+                    } else {
+                        tocSidebar.setAttribute('hidden', '');
+                    }
+                    toggle.setAttribute('aria-expanded', String(isHidden));
+                });
+            } else {
+                const firstHeader = contentRoot.querySelector('header');
+                if (firstHeader && firstHeader.nextSibling) {
+                    contentRoot.insertBefore(tocNav, firstHeader.nextSibling);
+                } else {
+                    contentRoot.prepend(tocNav);
+                }
+            }
+        });
+    </script>
 </body>
 </html>
