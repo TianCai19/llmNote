@@ -1,0 +1,446 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+---
+
+<BaseLayout title="LoRA 低秩适配：用小模块改造大模型">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">PEFT / Low-Rank</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">LoRA 低秩适配：用小模块改造大模型</h1>
+        <p class="text-xl text-gray-500">冻结大模型，只训练少量低秩矩阵，兼顾成本与效果</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>为什么需要 LoRA？</h2>
+        <p>大模型全量微调需要保存和更新全部参数，不仅显存开销大，部署也要为每个任务保留完整副本。LoRA 的目标是：<span class="highlight">让模型只学“变化”，而不是重学全部</span>。</p>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <h4 class="font-semibold text-slate-700 mb-2">全量微调</h4>
+                <p class="text-sm text-slate-600">参数量 = 全模型参数，显存高，存储贵。</p>
+            </div>
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <h4 class="font-semibold text-slate-700 mb-2">LoRA</h4>
+                <p class="text-sm text-slate-600">只训练低秩矩阵，参数量可降到 0.1% 甚至更低。</p>
+            </div>
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <h4 class="font-semibold text-slate-700 mb-2">部署优势</h4>
+                <p class="text-sm text-slate-600">可合并到原权重，推理不增加延迟。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>背景知识：什么是参数高效微调（PEFT）？</h2>
+        <p>PEFT 的核心思路是：<span class="highlight">保留大模型的通用能力，只为新任务学习少量参数</span>。这样可以显著降低训练成本与存储开销。</p>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <h4 class="font-semibold text-slate-700 mb-2">Adapter</h4>
+                <p class="text-sm text-slate-600">在层内插入小网络，新增参数较多，推理可能变慢。</p>
+            </div>
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <h4 class="font-semibold text-slate-700 mb-2">Prefix / Prompt Tuning</h4>
+                <p class="text-sm text-slate-600">只学习一段可训练的提示向量，但表达力有限。</p>
+            </div>
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <h4 class="font-semibold text-slate-700 mb-2">LoRA</h4>
+                <p class="text-sm text-slate-600">用低秩矩阵表达参数变化，兼顾效率与效果。</p>
+            </div>
+        </div>
+        <div class="quote-block">
+            <p>直觉上：PEFT 是给大模型“加配件”而不是“重新造一台”。LoRA 的配件最轻、也最容易拆装。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>背景知识：什么是全量微调（Full Fine-tuning）？</h2>
+        <p>全量微调会对模型的所有参数进行更新，目标是让模型完全适配新任务。这是效果上最强的基线，但成本也最高。</p>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <h4 class="font-semibold text-slate-700 mb-2">训练成本</h4>
+                <p class="text-sm text-slate-600">显存和计算需求大，尤其是大模型。</p>
+            </div>
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <h4 class="font-semibold text-slate-700 mb-2">部署成本</h4>
+                <p class="text-sm text-slate-600">每个任务需要保存一整份模型。</p>
+            </div>
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <h4 class="font-semibold text-slate-700 mb-2">适用场景</h4>
+                <p class="text-sm text-slate-600">任务差异极大或数据规模充足时更划算。</p>
+            </div>
+        </div>
+        <div class="quote-block">
+            <p>可以把全量微调理解为“重新塑造大模型的每个细节”，而 LoRA 则是只调整最关键的方向。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>核心思想：把权重更新写成低秩分解</h2>
+        <p>LoRA 不直接训练 <span class="highlight">W</span>，而是学习一个低秩更新矩阵 ΔW。形式如下：</p>
+        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm md:text-base text-center overflow-x-auto">
+            W' = W₀ + ΔW,  ΔW = B · A,  B ∈ R<sup>d&times;r</sup>, A ∈ R<sup>r&times;k</sup>
+        </div>
+        <p>由于 r 很小，训练参数量减少；而且 ΔW 可以在部署时直接与 W 合并。</p>
+
+        <h3>直觉：只在关键方向上“补差”</h3>
+        <p>可以把 ΔW 理解为“任务相关的变化方向”。全量微调等于在整个高维空间里调整，而 LoRA 只在 r 个方向上补差，像是对权重变化做一个低维投影。</p>
+
+        <h3>参数量为什么会下降？</h3>
+        <p>原始更新矩阵是 d&times;k 的满秩矩阵，而 LoRA 把它拆成 d&times;r 和 r&times;k。参数量从 d&times;k 变成 r&times;(d+k)。当 r &ll; d,k 时，参数量就大幅下降。</p>
+        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm md:text-base text-center overflow-x-auto">
+            Params(LoRA) ≈ r · (d + k)  &lt;&lt;  d · k
+        </div>
+
+        <h3>为什么低秩足够？</h3>
+        <p>论文的实证发现表明：模型在适配新任务时，真正“需要改变”的方向其实很少，权重更新往往集中在一个低维子空间里。这也是为什么 r 取 4~16 就能在很多任务上接近甚至超过全量微调效果。</p>
+
+        <h3>训练更新（公式形式）</h3>
+        <p>实际训练时只优化 A、B 的参数，W₀ 完全冻结。优化过程可以写成：</p>
+        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm md:text-base text-center overflow-x-auto">
+            A ← A − η · ∂L/∂A,  B ← B − η · ∂L/∂B,  W₀ 固定
+        </div>
+        <p>因此显存与优化器状态只为 A、B 分配，训练成本大幅下降。</p>
+
+        <h3>参数量与算力的真实数量级</h3>
+        <p>以线性层输入/输出维度 d=k=4096 为例，对比不同 r 的参数量：</p>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">r</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">LoRA 参数量 r(d+k)</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">全量参数量 d·k</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">占比</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-sm">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">8</td>
+                        <td class="px-4 py-3">65,536</td>
+                        <td class="px-4 py-3">16,777,216</td>
+                        <td class="px-4 py-3">0.39%</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">16</td>
+                        <td class="px-4 py-3">131,072</td>
+                        <td class="px-4 py-3">16,777,216</td>
+                        <td class="px-4 py-3">0.78%</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">64</td>
+                        <td class="px-4 py-3">524,288</td>
+                        <td class="px-4 py-3">16,777,216</td>
+                        <td class="px-4 py-3">3.13%</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="quote-block">
+            <p>这个数量级解释了为什么 LoRA 可以让“大模型微调”变得可用：每个线性层只增加不到 1% 的参数量。</p>
+        </div>
+        <figure class="rounded-2xl border border-white/70 bg-white/85 p-4">
+            <img src="/notes/lora/figure-1.png" alt="LoRA reparameterization" class="mx-auto w-full max-w-[520px] rounded-xl" loading="lazy" />
+            <figcaption class="mt-3 text-sm text-slate-600">图 1：LoRA 的重参数化示意。核心是只训练 A、B 的低秩矩阵，W₀ 保持冻结。</figcaption>
+            <div class="mt-4 rounded-xl border border-white/70 bg-white/80 p-4 text-sm text-slate-600">
+                <p class="mb-3 font-semibold text-slate-700">图中符号解释：</p>
+                <ul class="list-disc pl-6 space-y-2">
+                    <li><strong>W₀：</strong>原始预训练权重，训练时冻结不更新。</li>
+                    <li><strong>ΔW = B·A：</strong>任务相关的权重更新，用低秩矩阵分解表示。</li>
+                    <li><strong>A ∈ R<sup>r×k</sup>：</strong>低秩分解的右矩阵，通常初始化为小随机值。</li>
+                    <li><strong>B ∈ R<sup>d×r</sup>：</strong>低秩分解的左矩阵，初始化为 0 或很小的值。</li>
+                    <li><strong>r：</strong>rank（秩），控制更新的“方向数”，r 越大表达力越强但参数越多。</li>
+                    <li><strong>d, k：</strong>线性层的输入/输出维度（取决于具体层的大小）。</li>
+                    <li><strong>W' = W₀ + ΔW：</strong>最终权重，推理时可合并，不增加延迟。</li>
+                </ul>
+                <p class="mt-3 text-xs text-slate-500">图中 B=0 与 A∼N(0, σ²) 代表常见的初始化方式：先让更新为 0，再逐步学习任务差异。</p>
+            </div>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>训练与推理的真实差异（数值视角）</h2>
+        <p>LoRA 的“效率优势”可以用参数量与优化器状态量化出来：</p>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">对比项</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">全量微调</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">LoRA</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-sm">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">训练参数量</td>
+                        <td class="px-4 py-3">≈ 全模型参数</td>
+                        <td class="px-4 py-3">≈ r(d+k) / (d·k)</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">优化器状态</td>
+                        <td class="px-4 py-3">2–4× 参数量</td>
+                        <td class="px-4 py-3">2–4× 低秩参数量</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">推理延迟</td>
+                        <td class="px-4 py-3">无额外开销</td>
+                        <td class="px-4 py-3">可合并后无额外开销</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">模型存储</td>
+                        <td class="px-4 py-3">每任务一份大模型</td>
+                        <td class="px-4 py-3">共享基座 + 轻量 LoRA</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <figure class="rounded-2xl border border-white/70 bg-white/85 p-4">
+            <img src="/notes/lora/figure-2.png" alt="LoRA training vs fine-tuning" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="mt-3 text-sm text-slate-600">图 2：LoRA 与全量微调的训练/部署对比，强调“低秩更新 + 合并部署”的优势。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>LoRA 通常插在哪些层？</h2>
+        <p>论文与工程实践中，LoRA 常插入注意力模块的线性层（Q/K/V/O），也可以扩展到 MLP 层。</p>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div class="rounded-2xl border border-white/70 bg-white/85 p-6">
+                <h3 class="mt-0">注意力线性层</h3>
+                <ul class="list-disc pl-6">
+                    <li>Query / Key / Value / Output</li>
+                    <li>低秩更新能覆盖主要表征变化</li>
+                </ul>
+            </div>
+            <div class="rounded-2xl border border-white/70 bg-white/85 p-6">
+                <h3 class="mt-0">MLP/FFN 层</h3>
+                <ul class="list-disc pl-6">
+                    <li>有时提升任务表现</li>
+                    <li>训练成本略增</li>
+                </ul>
+            </div>
+        </div>
+        <figure class="rounded-2xl border border-white/70 bg-white/85 p-4">
+            <img src="/notes/lora/figure-5.png" alt="LoRA layer analysis" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="mt-3 text-sm text-slate-600">图 5：不同层的适配行为对比，说明选择注入层会影响效果与成本。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>在大模型里，LoRA 插入的具体位置</h2>
+        <p>以开源 LLM（如 Qwen、LLaMA 系列的常见实现）为例，LoRA 最常注入在注意力的线性投影层（Wq/Wk/Wv/Wo），也会注入到 MLP 的两层线性（up/gate/down）。</p>
+        <div class="svg-container">
+            <svg width="720" height="360" viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <marker id="arrow-lora-pos" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                        <polygon points="0 0, 8 3, 0 6" fill="#0f766e" />
+                    </marker>
+                </defs>
+
+                <text x="360" y="28" text-anchor="middle" font-size="16" font-weight="bold" fill="#1e293b">Transformer Block 中 LoRA 常见注入点</text>
+
+                <rect x="40" y="70" width="300" height="220" rx="18" fill="#f0fdf4" stroke="#86efac" />
+                <text x="190" y="95" text-anchor="middle" font-size="13" font-weight="bold" fill="#166534">自注意力 (Attention)</text>
+
+                <rect x="70" y="120" width="110" height="40" rx="10" fill="#dcfce7" stroke="#22c55e" />
+                <text x="125" y="145" text-anchor="middle" font-size="11" fill="#166534">Wq</text>
+                <rect x="190" y="120" width="110" height="40" rx="10" fill="#dcfce7" stroke="#22c55e" />
+                <text x="245" y="145" text-anchor="middle" font-size="11" fill="#166534">Wk</text>
+
+                <rect x="70" y="175" width="110" height="40" rx="10" fill="#dcfce7" stroke="#22c55e" />
+                <text x="125" y="200" text-anchor="middle" font-size="11" fill="#166534">Wv</text>
+                <rect x="190" y="175" width="110" height="40" rx="10" fill="#dcfce7" stroke="#22c55e" />
+                <text x="245" y="200" text-anchor="middle" font-size="11" fill="#166534">Wo</text>
+
+                <rect x="70" y="230" width="230" height="40" rx="10" fill="#ecfdf3" stroke="#16a34a" />
+                <text x="185" y="255" text-anchor="middle" font-size="11" fill="#14532d">LoRA 注入：Q/K/V/O 线性层</text>
+
+                <rect x="380" y="70" width="300" height="220" rx="18" fill="#fff7ed" stroke="#fdba74" />
+                <text x="530" y="95" text-anchor="middle" font-size="13" font-weight="bold" fill="#9a3412">前馈网络 (MLP / FFN)</text>
+
+                <rect x="410" y="120" width="110" height="40" rx="10" fill="#ffedd5" stroke="#fb923c" />
+                <text x="465" y="145" text-anchor="middle" font-size="11" fill="#9a3412">Up / Gate</text>
+                <rect x="530" y="120" width="110" height="40" rx="10" fill="#ffedd5" stroke="#fb923c" />
+                <text x="585" y="145" text-anchor="middle" font-size="11" fill="#9a3412">Down</text>
+
+                <rect x="410" y="175" width="230" height="40" rx="10" fill="#fff4e6" stroke="#f97316" />
+                <text x="525" y="200" text-anchor="middle" font-size="11" fill="#9a3412">LoRA 可注入：MLP 线性层</text>
+
+                <path d="M340 180 L380 180" stroke="#0f766e" stroke-width="2" marker-end="url(#arrow-lora-pos)" />
+                <text x="360" y="170" text-anchor="middle" font-size="10" fill="#0f766e">同一层同时注入</text>
+            </svg>
+        </div>
+        <div class="note-box">
+            <strong>工程常见做法：</strong>
+            <p class="text-sm text-slate-600">多数开源 LLM 的 LoRA 默认只注入注意力层（Q/V 最常见），因为性价比高；如果任务复杂或需要更强表达力，再扩展到 MLP 层。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Transformer 架构里 LoRA 的具体位置</h2>
+        <p>下面是一个标准 Transformer block 的简化图。绿色框表示注意力线性层注入点，橙色框表示 MLP 线性层注入点。</p>
+        <div class="svg-container">
+            <svg width="720" height="360" viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <marker id="arrow-tf" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                        <polygon points="0 0, 8 3, 0 6" fill="#0f766e" />
+                    </marker>
+                </defs>
+
+                <text x="360" y="26" text-anchor="middle" font-size="16" font-weight="bold" fill="#1e293b">Transformer Block (Decoder-only)</text>
+
+                <rect x="120" y="60" width="480" height="260" rx="20" fill="#f8fafc" stroke="#cbd5e1" />
+
+                <rect x="170" y="90" width="380" height="90" rx="14" fill="#f0fdf4" stroke="#22c55e" />
+                <text x="360" y="112" text-anchor="middle" font-size="12" font-weight="bold" fill="#166534">Self-Attention</text>
+                <text x="360" y="132" text-anchor="middle" font-size="10" fill="#166534">Q=XWq, K=XWk, V=XWv</text>
+                <text x="360" y="150" text-anchor="middle" font-size="10" fill="#166534">Attn=softmax(QKᵀ/√d)·V, LoRA: q_proj/k_proj/v_proj/o_proj</text>
+
+                <rect x="170" y="200" width="380" height="90" rx="14" fill="#fff7ed" stroke="#fb923c" />
+                <text x="360" y="222" text-anchor="middle" font-size="12" font-weight="bold" fill="#9a3412">MLP / FFN</text>
+                <text x="360" y="242" text-anchor="middle" font-size="10" fill="#9a3412">h=σ(XW_up) ⊙ (XW_gate)</text>
+                <text x="360" y="260" text-anchor="middle" font-size="10" fill="#9a3412">Y=hW_down, LoRA: up_proj/gate_proj/down_proj</text>
+
+                <path d="M360 30 L360 60" stroke="#0f766e" stroke-width="2" marker-end="url(#arrow-tf)" />
+                <text x="360" y="52" text-anchor="middle" font-size="10" fill="#0f766e">输入 x</text>
+
+                <path d="M360 180 L360 200" stroke="#0f766e" stroke-width="2" marker-end="url(#arrow-tf)" />
+                <path d="M360 290 L360 320" stroke="#0f766e" stroke-width="2" marker-end="url(#arrow-tf)" />
+                <text x="360" y="335" text-anchor="middle" font-size="10" fill="#0f766e">输出 y</text>
+
+                <text x="140" y="312" font-size="10" fill="#64748b">残差 + LayerNorm 在每个子层外侧</text>
+            </svg>
+        </div>
+        <div class="note-box">
+            <strong>直观理解：</strong>
+            <p class="text-sm text-slate-600">LoRA 只改动线性层的权重更新位置，不改变整体架构，所以推理速度基本不变。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>快速对比：只注入注意力 vs 扩展到 MLP</h2>
+        <p>下表是经验级对比，帮助你快速理解“省参数”和“更强表达力”的权衡。</p>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">注入位置</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">参数增量</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">效果/成本</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">适合场景</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-sm">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">仅 Q/V</td>
+                        <td class="px-4 py-3">最低</td>
+                        <td class="px-4 py-3">性价比最高</td>
+                        <td class="px-4 py-3">大多数指令微调/对话</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">Q/K/V/O</td>
+                        <td class="px-4 py-3">低</td>
+                        <td class="px-4 py-3">更稳健</td>
+                        <td class="px-4 py-3">多任务或结构化生成</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-amber-700">Attention + MLP</td>
+                        <td class="px-4 py-3">中等</td>
+                        <td class="px-4 py-3">表达力更强</td>
+                        <td class="px-4 py-3">高复杂度任务/领域迁移</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="quote-block">
+            <p>实践建议：先从 Q/V 注入起步，效果不足时再逐步加到 O 或 MLP。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>关键超参数：r、α 与 dropout</h2>
+        <p>LoRA 最重要的是秩 r（rank）。r 越大，表达力越强，但参数也更多。</p>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div class="note-box">
+                <strong>r（rank）</strong>
+                <p class="text-sm text-slate-600">常见范围 4~64，任务更复杂时可适度提高。</p>
+            </div>
+            <div class="note-box">
+                <strong>α（缩放）</strong>
+                <p class="text-sm text-slate-600">通常设为 r 的倍数，用于稳定训练。</p>
+            </div>
+            <div class="note-box">
+                <strong>dropout</strong>
+                <p class="text-sm text-slate-600">防止过拟合，尤其是小数据任务。</p>
+            </div>
+        </div>
+        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm md:text-base text-center overflow-x-auto mt-6">
+            W' = W₀ + (α / r) · B · A
+        </div>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2 mt-6">
+            <figure class="rounded-2xl border border-white/70 bg-white/85 p-4">
+                <img src="/notes/lora/figure-3.png" alt="Rank sensitivity results" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="mt-3 text-sm text-slate-600">图 3：不同秩 r 对性能的影响。通常 r 越大性能越好，但边际收益递减。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/85 p-4">
+                <img src="/notes/lora/figure-4.png" alt="Rank vs performance" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="mt-3 text-sm text-slate-600">图 4：rank 变化的性能曲线，帮助选择合理的 r 区间。</figcaption>
+            </figure>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>一图读懂：LoRA 的优势与限制</h2>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
+                <h3 class="mt-0 text-emerald-800">优势</h3>
+                <ul class="list-disc pl-6 text-emerald-800">
+                    <li>参数少、训练快、显存更省</li>
+                    <li>同一底座可复用多个任务模块</li>
+                    <li>推理无额外延迟（可合并权重）</li>
+                </ul>
+            </div>
+            <div class="rounded-2xl border border-amber-200 bg-amber-50 p-6">
+                <h3 class="mt-0 text-amber-800">限制</h3>
+                <ul class="list-disc pl-6 text-amber-800">
+                    <li>极复杂任务可能需要更高 r</li>
+                    <li>不替代高质量数据与训练策略</li>
+                    <li>不同模型的最佳注入层不同</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>低秩更新的结构性证据</h2>
+        <p>论文进一步分析了 LoRA 的“低秩本质”。这些图像展示了不同层、不同随机种子下的子空间相似性，说明 ΔW 确实集中在少量方向上。</p>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <figure class="rounded-2xl border border-white/70 bg-white/85 p-4">
+                <img src="/notes/lora/figure-6.png" alt="Subspace similarity" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="mt-3 text-sm text-slate-600">图 6：不同层的子空间相似度，表明低秩更新在多层都有效。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/85 p-4">
+                <img src="/notes/lora/figure-7.png" alt="Random seed similarity" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="mt-3 text-sm text-slate-600">图 7：不同随机种子的相似性，说明低秩方向具有稳定性。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/85 p-4">
+                <img src="/notes/lora/figure-8.png" alt="W and delta W similarity" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="mt-3 text-sm text-slate-600">图 8：W 与 ΔW 的子空间关系，强调更新主要在“未被原权重强调”的方向上。</figcaption>
+            </figure>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>LoRA 使用步骤（快速版）</h2>
+        <ol class="list-decimal pl-6">
+            <li>选择要注入的层（常见：Attention 的 Q/K/V/O）。</li>
+            <li>设置 rank r 与缩放 α。</li>
+            <li>冻结原模型权重，只训练 A、B。</li>
+            <li>训练完成后，把 ΔW 合并进 W₀ 进行部署。</li>
+        </ol>
+        <div class="quote-block">
+            <p>一句话：LoRA 让你用“可插拔小模块”来适配大模型，而不是复制一整份模型。</p>
+            <span>—— LoRA 论文核心思想</span>
+        </div>
+    </div>
+</BaseLayout>
