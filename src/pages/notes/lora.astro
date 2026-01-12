@@ -79,9 +79,10 @@ const createdAt = todayYmd();
     <div class="card">
         <h2>核心思想：把权重更新写成低秩分解</h2>
         <p>LoRA 不直接训练 <span class="highlight">W</span>，而是学习一个低秩更新矩阵 ΔW。形式如下：</p>
-        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm md:text-base text-center overflow-x-auto">
-            W' = W₀ + ΔW,  ΔW = B · A,  B ∈ R<sup>d&times;r</sup>, A ∈ R<sup>r&times;k</sup>
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$W' = W_0 + \Delta W,\quad \Delta W = BA,\quad B \in \mathbb{R}^{d \times r},\ A \in \mathbb{R}^{r \times k}$$`}
+        ></div>
         <p>由于 r 很小，训练参数量减少；而且 ΔW 可以在部署时直接与 W 合并。</p>
 
         <h3>直觉：只在关键方向上“补差”</h3>
@@ -89,18 +90,20 @@ const createdAt = todayYmd();
 
         <h3>参数量为什么会下降？</h3>
         <p>原始更新矩阵是 d&times;k 的满秩矩阵，而 LoRA 把它拆成 d&times;r 和 r&times;k。参数量从 d&times;k 变成 r&times;(d+k)。当 r &ll; d,k 时，参数量就大幅下降。</p>
-        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm md:text-base text-center overflow-x-auto">
-            Params(LoRA) ≈ r · (d + k)  &lt;&lt;  d · k
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\text{Params(LoRA)} \approx r(d + k) \ll d k$$`}
+        ></div>
 
         <h3>为什么低秩足够？</h3>
         <p>论文的实证发现表明：模型在适配新任务时，真正“需要改变”的方向其实很少，权重更新往往集中在一个低维子空间里。这也是为什么 r 取 4~16 就能在很多任务上接近甚至超过全量微调效果。</p>
 
         <h3>训练更新（公式形式）</h3>
         <p>实际训练时只优化 A、B 的参数，W₀ 完全冻结。优化过程可以写成：</p>
-        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm md:text-base text-center overflow-x-auto">
-            A ← A − η · ∂L/∂A,  B ← B − η · ∂L/∂B,  W₀ 固定
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$A \leftarrow A - \eta \frac{\partial L}{\partial A},\quad B \leftarrow B - \eta \frac{\partial L}{\partial B},\quad W_0\ \text{fixed}$$`}
+        ></div>
         <p>因此显存与优化器状态只为 A、B 分配，训练成本大幅下降。</p>
 
         <h3>参数量与算力的真实数量级</h3>
@@ -374,9 +377,10 @@ const createdAt = todayYmd();
                 <p class="text-sm text-slate-600">防止过拟合，尤其是小数据任务。</p>
             </div>
         </div>
-        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm md:text-base text-center overflow-x-auto mt-6">
-            W' = W₀ + (α / r) · B · A
-        </div>
+        <div
+            class="math-block mt-6"
+            set:html={String.raw`$$W' = W_0 + \frac{\alpha}{r} BA$$`}
+        ></div>
         <div class="grid grid-cols-1 gap-6 md:grid-cols-2 mt-6">
             <figure class="rounded-2xl border border-white/70 bg-white/85 p-4">
                 <img src="/notes/lora/figure-3.png" alt="Rank sensitivity results" class="w-full rounded-xl" loading="lazy" />

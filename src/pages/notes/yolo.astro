@@ -82,9 +82,10 @@ const createdAt = todayYmd();
     <div class="card">
         <h2>6. Loss：YOLO 在优化什么？</h2>
         <p>检测训练常见是多任务优化：定位 + 置信度 + 分类。一个简化版可以写成：</p>
-        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm overflow-x-auto">
-            L = λ_box · L_box + λ_obj · L_obj + λ_cls · L_cls
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$L = \lambda_{\text{box}} \cdot L_{\text{box}} + \lambda_{\text{obj}} \cdot L_{\text{obj}} + \lambda_{\text{cls}} \cdot L_{\text{cls}}$$`}
+        ></div>
         <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
             <li><strong>L_box：</strong>IoU 系列（GIoU/DIoU/CIoU）或更现代的分布式回归（如 DFL 思路）。</li>
             <li><strong>L_obj：</strong>目标存在概率（常用 BCE），解决“有无物体”。</li>
@@ -100,9 +101,10 @@ const createdAt = todayYmd();
             <li><strong>再抑制：</strong>按分数从高到低取框，删除与其 IoU 高于阈值的重叠框。</li>
             <li><strong>变体：</strong>Soft-NMS、DIoU-NMS 等在拥挤目标上更稳。</li>
         </ul>
-        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm overflow-x-auto">
-            score = obj × cls  → sort → select → suppress(overlap)
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\text{score} = \text{obj} \times \text{cls} \rightarrow \text{sort} \rightarrow \text{select} \rightarrow \text{suppress}(\text{overlap})$$`}
+        ></div>
         <NMSDiagram />
     </div>
 

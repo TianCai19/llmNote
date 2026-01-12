@@ -197,6 +197,19 @@ main > header p {
   color: var(--accent-strong);
 }
 
+.math-block {
+  @apply rounded-2xl border border-white/70 bg-white/85 px-5 py-4 text-center text-[15px] text-slate-700;
+  box-shadow: var(--shadow);
+}
+
+mjx-container {
+  font-size: 1.05em;
+}
+
+.math-block mjx-container {
+  font-size: 1.1em;
+}
+
 .layout-grid {
   display: block;
 }

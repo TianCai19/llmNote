@@ -71,6 +71,7 @@ const { title, description = 'LLM 学习笔记' } = Astro.props;
             }
 
             const contentRoot = main.querySelector('main') ?? main;
+            const tocShell = document.querySelector('.toc-shell');
 
             const usedIds = new Set();
             const slugify = (text, index) => {
@@ -96,6 +97,7 @@ const { title, description = 'LLM 学习笔记' } = Astro.props;
             } else {
                 const headings = Array.from(contentRoot.querySelectorAll('h2, h3'));
                 if (headings.length < 3) {
+                    tocShell?.setAttribute('hidden', '');
                     return;
                 }
 
@@ -130,13 +132,13 @@ const { title, description = 'LLM 学习笔记' } = Astro.props;
                 });
 
                 if (!tocList.children.length) {
+                    tocShell?.setAttribute('hidden', '');
                     return;
                 }
 
                 tocNav.appendChild(tocList);
             }
 
-            const tocShell = document.querySelector('.toc-shell');
             const tocSidebar = tocShell?.querySelector('.toc-sidebar');
             const useSidebar = window.matchMedia('(min-width: 1024px)').matches;
 

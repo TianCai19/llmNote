@@ -46,9 +46,10 @@ const createdAt = yesterdayYmd();
 
         <h3>1.1 LLM 的基本假设：输入是一串 token</h3>
         <p>LLM 的世界观很简单：输入必须是离散 token 序列。每个 token 会被查表变成向量：</p>
-        <div class="bg-gray-50 p-4 rounded-xl font-mono text-sm overflow-x-auto">
-            $$e_i = W_&#123;token_i&#125;$$
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$e_i = W_{token_i}$$`}
+        ></div>
         <p>换句话说，LLM 只会读“词表里的编号”。如果你给它一张图片，它会说：这不是编号序列。</p>
 
         <h3>1.2 图像是连续网格，不是序列</h3>
@@ -69,17 +70,21 @@ const createdAt = yesterdayYmd();
 
         <h3>2.1 Patch：把图片切成“小词”</h3>
         <p>经典做法是把图片切成 Patch，每个 Patch 展平后变成一个向量。Patch 数量近似为：</p>
-        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
-            $$N = \frac&#123;H&#125;&#123;P&#125; \times \frac&#123;W&#125;&#123;P&#125;$$
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$N = \frac{H}{P} \times \frac{W}{P}$$`}
+        ></div>
         <p>例如 $H=W=224, P=16$，则 $N=14\times 14=196$。所以一张图片就变成了 196 个 token。</p>
 
         <h3>2.2 Patch Embedding：从像素到向量</h3>
         <p>切完 Patch 后，每个 Patch 展平成向量，再乘一个线性投影矩阵：</p>
-        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
-            $$X_p \in \mathbb&#123;R&#125;^&#123;N \times (P^2 C)&#125;$$
-            $$E = X_p W + b$$
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\begin{aligned}
+X_p \in \mathbb{R}^{N \times (P^2 C)} \\
+E = X_p W + b
+\end{aligned}$$`}
+        ></div>
         <p>这一步就是“让图片说人话”：把像素维度投影到 LLM 能接受的隐藏维度。</p>
 
         <h3>2.3 2×2 合并：让 token 数更少</h3>
@@ -149,9 +154,10 @@ const createdAt = yesterdayYmd();
 
         <h3>4.1 Interleaved MRoPE：让频谱更均匀</h3>
         <p>RoPE 是“把位置编码变成旋转”的方法：</p>
-        <div class="bg-gray-50 p-4 rounded-xl font-mono text-sm overflow-x-auto">
-            $$\text&#123;RoPE&#125;(x_&#123;2i&#125;, x_&#123;2i+1&#125;) = (x_&#123;2i&#125;\cos\theta - x_&#123;2i+1&#125;\sin\theta,\; x_&#123;2i&#125;\sin\theta + x_&#123;2i+1&#125;\cos\theta)$$
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\text{RoPE}(x_{2i}, x_{2i+1}) = (x_{2i}\cos\theta - x_{2i+1}\sin\theta,\; x_{2i}\sin\theta + x_{2i+1}\cos\theta)$$`}
+        ></div>
         <p>多模态里有三个轴：时间 t、水平 h、垂直 w。原始 MRoPE 把三者分配到不同频段，但会导致频谱不均衡。</p>
         <div class="quote-block">
             <p>“We adopt an interleaved MRoPE that distributes t, h, and w uniformly across low- and high-frequency bands.”</p>
@@ -177,10 +183,13 @@ const createdAt = yesterdayYmd();
             <span>— Qwen3-VL Technical Report</span>
         </div>
         <Qwen3VLTimestampTokens />
-        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm">
-            $$[\text&#123;&lt;1.5 seconds&gt;&#125;, v_1, v_2, v_3, \ldots]$$
-            $$[\text&#123;&lt;01:02:15&gt;&#125;, v_&#123;t&#125;, v_&#123;t+1&#125;, \ldots]$$
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\begin{aligned}
+[\text{<1.5 seconds>}, v_1, v_2, v_3, \ldots] \\
+[\text{<01:02:15>}, v_t, v_{t+1}, \ldots]
+\end{aligned}$$`}
+        ></div>
     </article>
 
     <article class="chapter" id="ch5">

@@ -37,7 +37,7 @@ const createdAt = yesterdayYmd();
         <SelfAttention />
 
         <h3 class="text-violet-600">为什么要除以 √d？</h3>
-        <p>当维度 (d) 很大时，点积结果也会很大，导致 softmax 梯度趋近于 0。除以 &radic;d 可以稳定训练。</p>
+        <p>当维度 (d) 很大时，点积结果也会很大，导致 softmax 梯度趋近于 0。除以 <span set:html={"$\\sqrt{d}$"}></span> 可以稳定训练。</p>
     </div>
 
     <div class="card">
@@ -51,10 +51,13 @@ const createdAt = yesterdayYmd();
         </div>
 
         <p>公式：</p>
-        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm overflow-x-auto">
-            MultiHead(Q, K, V) = Concat(head₁, ..., headₕ) · W<sup>O</sup><br/>
-            where headᵢ = Attention(QW<sub>i</sub><sup>Q</sup>, KW<sub>i</sub><sup>K</sup>, VW<sub>i</sub><sup>V</sup>)
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\begin{aligned}
+\text{MultiHead}(Q, K, V) &= \text{Concat}(\text{head}_1, \ldots, \text{head}_h)\, W^{O} \\
+\text{head}_i &= \text{Attention}(QW_i^{Q}, KW_i^{K}, VW_i^{V})
+\end{aligned}$$`}
+        ></div>
     </div>
 
     <div class="card">
@@ -63,10 +66,13 @@ const createdAt = yesterdayYmd();
 
         <h3 class="text-violet-600">正弦位置编码</h3>
         <p>原始论文使用正弦和余弦函数：</p>
-        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm overflow-x-auto my-4">
-            PE(pos, 2i) = sin(pos / 10000<sup>2i/d</sup>)<br/>
-            PE(pos, 2i+1) = cos(pos / 10000<sup>2i/d</sup>)
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\begin{aligned}
+\text{PE}(pos, 2i) &= \sin\left(\frac{pos}{10000^{2i/d}}\right) \\
+\text{PE}(pos, 2i+1) &= \cos\left(\frac{pos}{10000^{2i/d}}\right)
+\end{aligned}$$`}
+        ></div>
         <p>这种编码的优点：可以处理任意长度的序列，且相对位置关系可以通过线性变换获得。</p>
     </div>
 
@@ -100,9 +106,10 @@ const createdAt = yesterdayYmd();
         <h2>5. 关键组件：Add & Norm</h2>
         <p>每个子层后都有残差连接和层归一化，这对于训练深层网络至关重要。</p>
 
-        <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm">
-            output = LayerNorm(x + Sublayer(x))
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\text{output} = \text{LayerNorm}(x + \text{Sublayer}(x))$$`}
+        ></div>
 
         <ul class="list-disc pl-6 mt-4 space-y-2 text-gray-600">
             <li><strong>残差连接：</strong> 缓解梯度消失，允许梯度直接流向浅层</li>

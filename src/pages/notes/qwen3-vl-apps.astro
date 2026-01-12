@@ -99,9 +99,10 @@ const createdAt = yesterdayYmd();
 
         <h3>2.3 坐标输出的规范</h3>
         <p>定位任务通常用“归一化坐标”。如果图像宽高为 $W, H$，像素坐标 $(x, y)$ 的归一化是：</p>
-        <div class="bg-gray-50 p-4 rounded-xl font-mono text-sm">
-            $$x' = \frac&#123;x&#125;&#123;W&#125;, \quad y' = \frac&#123;y&#125;&#123;H&#125;$$
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$x' = \frac{x}{W}, \quad y' = \frac{y}{H}$$`}
+        ></div>
         <div class="note-box text-sm">
             <p><strong>示例：</strong></p>
             <p>User: 把折线图区域标出来，输出 bbox（归一化坐标）。</p>
@@ -124,9 +125,10 @@ const createdAt = yesterdayYmd();
             <h2>第 3 章：视觉 token 预算</h2>
         </header>
         <p>视觉 token 数和像素预算成正比，压缩比约为 32。<a href="https://github.com/QwenLM/Qwen3-VL" class="text-emerald-700">[1]</a></p>
-        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm">
-            $$N_&#123;vision&#125; \approx \frac&#123;H \times W&#125;&#123;32^2&#125;$$
-        </div>
+        <div
+            class="math-block"
+            set:html={String.raw`$$N_{\text{vision}} \approx \frac{H \times W}{32^2}$$`}
+        ></div>
         <p>直觉理解：图像越大，token 越多，注意力计算就越慢。</p>
         <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto mt-4">
             <pre><code class="language-python">processor.image_processor.size = &#123;
