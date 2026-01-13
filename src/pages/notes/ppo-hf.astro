@@ -1,0 +1,352 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+---
+
+<BaseLayout title="PPO 直观图解：来自 Hugging Face 的深度强化学习课">
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">PPO 直观图解：稳定策略更新的关键逻辑</h1>
+        <p class="text-xl text-gray-500">基于 Hugging Face 深度强化学习课的完整图解版讲义</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>先说结论：PPO 解决了什么问题？</h2>
+        <p>PPO（Proximal Policy Optimization）要解决的核心问题是：<strong>策略更新太猛会把性能“推下悬崖”</strong>。在策略梯度里，参数更新方向没问题，但步子过大就会让性能瞬间崩掉。</p>
+        <p>因此 PPO 的关键词是<strong>proximity（近端）</strong>：只允许在“可信范围”内更新策略，让训练更稳定、更可控。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="https://huggingface.co/blog/assets/93_deep_rl_ppo/cliff.jpg"
+                alt="Policy update cliff"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-sm text-gray-500 mt-3">策略更新过大导致性能“掉崖”的直观示意。</figcaption>
+            <p class="text-sm text-gray-600 mt-3">这张图强调“更新太激进”会让策略从可用区域直接跌到不可用区域。PPO 的裁剪目标就是为了避免这种一步跨过安全区的情况。</p>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>回顾：A2C / Actor-Critic 在做什么</h2>
+        <p>在 PPO 之前，我们通常使用 Actor-Critic：Actor 负责产生动作，Critic 评估动作质量，协助稳定训练。</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>Actor：</strong>输出策略 <span set:html={"$\pi_\theta(a\mid s)$"}></span>，决定智能体“怎么做”。</li>
+            <li><strong>Critic：</strong>估计价值函数 <span set:html={"$V(s)$"}></span> 或优势函数，告诉 Actor “做得好不好”。</li>
+        </ul>
+        <p>这一套机制解决了方差过大的问题，但仍然可能出现<strong>更新过大</strong>导致的不稳定。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="https://huggingface.co/blog/assets/93_deep_rl_ppo/lpg.jpg"
+                alt="REINFORCE overview"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-sm text-gray-500 mt-3">从 REINFORCE 到 Actor-Critic：优势函数让训练更稳定。</figcaption>
+            <p class="text-sm text-gray-600 mt-3">图里展示了策略梯度的基本思想：对“好动作”增加概率，对“差动作”降低概率。优势函数相当于把“平均水平”扣掉，减少噪声。</p>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>策略目标函数：从“提升回报”到“控制更新”</h2>
+        <p>策略梯度的基本思想是：让“高优势动作”的概率更大，让“低优势动作”的概率更小。</p>
+        <p>而 PPO 的关键变化是：<strong>我们不直接最大化收益，而是限制更新幅度</strong>。这个限制通过“比率函数”实现。</p>
+        <div
+            class="math-block mt-4"
+            set:html={String.raw`$$r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}$$`}
+        ></div>
+        <p>这个比率衡量了新旧策略对同一动作的偏好差异。<strong>r 接近 1</strong> 说明变化小，<strong>r 偏离 1</strong> 说明更新太大。</p>
+        <div class="note-box text-sm">
+            <p><strong>符号解释：</strong></p>
+            <p><span set:html={"$\\pi_\\theta(a_t \\mid s_t)$"}></span> 是“当前策略”在状态 <span set:html={"$s_t$"}></span> 选择动作 <span set:html={"$a_t$"}></span> 的概率。</p>
+            <p><span set:html={"$\\pi_{\\theta_{\\text{old}}}(a_t \\mid s_t)$"}></span> 是“旧策略”给出的概率（采样轨迹时使用）。</p>
+            <p>比率 > 1 表示新策略更偏好这个动作，比率 < 1 表示新策略更不偏好。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>PPO 的核心公式：Clipped Surrogate Objective</h2>
+        <p>PPO 用“裁剪”来限制 r 的变化范围，避免过度更新：</p>
+        <div
+            class="math-block mt-4"
+            set:html={String.raw`$$L^{\text{CLIP}}(\theta) = \mathbb{E}_t\left[\min\left(r_t(\theta)\hat{A}_t,\; \text{clip}(r_t(\theta), 1-\epsilon, 1+\epsilon)\hat{A}_t\right)\right]$$`}
+        ></div>
+        <p>直觉上：如果策略更新“跑出”区间，收益会被截断，逼着算法回到安全范围。</p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>clip 函数是什么：</strong></p>
+            <p><span set:html={"$\\text{clip}(r, 1-\\epsilon, 1+\\epsilon) = \\min(\\max(r, 1-\\epsilon), 1+\\epsilon)$"}></span>。</p>
+            <p>含义就是把 <span set:html={"$r$"}></span> 强行限制在区间 <span set:html={"$[1-\\epsilon, 1+\\epsilon]$"}></span> 里，超出就“拉回边界”。</p>
+        </div>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 640 320" role="img" aria-label="Clip function layered view" class="w-full">
+                <defs>
+                    <linearGradient id="panelGlow" x1="0" x2="1">
+                        <stop offset="0%" stop-color="#f8fafc" />
+                        <stop offset="100%" stop-color="#f1f5f9" />
+                    </linearGradient>
+                </defs>
+                <rect x="40" y="24" width="560" height="86" rx="18" fill="url(#panelGlow)" stroke="#e2e8f0" />
+                <rect x="40" y="120" width="560" height="86" rx="18" fill="url(#panelGlow)" stroke="#e2e8f0" />
+                <rect x="40" y="216" width="560" height="80" rx="18" fill="url(#panelGlow)" stroke="#e2e8f0" />
+
+                <text x="60" y="50" font-size="12" fill="#0f172a">Step 1: max(r, 1-ε)</text>
+                <text x="60" y="146" font-size="12" fill="#0f172a">Step 2: min(上一步, 1+ε)</text>
+                <text x="60" y="242" font-size="12" fill="#0f172a">Step 3: clip(r) 输出</text>
+
+                <line x1="90" y1="90" x2="570" y2="90" stroke="#e2e8f0" />
+                <line x1="90" y1="72" x2="570" y2="72" stroke="#e2e8f0" />
+                <line x1="260" y1="64" x2="260" y2="96" stroke="#10b981" stroke-dasharray="4 4" />
+                <line x1="380" y1="64" x2="380" y2="96" stroke="#10b981" stroke-dasharray="4 4" />
+                <text x="260" y="60" text-anchor="middle" font-size="11" fill="#047857">1-ε</text>
+                <text x="380" y="60" text-anchor="middle" font-size="11" fill="#047857">1+ε</text>
+                <path d="M130 86 L260 86 L380 70 L470 56" fill="none" stroke="#1d4ed8" stroke-width="3" />
+                <circle cx="130" cy="86" r="4" fill="#1d4ed8" />
+                <circle cx="260" cy="86" r="4" fill="#1d4ed8" />
+                <circle cx="380" cy="70" r="4" fill="#1d4ed8" />
+                <circle cx="470" cy="56" r="4" fill="#1d4ed8" />
+
+                <line x1="90" y1="186" x2="570" y2="186" stroke="#e2e8f0" />
+                <line x1="90" y1="168" x2="570" y2="168" stroke="#e2e8f0" />
+                <line x1="260" y1="160" x2="260" y2="192" stroke="#10b981" stroke-dasharray="4 4" />
+                <line x1="380" y1="160" x2="380" y2="192" stroke="#10b981" stroke-dasharray="4 4" />
+                <path d="M130 186 L260 186 L380 170 L470 170" fill="none" stroke="#f97316" stroke-width="3" />
+                <circle cx="130" cy="186" r="4" fill="#f97316" />
+                <circle cx="260" cy="186" r="4" fill="#f97316" />
+                <circle cx="380" cy="170" r="4" fill="#f97316" />
+                <circle cx="470" cy="170" r="4" fill="#f97316" />
+
+                <line x1="90" y1="270" x2="570" y2="270" stroke="#e2e8f0" />
+                <line x1="260" y1="252" x2="260" y2="284" stroke="#10b981" stroke-dasharray="4 4" />
+                <line x1="380" y1="252" x2="380" y2="284" stroke="#10b981" stroke-dasharray="4 4" />
+                <path d="M130 270 L260 270 L380 256 L470 256" fill="none" stroke="#22c55e" stroke-width="3" />
+                <circle cx="130" cy="270" r="4" fill="#22c55e" />
+                <circle cx="260" cy="270" r="4" fill="#22c55e" />
+                <circle cx="380" cy="256" r="4" fill="#22c55e" />
+                <circle cx="470" cy="256" r="4" fill="#22c55e" />
+
+                <text x="320" y="308" font-size="11" fill="#64748b" text-anchor="middle">r axis (left -> right)</text>
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">clip 分解：先做 <span set:html={"$\\max(r, 1-\\epsilon)$"}></span>，再做 <span set:html={"$\\min(\\cdot, 1+\\epsilon)$"}></span>。</figcaption>
+            <p class="text-sm text-gray-600 mt-3">第一步把过小的 <span set:html={"$r$"}></span> 抬到下界，第二步把过大的 <span set:html={"$r$"}></span> 压到上界，得到最终稳定输出。</p>
+        </figure>
+        <div class="note-box text-sm">
+            <p><strong>逐项理解：</strong></p>
+            <p><span set:html={"$r_t(\\theta)\\hat{A}_t$"}></span> 是“原始目标”：直接按优势放大/缩小动作概率。</p>
+            <p><span set:html={"$\\text{clip}(r_t(\\theta), 1-\\epsilon, 1+\\epsilon)\\hat{A}_t$"}></span> 是“裁剪目标”：把比率限制在安全区间内。</p>
+            <p><span set:html={"$\\min(\\cdot)$"}></span> 取两者较小值：优势为正时限制“过度提升”，优势为负时限制“过度压制”。</p>
+            <p><span set:html={"$\\mathbb{E}_t$"}></span> 表示对一批时间步取平均，实践中通常是 mini-batch。</p>
+        </div>
+        <div class="note-box text-sm mt-4">
+            <p><strong>数值例子（和图一致）：</strong></p>
+            <p>设 <span set:html={"$\\epsilon = 0.2$"}></span>，安全区间是 <span set:html={"$[0.8, 1.2]$"}></span>。</p>
+            <p>若 <span set:html={"$\\hat{A}_t = +2$"}></span> 且 <span set:html={"$r_t = 1.3$"}></span>：</p>
+            <p>原始目标 <span set:html={"$r_t\\hat{A}_t = 2.6$"}></span>，裁剪目标 <span set:html={"$1.2 \\times 2 = 2.4$"}></span>，取较小值 -> <span set:html={"$2.4$"}></span>。</p>
+            <p>若 <span set:html={"$\\hat{A}_t = -2$"}></span> 且 <span set:html={"$r_t = 0.6$"}></span>：</p>
+            <p>原始目标 <span set:html={"$r_t\\hat{A}_t = -1.2$"}></span>，裁剪目标 <span set:html={"$0.8 \\times (-2) = -1.6$"}></span>，取较小值 -> <span set:html={"$-1.6$"}></span>。</p>
+            <p>直觉：优势为正时“上限被卡住”，优势为负时“惩罚不会无限缩小”。</p>
+        </div>
+        <div class="note-box text-sm mt-4">
+            <p><strong>ratio 与 clip fraction 的小例子：</strong></p>
+            <p>假设一个 batch 有 5 个样本，它们的 <span set:html={"$r_t$"}></span> 分别是 <span set:html={"$[0.72, 0.95, 1.05, 1.18, 1.35]$"}></span>。</p>
+            <p>若 <span set:html={"$\\epsilon = 0.2$"}></span>，安全区间是 <span set:html={"$[0.8, 1.2]$"}></span>，其中 <span set:html={"$0.72$"}></span> 和 <span set:html={"$1.35$"}></span> 会被裁剪。</p>
+            <p>clip fraction = 被裁剪样本数 / 总样本数 = <span set:html={"$2/5 = 0.4$"}></span>。</p>
+            <p>工程上若 clip fraction 长期偏高，说明更新过猛，通常会降低学习率或减少更新轮数。</p>
+        </div>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 520 220" role="img" aria-label="Clipping example" class="w-full">
+                <defs>
+                    <linearGradient id="clipBand" x1="0" x2="1">
+                        <stop offset="0%" stop-color="#bbf7d0" />
+                        <stop offset="100%" stop-color="#dcfce7" />
+                    </linearGradient>
+                </defs>
+                <rect x="60" y="40" width="400" height="140" rx="18" fill="#f8fafc" stroke="#e2e8f0" />
+                <rect x="200" y="40" width="120" height="140" fill="url(#clipBand)" opacity="0.9" />
+                <line x1="200" y1="40" x2="200" y2="180" stroke="#10b981" stroke-dasharray="4 4" />
+                <line x1="320" y1="40" x2="320" y2="180" stroke="#10b981" stroke-dasharray="4 4" />
+                <text x="200" y="32" text-anchor="middle" font-size="12" fill="#047857">0.8</text>
+                <text x="320" y="32" text-anchor="middle" font-size="12" fill="#047857">1.2</text>
+                <text x="260" y="24" text-anchor="middle" font-size="12" fill="#065f46">clip band</text>
+
+                <g fill="#0ea5e9">
+                    <rect x="86" y="150" width="40" height="30" rx="6" />
+                    <rect x="160" y="135" width="40" height="45" rx="6" />
+                    <rect x="240" y="125" width="40" height="55" rx="6" />
+                    <rect x="320" y="118" width="40" height="62" rx="6" />
+                    <rect x="394" y="145" width="40" height="35" rx="6" />
+                </g>
+                <g font-size="11" fill="#0f172a" text-anchor="middle">
+                    <text x="106" y="195">0.72</text>
+                    <text x="180" y="195">0.95</text>
+                    <text x="260" y="195">1.05</text>
+                    <text x="340" y="195">1.18</text>
+                    <text x="414" y="195">1.35</text>
+                </g>
+                <text x="30" y="115" font-size="12" fill="#475569" text-anchor="middle" transform="rotate(-90 30 115)">r_t</text>
+                <text x="260" y="210" font-size="12" fill="#475569" text-anchor="middle">samples in batch</text>
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">数值例子可视化：超出 0.8~1.2 区间的样本会被裁剪。</figcaption>
+            <p class="text-sm text-gray-600 mt-3">图中蓝色柱表示每个样本的 <span set:html={"$r_t$"}></span>，绿色带状区间是 clip band。落在带外的柱会被“拉回”边界。</p>
+        </figure>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="https://huggingface.co/blog/assets/93_deep_rl_ppo/ppo-surrogate.jpg"
+                alt="PPO surrogate objective"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-sm text-gray-500 mt-3">PPO 目标函数：原始目标与裁剪目标取最小值。</figcaption>
+            <p class="text-sm text-gray-600 mt-3">图中横轴是比率 <span set:html={"$r_t$"}></span>，纵轴是 surrogate 目标值。绿色曲线为裁剪后的目标，蓝线为原始目标。区间 <span set:html={"$[1-\\epsilon, 1+\\epsilon]$"}></span> 之外的部分被“压平”，避免更新继续放大。</p>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>比率函数的直觉图解</h2>
+        <p>比率函数告诉我们：新策略相较旧策略在同一动作上的概率变化幅度。</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="https://huggingface.co/blog/assets/93_deep_rl_ppo/ratio1.jpg"
+                    alt="Ratio illustration 1"
+                    class="w-full rounded-xl"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">比率接近 1：新旧策略差异小。</figcaption>
+                <p class="text-sm text-gray-600 mt-3">当 <span set:html={"$r_t \\approx 1$"}></span>，更新属于“小步”，策略在正确方向上微调。此时裁剪不会生效，目标函数保持原始线性增长。</p>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="https://huggingface.co/blog/assets/93_deep_rl_ppo/ratio2.jpg"
+                    alt="Ratio illustration 2"
+                    class="w-full rounded-xl"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">比率偏离 1：更新过大风险上升。</figcaption>
+                <p class="text-sm text-gray-600 mt-3">当 <span set:html={"$r_t$"}></span> 远离 1，策略对动作概率的变化过猛。PPO 会通过 clip 把这类更新“打回安全区”。</p>
+            </figure>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>未裁剪 vs 裁剪：为什么要取 min</h2>
+        <p>裁剪机制的作用是：当更新过大时，强行压制收益。这样无论优势函数正负，都不会被过度放大。</p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="https://huggingface.co/blog/assets/93_deep_rl_ppo/unclipped1.jpg"
+                    alt="Unclipped objective case 1"
+                    class="w-full rounded-xl"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">未裁剪目标：优势为正时，过大更新会放大收益。</figcaption>
+                <p class="text-sm text-gray-600 mt-3">优势为正意味着“这个动作比平均更好”。如果比率过大，收益会被持续放大，导致策略过度偏向单一动作。</p>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="https://huggingface.co/blog/assets/93_deep_rl_ppo/unclipped2.jpg"
+                    alt="Unclipped objective case 2"
+                    class="w-full rounded-xl"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">未裁剪目标：优势为负时，过大更新会过度惩罚。</figcaption>
+                <p class="text-sm text-gray-600 mt-3">优势为负意味着“这个动作比平均更差”。若比率继续减小，策略会过度压制该动作，导致探索不足。</p>
+            </figure>
+        </div>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="https://huggingface.co/blog/assets/93_deep_rl_ppo/clipped.jpg"
+                alt="Clipped objective"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-sm text-gray-500 mt-3">裁剪后的目标函数：超过范围的收益被限制。</figcaption>
+            <p class="text-sm text-gray-600 mt-3">裁剪后，曲线在区间外变“平”。这意味着继续扩大比率不会带来额外收益，从而避免爆炸式更新。</p>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>案例全景：不同区间的策略更新表现</h2>
+        <p>将优势符号（正 / 负）与比率区间组合起来，就能得到 PPO 的完整“行为地图”。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="https://huggingface.co/blog/assets/93_deep_rl_ppo/recap.jpg"
+                alt="PPO recap cases"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-sm text-gray-500 mt-3">PPO 案例合集：比率范围与优势符号共同决定更新方向。</figcaption>
+            <p class="text-sm text-gray-600 mt-3">这张总览图把“优势正负”和“比率区间”全部列出：裁剪机制只在危险区间介入，安全区间内保持正常优化。</p>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>PPO 的训练流程（实践视角）</h2>
+        <p>PPO 通常按“采样 -> 估计优势 -> 多轮更新 -> 同步旧策略”的循环执行。</p>
+        <ol class="list-decimal pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>采样轨迹：</strong>用当前策略与环境交互，收集 (s, a, r, s')。</li>
+            <li><strong>估计优势：</strong>用价值函数或 GAE 计算 <span set:html={"$\hat{A}_t$"}></span>。</li>
+            <li><strong>多轮更新：</strong>在同一批数据上执行 K 次小步更新。</li>
+            <li><strong>同步策略：</strong>更新 old policy，用于下一轮比率计算。</li>
+        </ol>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="https://huggingface.co/blog/assets/93_deep_rl_ppo/ppo-objective.jpg"
+                alt="PPO objective summary"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-sm text-gray-500 mt-3">PPO 训练目标与更新流程总结。</figcaption>
+            <p class="text-sm text-gray-600 mt-3">PPO 的实践秘诀是“同一批数据多次更新 + clip 约束”。这让样本利用率更高，同时避免大步更新。</p>
+        </figure>
+        <div class="note-box mt-4 text-sm">
+            <p><strong>工程提示：</strong>常监控 KL 或 clip fraction，过大就提前停止更新。</p>
+        </div>
+        <div class="note-box mt-4 text-sm">
+            <p><strong>KL 是什么：</strong></p>
+            <p>KL（Kullback–Leibler divergence）衡量两个概率分布的差异，直观上是“用旧分布描述新分布要多付出的信息量”。</p>
+            <p>在 PPO 中常监控 <span set:html={"$KL(\\pi_{\\text{new}} \\parallel \\pi_{\\text{old}})$"}></span>，KL 越大说明更新越激进。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>从理论到代码：PPO 实现的关键模块</h2>
+        <p>Hugging Face 教程强调了从零实现 PPO 的关键组成部分：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>策略网络：</strong>输出动作分布。</li>
+            <li><strong>价值网络：</strong>估计状态价值。</li>
+            <li><strong>Rollout Buffer：</strong>缓存一批轨迹用于多次更新。</li>
+            <li><strong>优势估计：</strong>使用 GAE 或者直接 TD 误差。</li>
+            <li><strong>损失函数：</strong>策略损失 + 价值损失 + 熵正则。</li>
+        </ul>
+        <p>实践上常用 CartPole-v1 验证算法正确性，再用 LunarLander-v2 进行更复杂的训练。</p>
+    </div>
+
+    <div class="card">
+        <h2>关键超参数与调参直觉</h2>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>clip ε：</strong>越小越稳，但收敛变慢；常见 0.1~0.3。</li>
+            <li><strong>更新轮数 K：</strong>一批数据多次更新，常见 3~10 次。</li>
+            <li><strong>优势归一化：</strong>稳定训练的常用 trick。</li>
+            <li><strong>熵奖励：</strong>避免策略过早收敛，保持探索。</li>
+        </ul>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="https://huggingface.co/blog/assets/93_deep_rl_ppo/thumbnail.png"
+                alt="PPO thumbnail"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-sm text-gray-500 mt-3">PPO 课程视觉封面图。</figcaption>
+            <p class="text-sm text-gray-600 mt-3">原课程包含实现代码与完整训练流程，适合把本文的理论落实成可跑的实验。</p>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>参考与来源</h2>
+        <ol class="list-decimal pl-6 text-sm text-gray-600 space-y-2">
+            <li><a href="https://huggingface.co/blog/deep-rl-ppo">Hugging Face Blog: Proximal Policy Optimization (PPO)</a></li>
+            <li><a href="https://github.com/huggingface/blog/blob/main/deep-rl-ppo.md">Article source on GitHub</a></li>
+        </ol>
+    </div>
+</BaseLayout>
