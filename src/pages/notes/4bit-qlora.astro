@@ -1,0 +1,591 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+---
+
+<BaseLayout title="4-bit 量化与 QLoRA：让大模型更亲民">
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">4-bit 量化与 QLoRA：让大模型跑进 16GB 显存</h1>
+        <p class="text-xl text-gray-500">基于 Hugging Face 博客的完整讲义版整理：bitsandbytes、NF4 与 QLoRA</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>核心结论：4-bit 量化让“可训练”更接近大众硬件</h2>
+        <p>大模型的瓶颈通常不是算力，而是显存。4-bit 量化的思路是：<strong>把权重压缩到 4bit 存储，但计算仍用 16/32bit</strong>，显著降低显存占用，同时保持可接受的精度。</p>
+        <p>QLoRA 在此基础上把可训练参数进一步压缩：冻结 4-bit 基座模型，只训练 LoRA 适配器，使 33B~65B 模型能够在单卡上微调。</p>
+    </div>
+
+    <div class="card">
+        <h2>从 FP8 到 FP4：为什么要理解“位数”</h2>
+        <p>浮点数由符号位、指数位和尾数位组成。位数越少，可表示的范围与精度越低，但显存更省。FP8 和 FP4 都属于 minifloat 家族。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/bitsandbytes/FP8-scheme.png"
+                alt="FP8 scheme"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-sm text-gray-500 mt-3">FP8 格式示意：不同位数分配影响范围与精度。</figcaption>
+            <p class="text-sm text-gray-600 mt-3">E4M3 指 4bit 指数 + 3bit 尾数，范围较小但精度更高；E5M2 范围更大但精度更粗。文章指出前向更偏好 E4M3，反向计算更偏好 E5M2。</p>
+            <div class="note-box text-sm mt-4">
+                <p><strong>图中术语逐词解释：</strong></p>
+                <p><strong>Sign：</strong>符号位，决定正负（+ / -）。</p>
+                <p><strong>Exponent：</strong>指数位，控制数值的“范围跨度”。指数位越多，可表示的范围越大。</p>
+                <p><strong>Mantissa / Fraction：</strong>尾数位，控制数值的“精细程度”。尾数位越多，精度越高。</p>
+                <p><strong>E4M3：</strong>Exponent=4 bits, Mantissa=3 bits。</p>
+                <p><strong>E5M2：</strong>Exponent=5 bits, Mantissa=2 bits。</p>
+            </div>
+            <figure class="mt-4 bg-white/80 border border-white/70 rounded-2xl p-4">
+                <svg viewBox="0 0 600 220" role="img" aria-label="FP8 bit layout annotated" class="w-full">
+                    <rect x="30" y="30" width="540" height="60" rx="14" fill="#f8fafc" stroke="#e2e8f0" />
+                    <rect x="30" y="120" width="540" height="60" rx="14" fill="#f8fafc" stroke="#e2e8f0" />
+
+                    <text x="40" y="22" font-size="12" fill="#64748b">E4M3</text>
+                    <text x="40" y="112" font-size="12" fill="#64748b">E5M2</text>
+
+                    <rect x="30" y="30" width="60" height="60" fill="#fee2e2" />
+                    <rect x="90" y="30" width="240" height="60" fill="#dbeafe" />
+                    <rect x="330" y="30" width="240" height="60" fill="#dcfce7" />
+
+                    <rect x="30" y="120" width="60" height="60" fill="#fee2e2" />
+                    <rect x="90" y="120" width="300" height="60" fill="#dbeafe" />
+                    <rect x="390" y="120" width="180" height="60" fill="#dcfce7" />
+
+                    <text x="60" y="64" text-anchor="middle" font-size="12" fill="#991b1b">Sign</text>
+                    <text x="210" y="64" text-anchor="middle" font-size="12" fill="#1d4ed8">Exponent (4)</text>
+                    <text x="450" y="64" text-anchor="middle" font-size="12" fill="#166534">Mantissa (3)</text>
+
+                    <text x="60" y="154" text-anchor="middle" font-size="12" fill="#991b1b">Sign</text>
+                    <text x="240" y="154" text-anchor="middle" font-size="12" fill="#1d4ed8">Exponent (5)</text>
+                    <text x="480" y="154" text-anchor="middle" font-size="12" fill="#166534">Mantissa (2)</text>
+                </svg>
+                <figcaption class="text-sm text-gray-500 mt-3">自制标注图：用色块标出 Sign / Exponent / Mantissa 的位置与位数。</figcaption>
+                <p class="text-sm text-gray-600 mt-3">上图直观看出：E4M3 更“精细”、E5M2 更“广域”。位数分配决定了“范围 vs 精度”的权衡。</p>
+            </figure>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>FP4 precision in a few words（用简单例子理解 FP4）</h2>
+        <p>FP4 的核心是把“一个实数”拆成三个部分：符号位（正负）、指数位（范围）和尾数位（精度）。它没有统一固定格式，因此可以在指数位和尾数位之间灵活分配。</p>
+        <div class="note-box text-sm">
+            <p><strong>拆解规则：</strong></p>
+            <p><strong>Sign bit：</strong>决定正负（+ / -）。</p>
+            <p><strong>Exponent bits：</strong>表示 2 的整数次幂，例如 <span set:html={"$2^{010} = 2^2 = 4$"}></span>。</p>
+            <p><strong>Mantissa bits：</strong>表示若干个负幂之和；每个为 1 的位会贡献 <span set:html={"$2^{-i}$"}></span>。</p>
+        </div>
+        <div
+            class="math-block mt-4"
+            set:html={String.raw`$$\\text{mantissa}(1010_2) = 2^{-1} + 2^{-3} = 0.5 + 0.125 = 0.625$$`}
+        ></div>
+        <div
+            class="math-block mt-4"
+            set:html={String.raw`$$\\text{value} = (-1) \\times 2^{2} \\times (1 + 2^{-1}) = -6$$`}
+        ></div>
+        <p class="text-sm text-gray-600 mt-3">上面的例子说明：FP4 的“范围 vs 精度”取决于指数位和尾数位的分配。通常 3 位指数在多数情况下更稳，但某些任务用 2 位指数 + 1 位尾数可能更合适。</p>
+    </div>
+
+    <div class="card">
+        <h2>FP4 与 NF4：为什么“NormalFloat”更好</h2>
+        <p>4-bit 浮点没有统一标准，通常需要在“指数位 vs 尾数位”之间权衡。QLoRA 引入 NF4（NormalFloat 4-bit）作为默认量化格式，因为语言模型权重近似正态分布，NF4 在信息论上更合适。</p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>NF4 是什么：</strong>一种专门为“近似正态分布”的权重设计的 4-bit 量化格式。</p>
+            <p><strong>为什么更好：</strong>LLM 权重大多呈正态分布，NF4 用更合理的量化刻度覆盖高密度区域，能在同样 4-bit 预算下减少量化误差。</p>
+            <p><strong>直观理解：</strong>把更多“刻度”放在权重最常出现的区间，少量刻度留给极端值。</p>
+        </div>
+        <div class="note-box text-sm mt-4">
+            <p><strong>更细节的定义（来自 QLoRA 论文思路）：</strong></p>
+            <p>NF4 基于“分位数量化（quantile quantization）”：让每个量化区间包含<strong>相同数量的样本</strong>，这样密集区域的刻度更细。</p>
+            <p>具体做法是针对标准正态分布 <span set:html={"$\\mathcal{N}(0,1)$"}></span> 计算分位点，再把结果归一化到 <span set:html={"$[-1,1]$"}></span>。</p>
+        </div>
+        <div
+            class="math-block mt-4"
+            set:html={String.raw`$$q_i = \\frac{1}{2}\\left(Q\\left(\\frac{i}{2^k+1}\\right) + Q\\left(\\frac{i+1}{2^k+1}\\right)\\right),\\quad i=1..2^k$$`}
+        ></div>
+        <p class="text-sm text-gray-600 mt-3">其中 <span set:html={"$Q(\\cdot)$"}></span> 是标准正态分布的分位函数。QLoRA 还会确保 0 能被精确表示，因此会构造“包含 0 的非对称刻度”。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 600 220" role="img" aria-label="NF4 quantile bins" class="w-full">
+                <defs>
+                    <linearGradient id="nf4Glow" x1="0" x2="1">
+                        <stop offset="0%" stop-color="#f1f5f9" />
+                        <stop offset="100%" stop-color="#e2e8f0" />
+                    </linearGradient>
+                </defs>
+                <rect x="30" y="24" width="540" height="160" rx="16" fill="url(#nf4Glow)" stroke="#e2e8f0" />
+                <path d="M60 160 C 140 40, 460 40, 540 160" fill="none" stroke="#2563eb" stroke-width="3" />
+                <line x1="300" y1="40" x2="300" y2="180" stroke="#94a3b8" stroke-dasharray="4 4" />
+                <text x="300" y="36" text-anchor="middle" font-size="12" fill="#64748b">0</text>
+                <g stroke="#10b981">
+                    <line x1="110" y1="150" x2="110" y2="180" />
+                    <line x1="140" y1="140" x2="140" y2="180" />
+                    <line x1="170" y1="130" x2="170" y2="180" />
+                    <line x1="200" y1="120" x2="200" y2="180" />
+                    <line x1="230" y1="112" x2="230" y2="180" />
+                    <line x1="260" y1="106" x2="260" y2="180" />
+                    <line x1="340" y1="106" x2="340" y2="180" />
+                    <line x1="370" y1="112" x2="370" y2="180" />
+                    <line x1="400" y1="120" x2="400" y2="180" />
+                    <line x1="430" y1="130" x2="430" y2="180" />
+                    <line x1="460" y1="140" x2="460" y2="180" />
+                    <line x1="490" y1="150" x2="490" y2="180" />
+                </g>
+                <text x="300" y="206" text-anchor="middle" font-size="12" fill="#475569">中间刻度更密，尾部刻度更稀</text>
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">NF4 思想：用分位点在正态分布上均匀“切块”，密集区域更细。</figcaption>
+            <p class="text-sm text-gray-600 mt-3">绿线表示量化刻度：中间权重密集处更密，尾部稀疏处更稀。</p>
+        </figure>
+        <div class="note-box text-sm mt-4">
+            <p><strong>NF4 的 16 个刻度（论文附录给出）：</strong></p>
+            <p class="font-mono text-xs text-slate-600 break-all">[-1.0, -0.6961928, -0.52507305, -0.3949175, -0.28444138, -0.18477343, -0.091050036, 0.0, 0.0795803, 0.1609302, 0.2461123, 0.33791524, 0.44070983, 0.562617, 0.72295684, 1.0]</p>
+        </div>
+        <div class="note-box text-sm">
+            <p><strong>关键结论：</strong>NF4 对 LLM 权重更友好，通常比纯 FP4 更稳定，因此在实践中是首选。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>QLoRA 的核心思想：4-bit 基座 + LoRA 训练</h2>
+        <p>QLoRA 的训练路线是：<strong>冻结 4-bit 权重，只训练 LoRA 低秩适配器</strong>。在训练时会把权重解压成 16-bit 进行计算，但梯度只更新 LoRA。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="https://huggingface.co/datasets/trl-internal-testing/example-images/resolve/main/blog/133_trl_peft/lora-animated.gif"
+                alt="LoRA animated"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-sm text-gray-500 mt-3">LoRA 动图：冻结基座权重，仅训练低秩矩阵 A/B。</figcaption>
+            <p class="text-sm text-gray-600 mt-3">通过 LoRA 只更新少量参数，显存压力来自“基座存储”而不是“可训练权重”，这也是 QLoRA 能在单卡微调 65B 的原因。</p>
+            <div class="note-box text-sm mt-4">
+                <p><strong>动图元素解释：</strong></p>
+                <p><strong>Frozen Weights：</strong>冻结的基座权重，保持 4-bit 存储。</p>
+                <p><strong>LoRA A / B：</strong>低秩矩阵，只训练这两块。</p>
+                <p><strong>ΔW = B·A：</strong>任务相关的权重增量，推理时可合并到基座权重中。</p>
+            </div>
+            <figure class="mt-4 bg-white/80 border border-white/70 rounded-2xl p-4">
+                <svg viewBox="0 0 600 220" role="img" aria-label="LoRA annotated" class="w-full">
+                    <rect x="40" y="50" width="200" height="120" rx="14" fill="#e0f2fe" stroke="#bae6fd" />
+                    <text x="140" y="90" text-anchor="middle" font-size="13" fill="#0c4a6e">W0 (Frozen)</text>
+                    <text x="140" y="112" text-anchor="middle" font-size="11" fill="#0c4a6e">4-bit storage</text>
+
+                    <rect x="300" y="50" width="110" height="50" rx="12" fill="#dcfce7" stroke="#bbf7d0" />
+                    <rect x="300" y="120" width="110" height="50" rx="12" fill="#dcfce7" stroke="#bbf7d0" />
+                    <text x="355" y="80" text-anchor="middle" font-size="12" fill="#166534">A (train)</text>
+                    <text x="355" y="150" text-anchor="middle" font-size="12" fill="#166534">B (train)</text>
+
+                    <path d="M240 110 L300 75" stroke="#94a3b8" stroke-width="2" />
+                    <path d="M240 110 L300 145" stroke="#94a3b8" stroke-width="2" />
+                    <text x="270" y="65" font-size="11" fill="#64748b">ΔW = B·A</text>
+
+                    <rect x="440" y="78" width="120" height="64" rx="12" fill="#fef3c7" stroke="#fde68a" />
+                    <text x="500" y="110" text-anchor="middle" font-size="12" fill="#92400e">W = W0 + ΔW</text>
+                </svg>
+                <figcaption class="text-sm text-gray-500 mt-3">自制标注图：冻结基座权重 + 低秩适配器组合输出。</figcaption>
+            <p class="text-sm text-gray-600 mt-3">训练时只更新 A/B，推理时把 ΔW 合并回 W0，推理速度不变。</p>
+            </figure>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>LoRA vs QLoRA：让普通显卡也能微调的两种路径</h2>
+        <p>简单来说，LoRA 和 QLoRA 都是为了让消费级显卡也能微调大语言模型而设计的技术。LoRA 开启了低成本微调的先河，而 QLoRA 把显存成本进一步压到极致。</p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>LoRA（Low-Rank Adaptation）：</strong>核心思路是“外挂插件”。冻结预训练权重，只训练低秩矩阵 A/B，推理时可合并回原始权重，不增加延迟。</p>
+            <p><strong>QLoRA（Quantized LoRA）：</strong>LoRA 的升级版。先把基座权重量化到 4-bit（NF4），再训练 LoRA 适配器，让大模型在小显存上也能训练。</p>
+        </div>
+        <div class="overflow-x-auto mt-6">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">特性</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">LoRA</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">QLoRA</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">基础模型格式</td>
+                        <td class="px-4 py-3">16-bit（FP16 / BF16）</td>
+                        <td class="px-4 py-3">4-bit（NF4）</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">显存需求</td>
+                        <td class="px-4 py-3">较低（仍受模型规模限制）</td>
+                        <td class="px-4 py-3">极低（比 LoRA 再降 50%~70%）</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">精度</td>
+                        <td class="px-4 py-3">接近全量微调</td>
+                        <td class="px-4 py-3">与 LoRA 基本持平（双重量化补偿）</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">训练速度</td>
+                        <td class="px-4 py-3">较快</td>
+                        <td class="px-4 py-3">略慢（训练时频繁解量化）</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">关键技术</td>
+                        <td class="px-4 py-3">低秩矩阵分解</td>
+                        <td class="px-4 py-3">NF4 + 双重量化 + 分页优化器</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="note-box text-sm mt-6">
+            <p><strong>QLoRA 的三大“杀手锏”：</strong></p>
+            <p><strong>4-bit NormalFloat（NF4）：</strong>针对正态分布权重设计的量化类型，信息损失更小。</p>
+            <p><strong>双重量化：</strong>对量化缩放系数再量化，进一步节省显存。</p>
+            <p><strong>分页优化器：</strong>显存峰值过高时，临时使用 CPU 内存缓冲，避免训练崩溃。</p>
+        </div>
+        <div class="note-box text-sm mt-4">
+            <p><strong>怎么选：</strong></p>
+            <p><strong>选 LoRA：</strong>显存充裕（如 7B + 40GB 显存），或追求更快训练速度。</p>
+            <p><strong>选 QLoRA：</strong>显存受限，希望在消费级显卡上跑大模型，愿意接受训练稍慢。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>QLoRA paper：量化 + 适配器的工程落地</h2>
+        <p>QLoRA 的关键结论是：在保持 16-bit 微调效果的前提下，把显存需求压到单卡可承受范围。论文给出的规模是：33B 模型可在 24GB GPU 上微调，65B 可在 46GB GPU 上微调。</p>
+        <p>核心机制可以拆成三层：</p>
+        <ol class="list-decimal pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>4-bit 量化基座：</strong>预训练模型权重以 4-bit 存储并冻结。</li>
+            <li><strong>LoRA 适配器：</strong>只训练少量低秩参数。</li>
+            <li><strong>混合精度计算：</strong>存储用 NF4，计算用 bfloat16（16-bit）。</li>
+        </ol>
+        <p>训练时权重会从存储 dtype 解压到计算 dtype 参与前向/反向，但<strong>只有 LoRA 的参数会计算梯度</strong>。权重解压只在需要时发生，所以显存占用保持很低。</p>
+        <div class="note-box text-sm">
+            <p><strong>效果层面：</strong>QLoRA 在多项实验中接近 16-bit 微调效果；Guanaco 系列在 Vicuna 基准上逼近 ChatGPT 水平。</p>
+        </div>
+        <p class="text-sm text-gray-600">想深入细节（数据配方、评测设置、更多 ablation），可以阅读原始 QLoRA 论文。</p>
+    </div>
+
+    <div class="card">
+        <h2>Transformers 中的 4-bit 使用方式</h2>
+        <h3>最小化用法</h3>
+        <p>加载模型时传入 <code>load_in_4bit</code> 并启用 <code>device_map</code>，即可让模型以 4-bit 权重运行。</p>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-python">from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "facebook/opt-350m",
+    load_in_4bit=True,
+    device_map="auto",
+)</code></pre>
+        </div>
+        <p class="text-sm text-gray-600">加载后不建议再手动移动子模块（除非非常清楚自己在做什么）。</p>
+
+        <h3 class="mt-8">进阶配置（NF4 + 双重量化）</h3>
+        <p>bitsandbytes 允许你指定量化格式、双重量化与计算 dtype。常见推荐组合：NF4 + double quant + bfloat16 计算。</p>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-python">from transformers import BitsAndBytesConfig
+import torch
+
+nf4_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_compute_dtype=torch.bfloat16,
+)
+model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    quantization_config=nf4_config,
+)</code></pre>
+        </div>
+        <div class="note-box text-sm">
+            <p><strong>选择建议：</strong>NF4 负责精度，double quant 负责省显存，16-bit 计算保证速度与稳定性。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>常见问题与边界条件</h2>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>只能 GPU：</strong>4-bit 量化需要 CUDA 支持，CPU 上不能跑。</li>
+            <li><strong>不是“纯 4-bit 训练”：</strong>权重以 4-bit 存储，但计算仍是 16/32-bit。</li>
+            <li><strong>依赖 accelerate：</strong>支持 <code>device_map</code> 的模型才能直接量化。</li>
+            <li><strong>适配范围广：</strong>文本、视觉、多模态模型都可以，只要支持 accelerate loading。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>显存实测（完整表）</h2>
+        <p>下表整理自 HF 博客原始实验，覆盖 Llama 7B/13B 在不同量化与训练设置下的 OOM 情况。</p>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">模型</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">半精度大小</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">硬件</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">量化方案</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Grad Acc</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Optimizer</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Seq Len</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">结果</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <tr class="bg-slate-50 text-slate-500">
+                        <td class="px-4 py-3" colspan="9">&lt;10B scale models</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-7b-hf</td>
+                        <td class="px-4 py-3">14GB</td>
+                        <td class="px-4 py-3">1xT4 / 16GB</td>
+                        <td class="px-4 py-3">LLM.int8 (8-bit) + GC</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">512</td>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">No OOM</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-7b-hf</td>
+                        <td class="px-4 py-3">14GB</td>
+                        <td class="px-4 py-3">1xT4 / 16GB</td>
+                        <td class="px-4 py-3">LLM.int8 (8-bit) + GC</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">1024</td>
+                        <td class="px-4 py-3 text-rose-600">OOM</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-7b-hf</td>
+                        <td class="px-4 py-3">14GB</td>
+                        <td class="px-4 py-3">1xT4 / 16GB</td>
+                        <td class="px-4 py-3">4bit + NF4 + bf16 CD + no GC</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">512</td>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">No OOM</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-7b-hf</td>
+                        <td class="px-4 py-3">14GB</td>
+                        <td class="px-4 py-3">1xT4 / 16GB</td>
+                        <td class="px-4 py-3">4bit + FP4 + bf16 CD + no GC</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">512</td>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">No OOM</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-7b-hf</td>
+                        <td class="px-4 py-3">14GB</td>
+                        <td class="px-4 py-3">1xT4 / 16GB</td>
+                        <td class="px-4 py-3">4bit + NF4 + bf16 CD + no GC</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">1024</td>
+                        <td class="px-4 py-3 text-rose-600">OOM</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-7b-hf</td>
+                        <td class="px-4 py-3">14GB</td>
+                        <td class="px-4 py-3">1xT4 / 16GB</td>
+                        <td class="px-4 py-3">4bit + FP4 + bf16 CD + no GC</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">1024</td>
+                        <td class="px-4 py-3 text-rose-600">OOM</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-7b-hf</td>
+                        <td class="px-4 py-3">14GB</td>
+                        <td class="px-4 py-3">1xT4 / 16GB</td>
+                        <td class="px-4 py-3">4bit + NF4 + bf16 CD + GC</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">1024</td>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">No OOM</td>
+                    </tr>
+                    <tr class="bg-slate-50 text-slate-500">
+                        <td class="px-4 py-3" colspan="9">10B+ scale models</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-13b-hf</td>
+                        <td class="px-4 py-3">27GB</td>
+                        <td class="px-4 py-3">2xT4 / 32GB</td>
+                        <td class="px-4 py-3">LLM.int8 (8-bit) + GC</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">512</td>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">No OOM</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-13b-hf</td>
+                        <td class="px-4 py-3">27GB</td>
+                        <td class="px-4 py-3">1xT4 / 16GB</td>
+                        <td class="px-4 py-3">LLM.int8 (8-bit) + GC</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">512</td>
+                        <td class="px-4 py-3 text-rose-600">OOM</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-13b-hf</td>
+                        <td class="px-4 py-3">27GB</td>
+                        <td class="px-4 py-3">1xT4 / 16GB</td>
+                        <td class="px-4 py-3">4bit + FP4 + bf16 CD + no GC</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">512</td>
+                        <td class="px-4 py-3 text-rose-600">OOM</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-13b-hf</td>
+                        <td class="px-4 py-3">27GB</td>
+                        <td class="px-4 py-3">1xT4 / 16GB</td>
+                        <td class="px-4 py-3">4bit + FP4 + fp16 CD + no GC</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">512</td>
+                        <td class="px-4 py-3 text-rose-600">OOM</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-13b-hf</td>
+                        <td class="px-4 py-3">27GB</td>
+                        <td class="px-4 py-3">1xT4 / 16GB</td>
+                        <td class="px-4 py-3">4bit + NF4 + fp16 CD + GC</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">512</td>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">No OOM</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-13b-hf</td>
+                        <td class="px-4 py-3">27GB</td>
+                        <td class="px-4 py-3">1xT4 / 16GB</td>
+                        <td class="px-4 py-3">4bit + NF4 + fp16 CD + GC</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">1024</td>
+                        <td class="px-4 py-3 text-rose-600">OOM</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">decapoda-research/llama-13b-hf</td>
+                        <td class="px-4 py-3">27GB</td>
+                        <td class="px-4 py-3">1xT4 / 16GB</td>
+                        <td class="px-4 py-3">4bit + NF4 + fp16 CD + GC + NQ</td>
+                        <td class="px-4 py-3">1</td>
+                        <td class="px-4 py-3">4</td>
+                        <td class="px-4 py-3">AdamW</td>
+                        <td class="px-4 py-3">1024</td>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">No OOM</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="note-box text-sm mt-4">
+            <p><strong>字段说明：</strong>CD=compute dtype，GC=gradient checkpointing，NQ=nested quantization。</p>
+            <p><strong>观察：</strong>NF4 + GC 明显提升可训练上限；加入 NQ 后 13B 在 1024 序列长度上也能无 OOM。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>QLoRA 论文表格（MMLU 5-shot，完整）</h2>
+        <p>下表整理自 QLoRA 论文 Table 4，用于对比不同数据类型在 Alpaca/FLAN v2 上的 5-shot MMLU 表现。</p>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">数据类型</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase" colspan="2">7B</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase" colspan="2">13B</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase" colspan="2">33B</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase" colspan="2">65B</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Mean</th>
+                    </tr>
+                    <tr class="bg-gray-50">
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Dataset</th>
+                        <th class="px-4 py-2 text-xs text-gray-400 uppercase">Alpaca</th>
+                        <th class="px-4 py-2 text-xs text-gray-400 uppercase">FLAN v2</th>
+                        <th class="px-4 py-2 text-xs text-gray-400 uppercase">Alpaca</th>
+                        <th class="px-4 py-2 text-xs text-gray-400 uppercase">FLAN v2</th>
+                        <th class="px-4 py-2 text-xs text-gray-400 uppercase">Alpaca</th>
+                        <th class="px-4 py-2 text-xs text-gray-400 uppercase">FLAN v2</th>
+                        <th class="px-4 py-2 text-xs text-gray-400 uppercase">Alpaca</th>
+                        <th class="px-4 py-2 text-xs text-gray-400 uppercase">FLAN v2</th>
+                        <th class="px-4 py-2 text-xs text-gray-400 uppercase">-</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">BFloat16</td>
+                        <td class="px-4 py-3 text-center">38.4</td>
+                        <td class="px-4 py-3 text-center">45.6</td>
+                        <td class="px-4 py-3 text-center">47.2</td>
+                        <td class="px-4 py-3 text-center">50.6</td>
+                        <td class="px-4 py-3 text-center">57.7</td>
+                        <td class="px-4 py-3 text-center">60.5</td>
+                        <td class="px-4 py-3 text-center">61.8</td>
+                        <td class="px-4 py-3 text-center">62.5</td>
+                        <td class="px-4 py-3 text-center">53.0</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">Float4</td>
+                        <td class="px-4 py-3 text-center">37.2</td>
+                        <td class="px-4 py-3 text-center">44.0</td>
+                        <td class="px-4 py-3 text-center">47.3</td>
+                        <td class="px-4 py-3 text-center">50.0</td>
+                        <td class="px-4 py-3 text-center">55.9</td>
+                        <td class="px-4 py-3 text-center">58.5</td>
+                        <td class="px-4 py-3 text-center">61.3</td>
+                        <td class="px-4 py-3 text-center">63.3</td>
+                        <td class="px-4 py-3 text-center">52.2</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-emerald-700">NFloat4 + DQ</td>
+                        <td class="px-4 py-3 text-center">39.0</td>
+                        <td class="px-4 py-3 text-center">44.5</td>
+                        <td class="px-4 py-3 text-center">47.5</td>
+                        <td class="px-4 py-3 text-center">50.7</td>
+                        <td class="px-4 py-3 text-center">57.3</td>
+                        <td class="px-4 py-3 text-center">59.2</td>
+                        <td class="px-4 py-3 text-center">61.8</td>
+                        <td class="px-4 py-3 text-center">63.9</td>
+                        <td class="px-4 py-3 text-center">53.1</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="note-box text-sm mt-4">
+            <p><strong>结论解读：</strong>NF4 + Double Quantization 在多个规模上接近甚至匹配 BFloat16 基线，而 FP4 稍有落后。</p>
+            <p><strong>含义：</strong>4-bit 不必牺牲性能，关键在于量化类型与训练配置。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>快速选型规则</h2>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>内存紧张：</strong>打开 double quant。</li>
+            <li><strong>精度优先：</strong>选择 NF4。</li>
+            <li><strong>速度优先：</strong>使用 16-bit 计算 dtype。</li>
+            <li><strong>长序列训练：</strong>配合 gradient checkpointing。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>参考与来源</h2>
+        <ol class="list-decimal pl-6 text-sm text-gray-600 space-y-2">
+            <li><a href="https://huggingface.co/blog/4bit-transformers-bitsandbytes">Hugging Face Blog: 4-bit Transformers, bitsandbytes and QLoRA</a></li>
+            <li><a href="https://github.com/huggingface/blog/blob/main/4bit-transformers-bitsandbytes.md">Article source on GitHub</a></li>
+            <li><a href="https://arxiv.org/abs/2305.14314">QLoRA Paper (arXiv:2305.14314)</a></li>
+        </ol>
+    </div>
+</BaseLayout>

@@ -4,6 +4,24 @@ import { todayYmd, yesterdayYmd } from '../utils/date';
 
 const notes = [
     {
+        number: '12',
+        title: '交叉熵函数',
+        description: '从信息论到损失函数：BCE、Softmax CE 与 KL 关系',
+        href: '/notes/cross-entropy',
+        tags: ['Loss', 'Math', 'ML'],
+        date: todayYmd(),
+        readTime: '12 min'
+    },
+    {
+        number: '11',
+        title: '4-bit 量化与 QLoRA',
+        description: 'bitsandbytes、NF4 与 QLoRA：如何在 16GB 显存微调大模型',
+        href: '/notes/4bit-qlora',
+        tags: ['Quantization', 'QLoRA', 'PEFT'],
+        date: todayYmd(),
+        readTime: '18 min'
+    },
+    {
         number: '10',
         title: 'PPO 直观图解（HF 课程）',
         description: '用 Hugging Face 的配图拆解 PPO：比率、裁剪目标与稳定训练',

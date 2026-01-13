@@ -1,0 +1,162 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+---
+
+<BaseLayout title="交叉熵函数：从概率到损失的桥">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Loss / Information Theory</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">交叉熵函数：从概率到损失的桥</h1>
+        <p class="text-xl text-gray-500">把“预测分布”和“真实分布”之间的差距变成可优化的目标</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>核心直觉：模型越把概率给对，损失越小</h2>
+        <p>交叉熵是衡量两个分布差异的指标。在监督学习中，<strong>真实分布</strong>通常是 one-hot（或软标签），<strong>预测分布</strong>来自模型输出。</p>
+        <p>直观上：<span class="highlight">给正确类别更高的概率，就能降低交叉熵</span>。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 680 220" role="img" aria-label="Cross entropy intuition bars" class="w-full">
+                <defs>
+                    <linearGradient id="ceGlow" x1="0" x2="1">
+                        <stop offset="0%" stop-color="#f1f5f9" />
+                        <stop offset="100%" stop-color="#e2e8f0" />
+                    </linearGradient>
+                </defs>
+                <rect x="24" y="24" width="632" height="170" rx="18" fill="url(#ceGlow)" stroke="#e2e8f0" />
+                <text x="70" y="52" font-size="12" fill="#64748b">真实分布 p(y)</text>
+                <text x="390" y="52" font-size="12" fill="#64748b">预测分布 q(y)</text>
+
+                <rect x="60" y="140" width="40" height="40" fill="#cbd5f5" />
+                <rect x="110" y="140" width="40" height="40" fill="#cbd5f5" />
+                <rect x="160" y="60" width="40" height="120" fill="#34d399" />
+                <rect x="210" y="140" width="40" height="40" fill="#cbd5f5" />
+
+                <rect x="380" y="110" width="40" height="70" fill="#94a3b8" />
+                <rect x="430" y="120" width="40" height="60" fill="#94a3b8" />
+                <rect x="480" y="90" width="40" height="90" fill="#34d399" />
+                <rect x="530" y="140" width="40" height="40" fill="#94a3b8" />
+
+                <text x="175" y="195" text-anchor="middle" font-size="11" fill="#475569">目标类别</text>
+                <text x="500" y="195" text-anchor="middle" font-size="11" fill="#475569">预测更接近目标</text>
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">绿色柱子是目标类别的概率。预测分布给目标更高概率时，交叉熵更小。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>数学定义：从信息论到机器学习</h2>
+        <p>对于离散分布 <span set:html={"$p(y)$"}></span> 与 <span set:html={"$q(y)$"}></span>，交叉熵定义为：</p>
+        <div
+            class="math-block"
+            set:html={String.raw`$$H(p, q) = -\sum_{y} p(y) \log q(y)$$`}
+        ></div>
+        <p class="text-sm text-gray-600 mt-3">默认使用自然对数（ln）。对数底只会影响缩放，不改变最优解。</p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>关键假设：</strong>真实分布 <span set:html={"$p(y)$"}></span> 表示标签的真实概率；模型输出 <span set:html={"$q(y)$"}></span> 需要是合法概率（非负且归一化）。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Sigmoid 与 Softmax：从 logits 到概率</h2>
+        <p>交叉熵的输入需要是概率分布，因此模型输出 logits 后要先做激活函数映射。</p>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <h3 class="font-semibold text-slate-700 mb-2">Sigmoid（用于二分类）</h3>
+                <div
+                    class="math-block"
+                    set:html={String.raw`$$\sigma(z) = \frac{1}{1 + e^{-z}}$$`}
+                ></div>
+                <p class="text-sm text-gray-600 mt-2">将任意实数映射到 (0,1)，得到正类概率 <span set:html={"$p$"}></span>。</p>
+            </div>
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <h3 class="font-semibold text-slate-700 mb-2">Softmax（用于多分类）</h3>
+                <div
+                    class="math-block"
+                    set:html={String.raw`$$\text{softmax}(z_i) = \frac{e^{z_i}}{\sum_j e^{z_j}}$$`}
+                ></div>
+                <p class="text-sm text-gray-600 mt-2">把向量 logits 映射成类别分布，所有类别概率之和为 1。</p>
+            </div>
+        </div>
+        <div class="note-box text-sm mt-4">
+            <p><strong>数值稳定技巧：</strong>softmax 常使用 <span set:html={"$z_i - \max(z)$"}></span> 进行平移，避免指数溢出；sigmoid 常与 BCE 合并实现以减少精度损失。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>二分类交叉熵（Binary Cross Entropy）</h2>
+        <p>当标签 <span set:html={"$y \in \{0,1\}$"}></span>，模型预测正类概率为 <span set:html={"$p$"}></span>，损失为：</p>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\mathcal{L}_{BCE} = -\left(y \log p + (1 - y)\log(1 - p)\right)$$`}
+        ></div>
+        <p>若使用 logits <span set:html={"$z$"}></span>，则 <span set:html={"$p = \sigma(z)$"}></span>，常用的实现会把 sigmoid 与 log 合并，避免数值不稳定。</p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>数值稳定公式：</strong></p>
+            <p class="font-mono text-xs text-slate-600">BCEWithLogits = max(z, 0) - z * y + log(1 + exp(-abs(z)))</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>多分类交叉熵（Softmax + NLL）</h2>
+        <p>多分类场景中，模型输出 logits <span set:html={"$z$"}></span>，用 softmax 得到预测分布：</p>
+        <div
+            class="math-block"
+            set:html={String.raw`$$q_i = \frac{\exp(z_i)}{\sum_j \exp(z_j)}$$`}
+        ></div>
+        <p>当标签是 one-hot 时，交叉熵简化为：</p>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\mathcal{L} = -\log q_{y}$$`}
+        ></div>
+        <p>也就是只惩罚“正确类别的概率太低”。</p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>Softmax + CE 合并公式：</strong></p>
+            <div
+                class="math-block mt-3"
+                set:html={String.raw`$$\mathcal{L} = -z_y + \log \sum_j \exp(z_j)$$`}
+            ></div>
+            <p class="text-sm text-gray-600 mt-2">这是 log-sum-exp 形式，数值更稳定，因此多数框架直接基于 logits 计算。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>交叉熵与 KL 散度的关系</h2>
+        <p>交叉熵可以拆成真实分布的熵 + KL 散度：</p>
+        <div
+            class="math-block"
+            set:html={String.raw`$$H(p, q) = H(p) + D_{KL}(p \| q)$$`}
+        ></div>
+        <p><span set:html={"$H(p)$"}></span> 与模型无关，因此最小化交叉熵等价于最小化 KL 散度。</p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>含义：</strong>训练就是在让预测分布 <span set:html={"$q$"}></span> 逼近真实分布 <span set:html={"$p$"}></span>。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>梯度视角：为何 softmax + CE 特别好用</h2>
+        <p>对 softmax + cross entropy，梯度可以写成简洁形式：</p>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\frac{\partial \mathcal{L}}{\partial z_i} = q_i - p_i$$`}
+        ></div>
+        <p>直观上：<span class="highlight">预测比真实多的就拉低，少的就拉高</span>，是一个稳定的“误差修正”信号。</p>
+    </div>
+
+    <div class="card">
+        <h2>实践细节与常见坑</h2>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>直接传 logits：</strong>多数框架提供 logits 版本（如 <code>CrossEntropyLoss</code>），内部做 log-sum-exp 更稳定。</li>
+            <li><strong>标签平滑（Label Smoothing）：</strong>把 one-hot 变成软分布，防止过度自信，提高泛化。</li>
+            <li><strong>类别不平衡：</strong>使用 class weights 或 focal loss 进行修正。</li>
+            <li><strong>序列任务：</strong>注意对 padding 位置做 mask，否则损失被无效 token 干扰。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>小结：什么时候“交叉熵”是正确选择</h2>
+        <p>只要你的目标是<strong>分类或分布拟合</strong>，交叉熵几乎都是默认选择。它连接了概率、信息论与可优化的损失函数，是现代深度学习中最核心的一块地基。</p>
+    </div>
+</BaseLayout>
