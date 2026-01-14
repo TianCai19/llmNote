@@ -27,6 +27,10 @@ There are no automated tests configured in this repository. If you add tests, up
 - Keep sections substantial with meaningful explanations; use subheadings to organize.
 - Ensure formulas are centered, readable, and sized consistently with body text.
 
+## Paper-Note Requirements (When the source is a paper)
+- Read and follow `NOTE_STYLE_REQUIREMENTS.md` before drafting.
+- Apply those requirements and iterate as user requests evolve (append refinements rather than deleting earlier requirements).
+
 ## Commit & Pull Request Guidelines
 No Git history is available in this workspace (no `.git`), so there is no established commit convention to reference. If you initialize Git, use short, imperative commit subjects (e.g., `Add hero layout`) and include scope where helpful.
 
