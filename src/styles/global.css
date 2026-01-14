@@ -210,6 +210,26 @@ mjx-container {
   font-size: 1.1em;
 }
 
+pre[class*='language-'] {
+  background: #0f172a;
+  border: 1px solid rgba(30, 41, 59, 0.9);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  margin: 1rem 0;
+  box-shadow: var(--shadow);
+}
+
+pre[class*='language-'] code {
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+}
+
+code[class*='language-'],
+pre[class*='language-'] {
+  text-shadow: none;
+}
+
 .layout-grid {
   display: block;
 }

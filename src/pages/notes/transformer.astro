@@ -36,6 +36,103 @@ const createdAt = yesterdayYmd();
 
         <SelfAttention />
 
+        <div class="note-box text-sm mt-6">
+            <p><strong>核心思想：</strong>从大量信息中筛选出对当前任务最重要的部分，并赋予更高的权重。</p>
+            <p>直觉上就像看一幅画时，眼睛会自然聚焦在主体（比如一只猫）上，而忽略背景。</p>
+        </div>
+
+        <h3 class="text-violet-600 mt-6">计算过程（缩放点积注意力）</h3>
+        <ol class="list-decimal pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>相似度：</strong>计算查询与所有键的点积得分。</li>
+            <li><strong>缩放：</strong>除以 <span set:html={"$\\sqrt{d_k}$"}></span>，防止 softmax 饱和。</li>
+            <li><strong>归一化：</strong>softmax 得到注意力权重。</li>
+            <li><strong>加权求和：</strong>用权重对值向量做加权平均。</li>
+        </ol>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\text{Attention}(Q, K, V) = \text{Softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V$$`}
+        ></div>
+
+        <h3 class="text-violet-600 mt-6">为什么一定要用 Softmax？</h3>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>概率化：</strong>把任意分数变成 0~1 的权重，且总和为 1，才能做可解释的加权平均。</li>
+            <li><strong>聚焦：</strong>指数放大高分项，抑制噪声，让模型真正“注意”关键位置。</li>
+            <li><strong>非线性：</strong>引入非线性，避免注意力退化为线性层叠加。</li>
+            <li><strong>配合缩放：</strong>与 <span set:html={"$\\sqrt{d_k}$"}></span> 搭配避免梯度消失。</li>
+        </ul>
+
+        <h3 class="text-violet-600 mt-6">PyTorch 手写实现</h3>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-python">import torch
+import torch.nn.functional as F
+import math
+
+def scaled_dot_product_attention(Q, K, V):
+    # Q, K, V: (batch, seq_len, d_k)
+    d_k = Q.size(-1)
+    scores = torch.matmul(Q, K.transpose(-2, -1))
+    scores = scores / math.sqrt(d_k)
+    attn_weights = F.softmax(scores, dim=-1)
+    output = torch.matmul(attn_weights, V)
+    return output, attn_weights
+
+batch_size = 2
+seq_len = 5
+d_k = 64
+
+Q = torch.randn(batch_size, seq_len, d_k)
+K = torch.randn(batch_size, seq_len, d_k)
+V = torch.randn(batch_size, seq_len, d_k)
+
+output, weights = scaled_dot_product_attention(Q, K, V)
+print(output.shape, weights.shape)</code></pre>
+        </div>
+
+        <h3 class="text-violet-600 mt-6">Shape 变化速查表</h3>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Step</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">输入形状</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">输出形状</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">含义</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">1</td>
+                        <td class="px-4 py-3">Q · Kᵀ</td>
+                        <td class="px-4 py-3">Q(L, d), K(L, d)</td>
+                        <td class="px-4 py-3">(L, L)</td>
+                        <td class="px-4 py-3">两两位置相似度矩阵</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">2</td>
+                        <td class="px-4 py-3">除以 <span set:html={"$\\sqrt{d}$"}></span></td>
+                        <td class="px-4 py-3">(L, L)</td>
+                        <td class="px-4 py-3">(L, L)</td>
+                        <td class="px-4 py-3">缩放稳定训练</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">3</td>
+                        <td class="px-4 py-3">Softmax</td>
+                        <td class="px-4 py-3">(L, L)</td>
+                        <td class="px-4 py-3">(L, L)</td>
+                        <td class="px-4 py-3">每行归一化为权重</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">4</td>
+                        <td class="px-4 py-3">权重 · V</td>
+                        <td class="px-4 py-3">W(L, L), V(L, d)</td>
+                        <td class="px-4 py-3">(L, d)</td>
+                        <td class="px-4 py-3">输出上下文表示</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
         <h3 class="text-violet-600">为什么要除以 √d？</h3>
         <p>当维度 (d) 很大时，点积结果也会很大，导致 softmax 梯度趋近于 0。除以 <span set:html={"$\\sqrt{d}$"}></span> 可以稳定训练。</p>
     </div>
@@ -58,6 +155,224 @@ const createdAt = yesterdayYmd();
 \text{head}_i &= \text{Attention}(QW_i^{Q}, KW_i^{K}, VW_i^{V})
 \end{aligned}$$`}
         ></div>
+    </div>
+
+    <div class="card">
+        <h2>2.5 手撕 Transformer Encoder（PyTorch 版）</h2>
+        <p>下面是一个简化的 Transformer 编码器实现，重点覆盖自注意力、残差连接、层归一化与 shape 变化。</p>
+
+        <h3 class="text-violet-600">0. 预备设置</h3>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-python">import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
+
+# 模型超参数
+d_model = 512
+n_heads = 8
+d_ff = 2048
+dropout_rate = 0.1
+max_seq_len = 5000
+vocab_size = 10000
+batch_size = 2
+seq_len = 10</code></pre>
+        </div>
+
+        <h3 class="text-violet-600 mt-6">1. 词嵌入层 (Word Embedding)</h3>
+        <p>把 token id 映射为向量表示，并乘以 <span set:html={"$\\sqrt{d_{model}}$"}></span> 稳定数值范围。</p>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-python">class WordEmbedding(nn.Module):
+    def __init__(self, vocab_size, d_model):
+        super().__init__()
+        self.embedding = nn.Embedding(vocab_size, d_model)
+        self.d_model = d_model
+
+    def forward(self, x):
+        # x: (batch_size, seq_len)
+        # 缩放嵌入，保持与后续注意力计算的数值量级一致
+        return self.embedding(x) * math.sqrt(self.d_model)</code></pre>
+        </div>
+        <p class="text-sm text-gray-600">shape: (batch, seq_len) → (batch, seq_len, d_model)</p>
+
+        <h3 class="text-violet-600 mt-6">2. 位置编码层 (Positional Encoding)</h3>
+        <p>用正弦/余弦注入位置信息，按位置叠加到词向量。</p>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\text{PE}(pos, 2i) = \sin\left(\frac{pos}{10000^{2i/d}}\right),\quad \text{PE}(pos, 2i+1) = \cos\left(\frac{pos}{10000^{2i/d}}\right)$$`}
+        ></div>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-python">class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_seq_len=5000, dropout_rate=0.1):
+        super().__init__()
+        self.dropout = nn.Dropout(dropout_rate)
+        pe = torch.zeros(max_seq_len, d_model)
+        # position: (max_seq_len, 1)
+        position = torch.arange(0, max_seq_len, dtype=torch.float).unsqueeze(1)
+        # 偶数维度使用 sin，奇数维度使用 cos
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        # 增加 batch 维，便于广播到输入
+        pe = pe.unsqueeze(0)
+        # 注册为 buffer，不参与梯度更新
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        # x: (batch_size, seq_len, d_model)
+        # 截取当前序列长度对应的位置编码
+        x = x + self.pe[:, :x.size(1), :]
+        return self.dropout(x)</code></pre>
+        </div>
+        <p class="text-sm text-gray-600">shape: (batch, seq_len, d_model) → (batch, seq_len, d_model)</p>
+
+        <h3 class="text-violet-600 mt-6">3. 多头注意力 (Multi-Head Attention)</h3>
+        <p>核心流程：线性投影 → 分头 → 缩放点积注意力 → 拼接 → 线性投影。</p>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\text{Attention}(Q, K, V) = \text{Softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V$$`}
+        ></div>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-python">class MultiHeadAttention(nn.Module):
+    def __init__(self, d_model, n_heads, dropout_rate=0.1):
+        super().__init__()
+        assert d_model % n_heads == 0
+        self.d_k = d_model // n_heads
+        self.d_model = d_model
+        self.n_heads = n_heads
+        # 线性投影层：Q/K/V 与输出投影
+        self.w_q = nn.Linear(d_model, d_model)
+        self.w_k = nn.Linear(d_model, d_model)
+        self.w_v = nn.Linear(d_model, d_model)
+        self.w_o = nn.Linear(d_model, d_model)
+        self.dropout = nn.Dropout(dropout_rate)
+
+    def forward(self, q, k, v, mask=None):
+        batch_size = q.size(0)
+        # 1) 线性投影 + 分头
+        q = self.w_q(q).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)
+        k = self.w_k(k).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)
+        v = self.w_v(v).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)
+
+        # 2) 缩放点积注意力打分
+        scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
+        if mask is not None:
+            # mask 需可广播到 (batch, n_heads, seq_len, seq_len)
+            scores = scores.masked_fill(mask == 0, torch.finfo(scores.dtype).min)
+
+        # 3) softmax 得到注意力权重
+        attn_weights = F.softmax(scores, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+        # 4) 权重对 V 做加权求和
+        x = torch.matmul(attn_weights, v)
+
+        # 5) 拼接多头，映射回 d_model
+        x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.d_model)
+        return self.w_o(x), attn_weights</code></pre>
+        </div>
+        <div class="note-box text-sm mt-4">
+            <p><strong>Mask 形状示例：</strong></p>
+            <p><strong>Padding mask：</strong><span class="font-mono text-xs"> (batch, 1, 1, seq_len)</span>，按 key 维度屏蔽 padding。</p>
+            <p><strong>Causal mask：</strong><span class="font-mono text-xs"> (1, 1, seq_len, seq_len)</span>，下三角为 1。</p>
+        </div>
+        <p class="text-sm text-gray-600">shape: (batch, seq_len, d_model) → (batch, n_heads, seq_len, d_k) → (batch, seq_len, d_model)</p>
+
+        <h3 class="text-violet-600 mt-6">4. 前馈网络 (FFN)</h3>
+        <p>对每个位置独立做两层线性变换 + 激活。</p>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\text{FFN}(x)=\max(0, xW_1+b_1)W_2+b_2$$`}
+        ></div>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-python">class PositionwiseFeedForward(nn.Module):
+    def __init__(self, d_model, d_ff, dropout_rate=0.1):
+        super().__init__()
+        self.w_1 = nn.Linear(d_model, d_ff)
+        self.w_2 = nn.Linear(d_ff, d_model)
+        self.dropout = nn.Dropout(dropout_rate)
+
+    def forward(self, x):
+        # 每个位置独立变换，不改变序列长度
+        return self.w_2(self.dropout(F.relu(self.w_1(x))))</code></pre>
+        </div>
+        <p class="text-sm text-gray-600">shape: (batch, seq_len, d_model) → (batch, seq_len, d_ff) → (batch, seq_len, d_model)</p>
+
+        <h3 class="text-violet-600 mt-6">5. Add &amp; Norm（残差 + 层归一化）</h3>
+        <p>用 Pre-LN 结构增强训练稳定性。</p>
+        <div
+            class="math-block"
+            set:html={String.raw`$$\text{output} = x + \text{Dropout}(\text{Sublayer}(\text{LayerNorm}(x)))$$`}
+        ></div>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-python">class SublayerConnection(nn.Module):
+    def __init__(self, d_model, dropout_rate=0.1):
+        super().__init__()
+        self.norm = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout_rate)
+
+    def forward(self, x, sublayer):
+        # Pre-LN: 先归一化再过子层，最后残差相加
+        return x + self.dropout(sublayer(self.norm(x)))</code></pre>
+        </div>
+
+        <h3 class="text-violet-600 mt-6">6. Encoder Layer</h3>
+        <p>一个编码器层 = 自注意力子层 + 前馈子层。</p>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-python">class EncoderLayer(nn.Module):
+    def __init__(self, d_model, n_heads, d_ff, dropout_rate=0.1):
+        super().__init__()
+        self.self_attn = MultiHeadAttention(d_model, n_heads, dropout_rate)
+        self.feed_forward = PositionwiseFeedForward(d_model, d_ff, dropout_rate)
+        self.sublayer1 = SublayerConnection(d_model, dropout_rate)
+        self.sublayer2 = SublayerConnection(d_model, dropout_rate)
+
+    def forward(self, x, mask=None):
+        # 自注意力子层（Q=K=V=x）
+        x = self.sublayer1(x, lambda x: self.self_attn(x, x, x, mask)[0])
+        # 前馈网络子层
+        x = self.sublayer2(x, self.feed_forward)
+        return x</code></pre>
+        </div>
+        <p class="text-sm text-gray-600">shape: (batch, seq_len, d_model) → (batch, seq_len, d_model)</p>
+
+        <h3 class="text-violet-600 mt-6">7. Encoder 堆叠</h3>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-python">class Encoder(nn.Module):
+    def __init__(self, vocab_size, d_model, n_heads, d_ff, num_layers, dropout_rate=0.1, max_seq_len=5000):
+        super().__init__()
+        self.word_embedding = WordEmbedding(vocab_size, d_model)
+        self.positional_encoding = PositionalEncoding(d_model, max_seq_len, dropout_rate)
+        self.layers = nn.ModuleList([
+            EncoderLayer(d_model, n_heads, d_ff, dropout_rate) for _ in range(num_layers)
+        ])
+        self.norm = nn.LayerNorm(d_model)
+
+    def forward(self, src, src_mask=None):
+        # 1) 词嵌入 + 位置编码
+        x = self.word_embedding(src)
+        x = self.positional_encoding(x)
+        # 2) 逐层编码
+        for layer in self.layers:
+            x = layer(x, src_mask)
+        # 3) 输出层归一化
+        return self.norm(x)</code></pre>
+        </div>
+
+        <h3 class="text-violet-600 mt-6">8. 快速测试</h3>
+        <div class="bg-gray-50 p-5 rounded-2xl font-mono text-sm overflow-x-auto">
+            <pre><code class="language-python">src_data = torch.randint(0, vocab_size, (batch_size, seq_len))
+encoder = Encoder(vocab_size, d_model, n_heads, d_ff, num_layers=6,
+                  dropout_rate=dropout_rate, max_seq_len=max_seq_len)
+encoder_output = encoder(src_data)
+print("input:", src_data.shape)
+print("output:", encoder_output.shape)</code></pre>
+        </div>
+
+        <h3 class="text-violet-600 mt-6">Decoder 简要差异</h3>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>Masked Self-Attention：</strong>下三角 mask 防止“偷看”未来 token。</li>
+            <li><strong>Cross-Attention：</strong>Q 来自解码器，K/V 来自编码器输出。</li>
+        </ul>
     </div>
 
     <div class="card">

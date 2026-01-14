@@ -53,6 +53,26 @@ const createdAt = todayYmd();
             class="math-block"
             set:html={String.raw`$$H(p, q) = -\sum_{y} p(y) \log q(y)$$`}
         ></div>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/cross-entropy/cross-entropy-pq.svg"
+                    alt="Cross entropy p and q distributions"
+                    class="w-full rounded-lg"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">对齐同一类别的 p(y) 与 q(y)。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/cross-entropy/cross-entropy-contrib.svg"
+                    alt="Cross entropy contributions per class"
+                    class="w-full rounded-lg"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">先按 p(y) 加权，再求和得到交叉熵。</figcaption>
+            </figure>
+        </div>
         <p class="text-sm text-gray-600 mt-3">默认使用自然对数（ln）。对数底只会影响缩放，不改变最优解。</p>
         <div class="note-box text-sm mt-4">
             <p><strong>关键假设：</strong>真实分布 <span set:html={"$p(y)$"}></span> 表示标签的真实概率；模型输出 <span set:html={"$q(y)$"}></span> 需要是合法概率（非负且归一化）。</p>
@@ -69,6 +89,26 @@ const createdAt = todayYmd();
                     class="math-block"
                     set:html={String.raw`$$\sigma(z) = \frac{1}{1 + e^{-z}}$$`}
                 ></div>
+                <div class="grid grid-cols-1 gap-3 mt-4">
+                    <figure class="bg-white/70 border border-white/70 rounded-xl p-3">
+                        <img
+                            src="/notes/cross-entropy/sigmoid.svg"
+                            alt="Sigmoid curve"
+                            class="w-full rounded-lg"
+                            loading="lazy"
+                        />
+                        <figcaption class="text-xs text-gray-500 mt-2">S 型曲线把 logits 压到 (0,1)。</figcaption>
+                    </figure>
+                    <figure class="bg-white/70 border border-white/70 rounded-xl p-3">
+                        <img
+                            src="/notes/cross-entropy/sigmoid-points.svg"
+                            alt="Sigmoid sample points"
+                            class="w-full rounded-lg"
+                            loading="lazy"
+                        />
+                        <figcaption class="text-xs text-gray-500 mt-2">输出是单一正类概率。</figcaption>
+                    </figure>
+                </div>
                 <p class="text-sm text-gray-600 mt-2">将任意实数映射到 (0,1)，得到正类概率 <span set:html={"$p$"}></span>。</p>
             </div>
             <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
@@ -77,6 +117,26 @@ const createdAt = todayYmd();
                     class="math-block"
                     set:html={String.raw`$$\text{softmax}(z_i) = \frac{e^{z_i}}{\sum_j e^{z_j}}$$`}
                 ></div>
+                <div class="grid grid-cols-1 gap-3 mt-4">
+                    <figure class="bg-white/70 border border-white/70 rounded-xl p-3">
+                        <img
+                            src="/notes/cross-entropy/softmax-bars.svg"
+                            alt="Softmax probabilities"
+                            class="w-full rounded-lg"
+                            loading="lazy"
+                        />
+                        <figcaption class="text-xs text-gray-500 mt-2">向量 logits 变成概率分布。</figcaption>
+                    </figure>
+                    <figure class="bg-white/70 border border-white/70 rounded-xl p-3">
+                        <img
+                            src="/notes/cross-entropy/softmax-sum.svg"
+                            alt="Softmax sum to one"
+                            class="w-full rounded-lg"
+                            loading="lazy"
+                        />
+                        <figcaption class="text-xs text-gray-500 mt-2">归一化保证总和为 1。</figcaption>
+                    </figure>
+                </div>
                 <p class="text-sm text-gray-600 mt-2">把向量 logits 映射成类别分布，所有类别概率之和为 1。</p>
             </div>
         </div>
@@ -92,6 +152,26 @@ const createdAt = todayYmd();
             class="math-block"
             set:html={String.raw`$$\mathcal{L}_{BCE} = -\left(y \log p + (1 - y)\log(1 - p)\right)$$`}
         ></div>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/cross-entropy/bce-y1.svg"
+                    alt="BCE y equals 1 curve"
+                    class="w-full rounded-lg"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">正类时只关心 p 的大小。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/cross-entropy/bce-y0.svg"
+                    alt="BCE y equals 0 curve"
+                    class="w-full rounded-lg"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">负类时惩罚 1-p。</figcaption>
+            </figure>
+        </div>
         <p>若使用 logits <span set:html={"$z$"}></span>，则 <span set:html={"$p = \sigma(z)$"}></span>，常用的实现会把 sigmoid 与 log 合并，避免数值不稳定。</p>
         <div class="note-box text-sm mt-4">
             <p><strong>数值稳定公式：</strong></p>
@@ -106,11 +186,51 @@ const createdAt = todayYmd();
             class="math-block"
             set:html={String.raw`$$q_i = \frac{\exp(z_i)}{\sum_j \exp(z_j)}$$`}
         ></div>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/cross-entropy/softmax-exp.svg"
+                    alt="Softmax exp values"
+                    class="w-full rounded-lg"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">同一类的指数值除以总和。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/cross-entropy/softmax-sum.svg"
+                    alt="Softmax sum to one"
+                    class="w-full rounded-lg"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">所有类别概率加起来为 1。</figcaption>
+            </figure>
+        </div>
         <p>当标签是 one-hot 时，交叉熵简化为：</p>
         <div
             class="math-block"
             set:html={String.raw`$$\mathcal{L} = -\log q_{y}$$`}
         ></div>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/cross-entropy/select-qy.svg"
+                    alt="Select qy probability"
+                    class="w-full rounded-lg"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">只取正确类别的概率。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/cross-entropy/neglog-curve.svg"
+                    alt="Negative log curve"
+                    class="w-full rounded-lg"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">概率越大，-log 越小。</figcaption>
+            </figure>
+        </div>
         <p>也就是只惩罚“正确类别的概率太低”。</p>
         <div class="note-box text-sm mt-4">
             <p><strong>Softmax + CE 合并公式：</strong></p>
@@ -118,6 +238,26 @@ const createdAt = todayYmd();
                 class="math-block mt-3"
                 set:html={String.raw`$$\mathcal{L} = -z_y + \log \sum_j \exp(z_j)$$`}
             ></div>
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-2 mt-4">
+                <figure class="bg-white/70 border border-white/70 rounded-xl p-3">
+                    <img
+                        src="/notes/cross-entropy/lse-terms.svg"
+                        alt="Log-sum-exp loss terms"
+                        class="w-full rounded-lg"
+                        loading="lazy"
+                    />
+                    <figcaption class="text-xs text-gray-500 mt-2">损失是两项之和。</figcaption>
+                </figure>
+                <figure class="bg-white/70 border border-white/70 rounded-xl p-3">
+                    <img
+                        src="/notes/cross-entropy/lse-shift.svg"
+                        alt="Log-sum-exp stability shift"
+                        class="w-full rounded-lg"
+                        loading="lazy"
+                    />
+                    <figcaption class="text-xs text-gray-500 mt-2">平移 logits 提升稳定性。</figcaption>
+                </figure>
+            </div>
             <p class="text-sm text-gray-600 mt-2">这是 log-sum-exp 形式，数值更稳定，因此多数框架直接基于 logits 计算。</p>
         </div>
     </div>
@@ -129,6 +269,26 @@ const createdAt = todayYmd();
             class="math-block"
             set:html={String.raw`$$H(p, q) = H(p) + D_{KL}(p \| q)$$`}
         ></div>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/cross-entropy/kl-decomp.svg"
+                    alt="Cross entropy decomposition"
+                    class="w-full rounded-lg"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">交叉熵由熵与 KL 组成。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/cross-entropy/kl-match.svg"
+                    alt="Match distributions by minimizing KL"
+                    class="w-full rounded-lg"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">最小化 KL 让分布更接近。</figcaption>
+            </figure>
+        </div>
         <p><span set:html={"$H(p)$"}></span> 与模型无关，因此最小化交叉熵等价于最小化 KL 散度。</p>
         <div class="note-box text-sm mt-4">
             <p><strong>含义：</strong>训练就是在让预测分布 <span set:html={"$q$"}></span> 逼近真实分布 <span set:html={"$p$"}></span>。</p>
@@ -142,6 +302,26 @@ const createdAt = todayYmd();
             class="math-block"
             set:html={String.raw`$$\frac{\partial \mathcal{L}}{\partial z_i} = q_i - p_i$$`}
         ></div>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/cross-entropy/grad-qp.svg"
+                    alt="Gradient uses q probabilities"
+                    class="w-full rounded-lg"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">示例：预测分布 q 的数值。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/cross-entropy/grad-error.svg"
+                    alt="Gradient error magnitude"
+                    class="w-full rounded-lg"
+                    loading="lazy"
+                />
+                <figcaption class="text-sm text-gray-500 mt-3">误差大小 |q - p| 决定更新强度。</figcaption>
+            </figure>
+        </div>
         <p>直观上：<span class="highlight">预测比真实多的就拉低，少的就拉高</span>，是一个稳定的“误差修正”信号。</p>
     </div>
 

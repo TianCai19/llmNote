@@ -17,6 +17,7 @@ const { title, description = 'LLM 学习笔记' } = Astro.props;
     <meta name="description" content={description}>
     <title>{title} | LLM Note</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@500;600;700&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css">
     <script is:inline>
         window.MathJax = {
             tex: {
@@ -26,6 +27,8 @@ const { title, description = 'LLM 学习笔记' } = Astro.props;
         };
     </script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js" data-autoloader-path="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/"></script>
 </head>
 <body class="min-h-screen antialiased text-[color:var(--ink)]">
     <nav class="sticky top-0 z-50 border-b border-white/70 bg-white/70 backdrop-blur">
@@ -63,6 +66,10 @@ const { title, description = 'LLM 学习笔记' } = Astro.props;
         window.addEventListener('DOMContentLoaded', () => {
             if (window.MathJax?.typesetPromise) {
                 window.MathJax.typesetPromise();
+            }
+
+            if (window.Prism?.highlightAll) {
+                window.Prism.highlightAll();
             }
 
             const main = document.querySelector('main');
