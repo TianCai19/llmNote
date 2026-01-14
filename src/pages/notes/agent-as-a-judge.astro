@@ -283,7 +283,50 @@ const createdAt = todayYmd();
     </div>
 
     <div class="card">
-        <h2>11. 结论</h2>
+        <h2>11. 原文图集（完整收录）</h2>
+        <p>以下图片来自论文原文（arXiv HTML 版本），用于对照理解各章节内容。</p>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/agent-as-a-judge/x1.png" alt="Figure 1: Agent-as-a-Judge overview" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 1. Agent-as-a-Judge 与 LLM-as-a-Judge、Human-as-a-Judge 对比示意。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/agent-as-a-judge/x2.png" alt="Figure 2: DevAI task distribution" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 2. DevAI 任务分布与统计特征。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/agent-as-a-judge/disagreement_meta.png" alt="Figure 4: Disagreement patterns" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 4. 人类评审分歧分布示意。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/agent-as-a-judge/human_error_rate_meta.png" alt="Figure 5: Human error rate" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 5. 人类评测误差率示意。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/agent-as-a-judge/x3.png" alt="Figure 6: Agent-as-a-Judge architecture" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 6. Agent-as-a-Judge 初始架构图。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/agent-as-a-judge/pr_curves_meta.png" alt="Figure 7: PR curves" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 7. 各评测方法 PR 曲线对比。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/agent-as-a-judge/x4.png" alt="Appendix Figure: Experiment design" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Appendix Figure. 实验设计总览图。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/agent-as-a-judge/x5.png" alt="Figure 9: Agent-as-a-Judge pipeline" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 9. Agent-as-a-Judge 评测流程管线。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4 md:col-span-2">
+                <img src="/notes/agent-as-a-judge/x6.png" alt="Appendix Figure: Evidence examples" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Appendix Figure. 评测证据示例集合。</figcaption>
+            </figure>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>12. 结论</h2>
         <p>Agent-as-a-Judge 提供了一条可扩展评测代理系统的新路径：它以需求为单位，依赖证据链进行判定，在可靠性与成本之间取得更好的折中。DevAI 数据集为这一框架提供了真实任务场景与结构化需求，使评测从“黑盒评分”转向“可解释的过程评估”。</p>
         <p>在当前阶段，Agent-as-a-Judge 已经能接近人类评测共识，并显著降低成本。更重要的是，它引入了过程监督信号，为未来的代理自我改进和自动化评测系统奠定了基础。</p>
     </div>
