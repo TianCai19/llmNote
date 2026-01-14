@@ -1,0 +1,236 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+---
+
+<BaseLayout title="Venus：VLM 在线视频理解的边缘记忆与检索系统">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">VLM / Edge Systems</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Venus：VLM 在线视频理解的边缘记忆与检索系统</h1>
+        <p class="text-xl text-gray-500">用边缘记忆与自适应检索，把 VLM 推理延迟压到秒级</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>1. 引言：VLM 强了，但系统成本跟不上</h2>
+        <p>视觉-语言模型（VLM）把视频理解提升到了“语义级推理”的高度，但在真实在线场景中，部署成本成为核心瓶颈：视频很长、边缘设备算力有限、云端推理又要吃带宽和延迟。论文指出，现有方法往往只在“算法精度”上优化，却忽视了在线部署的系统约束，导致在现实系统里不可用。</p>
+        <p>Venus 的核心主张是：<span class="highlight">把“记忆构建与检索”下沉到边缘端，只把最相关的关键帧送到云端 VLM 推理</span>。这让系统既能实时响应，又能保持接近甚至更高的推理准确率。</p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>原文摘录：</strong></p>
+            <p class="text-sm text-gray-600 italic">“We propose Venus, an on-device memory-and-retrieval system for efficient online video understanding.”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/html/2512.07344v2" class="text-[color:var(--accent)] underline">arXiv:2512.07344v2</a> Abstract</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>2. 应用场景与问题背景</h2>
+        <p>在线视频理解的典型场景包括智能家居、安防、辅助看护等。用户可以对“当前或历史视频”发起自然语言查询，例如“今天下午老人吃药了吗？”或“厨房刚才烹饪到哪一步了？”。</p>
+        <p>论文将系统拆分为三部分：<strong>Streaming Perception（边缘实时感知）</strong>、<strong>Historical Memory（历史记忆库）</strong>、<strong>Reasoning（云端推理）</strong>。关键问题在于：如果每一帧都送到云端推理，通信成本将成为系统瓶颈。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/venus/x1.png" alt="Figure 1: VLM-powered online video understanding" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 1. VLM 驱动的在线视频理解系统整体示意。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>3. 背景与动机：为什么现有方法不够</h2>
+        <p>在 VLM 时代之前，CNN-based 视频分析系统主要依赖边缘侧过滤与云端推理优化。但 VLM 模型更大、更重，且很多只能通过云 API 访问。传统优化策略难以直接复用。</p>
+        <p>论文对比了几类方法的延迟分解：Cloud-Only 方法主要被通信延迟拖累；Edge-Cloud 方法虽然减少了传输，但在边缘端做逐帧编码又会引入巨大算力消耗。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/venus/x2.png" alt="Figure 2: Latency breakdown" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 2. 端云方案的延迟拆解：通信与边缘计算均可能成为瓶颈。</figcaption>
+        </figure>
+        <p>论文总结了三类核心限制：</p>
+        <ul class="list-disc pl-6">
+            <li><strong>全量上传</strong>导致通信延迟占比高达 80%。</li>
+            <li><strong>逐帧编码</strong>在边缘端不可承受，甚至出现数百秒级延迟。</li>
+            <li><strong>固定采样策略</strong>会丢关键帧或引入冗余，削弱推理精度。</li>
+        </ul>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/venus/x3.png" alt="Figure 3: Edge-cloud disaggregated architecture" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 3. 端云拆分的基本流程：边缘过滤与检索，云端推理。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>4. 设计目标：在线、低延迟、可检索</h2>
+        <p>Venus 的设计目标集中在两点：<strong>实时记忆构建</strong>与<strong>自适应检索</strong>。前者要求在边缘侧持续生成可检索的历史记忆；后者要求在查询时只选取最相关且多样的关键帧，最小化传输与推理成本。</p>
+        <p>为了说明“边缘算力不足以逐帧编码”，论文展示了不同边缘设备在不同 FPS 下的编码能力。结论是：在真实 25 FPS 摄像头场景下，逐帧编码几乎不可行。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/venus/x4.png" alt="Figure 4: Embedding latency vs FPS" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 4. 编码延迟随 FPS 上升迅速爆炸。</figcaption>
+        </figure>
+        <p>同时，过密采样会让向量库充斥大量重复帧，反而削弱检索质量。Figure 5 说明了“冗余帧会拖累准确率”，并展示 Top-K 检索如何陷入单一片段。</p>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-3 mt-6">
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x5.png" alt="Figure 5a" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 5(a). 冗余帧导致准确率下降。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x6.png" alt="Figure 5b" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 5(b). Top-K 相似度集中于邻近时间。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x7.png" alt="Figure 5c" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 5(c). 选帧覆盖不足导致错误推理。</figcaption>
+            </figure>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>5. 总体架构：边缘-云拆分</h2>
+        <p>Venus 把系统拆成两阶段：<strong>Ingestion（摄入阶段）</strong>与<strong>Querying（查询阶段）</strong>。摄入阶段在边缘端完成分段、聚类、嵌入、建库；查询阶段在边缘检索关键帧，并把这些帧发送到云端 VLM 推理。</p>
+        <p>这种拆分让云端只看到“与问题相关的关键帧”，避免了全量视频上传的通信成本，也避免了边缘端逐帧编码的算力爆炸。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/venus/x8.png" alt="Figure 6: Venus overview" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 6. Venus 总体架构与双阶段流程。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>6. 摄入阶段：场景分割与帧聚类</h2>
+        <p>摄入阶段要在边缘端做到“尽可能低成本的稀疏索引”。Venus 使用轻量的场景分割与帧聚类，把连续视频划分为片段，再在每个片段中挑选代表性帧作为索引。</p>
+        <p>场景分割基于帧间视觉差异指标 <span set:html={String.raw`$\phi(f_i)$`}></span>，公式为：</p>
+        <div class="math-block" set:html={String.raw`$$\phi(f_i)=\frac{\lVert\mathbf{w}\odot(\mathbf{v}_i-\mathbf{v}_{i-1})\rVert_1}{\lVert\mathbf{w}\rVert_1},\quad \mathbf{v}_i=[H(f_i),S(f_i),L(f_i),E(f_i)]$$`}></div>
+        <p class="text-sm text-gray-600 mt-3">其中 H/S/L/E 分别表示色相、饱和度、亮度与边缘特征，w 为权重。</p>
+        <p>随后在每个场景分区内采用增量聚类，将近似帧归并成簇，并用簇中心帧构建稀疏索引。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/venus/cluster.png" alt="Figure 7: Scene segmentation and clustering" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 7. 场景分割 + 帧聚类流程示意。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>7. 记忆构建：分层存储与语义索引</h2>
+        <p>Venus 采用两层记忆结构：<strong>Raw Layer</strong> 保存原始视频帧，<strong>Index Layer</strong> 保存语义嵌入向量。这样检索时先定位相关片段，再回到原始帧做更细粒度采样。</p>
+        <p>为了降低 VLM 嵌入的不稳定性，系统还引入轻量辅助模型（OCR、YOLO 等）生成辅助提示，再与索引帧一起输入 MEM：</p>
+        <div class="math-block" set:html={String.raw`$$\mathcal{T}=\{t_i=\mathrm{AuxModels}(k_i)\mid k_i\in\mathcal{K}\}$$`}></div>
+        <div class="math-block" set:html={String.raw`$$\mathcal{O}=\{o_i=\mathrm{MEM}(k_i,t_i)\mid k_i\in\mathcal{K},t_i\in\mathcal{T}\}$$`}></div>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/venus/x9.png" alt="Figure 8: Memory construction" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 8. 分层记忆与索引构建示意。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>8. 查询阶段：采样式检索与自适应预算</h2>
+        <p>查询阶段首先将文本问题编码成向量，与索引向量集合计算相似度：</p>
+        <div class="math-block" set:html={String.raw`$$\mathcal{S}=\{s_i=\cos(\mathrm{MEM}(Q),o_i)\mid o_i\in\mathcal{O}\}$$`}></div>
+        <p>与传统 Top-K 不同，Venus 构建基于相似度的概率分布并进行采样，确保多样性：</p>
+        <div class="math-block" set:html={String.raw`$$\mathcal{P}=\left\{p_i=\frac{e^{s_i/\tau}}{\sum_{j=1}^{k}e^{s_j/\tau}}\mid s_i\in\mathcal{S}\right\}$$`}></div>
+        <p>采样结果决定从对应场景簇中选取多少帧，从而兼顾相关性与覆盖度。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/venus/x10.png" alt="Figure 9: Query distributions" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 9. 不同查询会产生不同的概率分布。</figcaption>
+        </figure>
+        <p>为解决“固定采样预算不适应不同查询”的问题，Venus 引入 AKR（Adaptive Keyframe Retrieval），使用阈值驱动的渐进采样：</p>
+        <div class="math-block" set:html={String.raw`$$\frac{\sum_{j\in\mathcal{I}}p_j}{\beta}\geq\theta$$`}></div>
+        <div class="math-block" set:html={String.raw`$$N_{\min}=\beta\cdot\left\lceil\theta/\max_{p_j\in\mathcal{P}}p_j\right\rceil$$`}></div>
+        <p class="text-sm text-gray-600 mt-3">直观上：概率集中时少采样，分散时多采样，从而在准确率与开销之间动态平衡。</p>
+    </div>
+
+    <div class="card">
+        <h2>9. 实验设置与基线</h2>
+        <p>实验使用 Jetson AGX Orin 作为边缘设备，云端使用 L40S GPU，带宽固定 100 Mbps。基线覆盖传统 VLM 方案（LLaVA-OneVision）、检索增强方案（Video-RAG）、以及自适应采样方案（AKS、BOLT）。</p>
+        <p>论文同时评估 Cloud-Only 与 Edge-Cloud 两种部署策略，确保在真实在线场景下公平对比。</p>
+    </div>
+
+    <div class="card">
+        <h2>10. 结果：速度与准确率双提升</h2>
+        <p>在不同数据集与 VLM 组合下，Venus 始终保持更高或相当的准确率，同时显著降低响应延迟。论文报告总体延迟提升达到 <span class="highlight">15×–131×</span>，并保持可比甚至更高的推理准确率。</p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>原文摘录：</strong></p>
+            <p class="text-sm text-gray-600 italic">“Venus achieves a 15×–131× speedup in total response latency compared to state-of-the-art methods.”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/html/2512.07344v2" class="text-[color:var(--accent)] underline">arXiv:2512.07344v2</a> Abstract</p>
+        </div>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/venus/x11.png" alt="Figure 10: Top-K vs sampling" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 10. Top-K 与采样式检索对比：采样覆盖更多选项。</figcaption>
+        </figure>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/venus/x12.png" alt="Figure 11: Ablation on AKR" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 11. AKR 模块消融实验：更少帧数达到相近精度。</figcaption>
+        </figure>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/venus/x13.png" alt="Figure 12: Latency breakdown" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 12. 端到端延迟分解与总延迟对比。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>11. 讨论与启示</h2>
+        <p>Venus 的核心价值并非只在算法层面，而是构建了一种“可部署的 VLM 在线推理框架”。它通过稀疏索引与自适应采样，解决了在线视频理解的三重矛盾：<strong>边缘算力不足、通信瓶颈、推理准确率需求</strong>。</p>
+        <p>这一设计也揭示了一个趋势：在多模态推理系统中，<span class="highlight">检索系统本身就是性能的一部分</span>。如果检索阶段无法提供足够多样而相关的证据，VLM 的推理能力再强也难以发挥。</p>
+    </div>
+
+    <div class="card">
+        <h2>12. 原文图集（完整收录）</h2>
+        <p>以下为论文原图的集中展示，便于快速对照。</p>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x1.png" alt="Figure 1" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 1. 在线视频理解应用示意。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x2.png" alt="Figure 2" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 2. 延迟分解。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x3.png" alt="Figure 3" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 3. 端云拆分架构。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x4.png" alt="Figure 4" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 4. 编码延迟 vs FPS。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x5.png" alt="Figure 5a" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 5(a). Video-MME 短视频准确率。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x6.png" alt="Figure 5b" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 5(b). 相似度分布。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x7.png" alt="Figure 5c" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 5(c). Top-16 选帧示例。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x8.png" alt="Figure 6" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 6. Venus 总体流程。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/cluster.png" alt="Figure 7" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 7. 场景分割与聚类。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x9.png" alt="Figure 8" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 8. 记忆构建与管理。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x10.png" alt="Figure 9" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 9. 查询分布示意。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x11.png" alt="Figure 10" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 10. Top-K vs 采样式检索。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/venus/x12.png" alt="Figure 11" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 11. AKR 消融。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4 md:col-span-2">
+                <img src="/notes/venus/x13.png" alt="Figure 12" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 12. 端到端延迟分解。</figcaption>
+            </figure>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>13. 结论</h2>
+        <p>Venus 提供了一个可部署、可扩展的 VLM 在线视频理解系统：通过边缘端建立分层记忆，通过采样式检索控制成本，再将最关键的证据送到云端 VLM 推理。这种设计把“系统效率”与“推理准确率”统一起来，也为未来多模态系统的端云协作提供了工程范式。</p>
+        <p>如果要在真实场景落地 VLM 视频理解，Venus 的结论是：<strong>检索系统必须先解决</strong>，否则再强的 VLM 也会被系统瓶颈拖垮。</p>
+    </div>
+</BaseLayout>
