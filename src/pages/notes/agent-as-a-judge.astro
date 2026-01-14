@@ -1,0 +1,153 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+---
+
+<BaseLayout title="Agent-as-a-Judge：用代理评估代理">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Evaluation / Agents</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Agent-as-a-Judge：用代理评估代理</h1>
+        <p class="text-xl text-gray-500">从“只看最终结果”走向“过程可解释、可优化”的代理评测</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>背景：传统评测为何跟不上代理系统</h2>
+        <p>代理系统（agentic systems）会分解任务、持续行动、累积中间产物。只看最终输出（如 pass@1）会掩盖“过程错误”，而完全依赖人工评估成本又高、不可扩展。</p>
+        <p>Agent-as-a-Judge 的核心想法是：<span class="highlight">让代理系统去评估代理系统，并在全过程给出反馈</span>，从而具备可扩展、过程监督、可复用的评测能力。</p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>关键转变：</strong>从“结果导向的判分”转向“证据驱动的过程评测”。代理评测可以从代码、日志、轨迹、图片等多模态证据中找依据。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>DevAI：真实 AI 开发任务基准</h2>
+        <p>论文同时发布 DevAI 数据集：<span class="highlight">55 个完整 AI 开发任务、365 条分层需求</span>，覆盖数据处理、训练、评估、报告等完整流程。</p>
+        <ul class="list-disc pl-6">
+            <li>每个任务包含用户查询、分层需求（带依赖关系）、偏好与标签。</li>
+            <li>需求更像真实研发 checklist，可量化“完成度”而不仅是“是否可运行”。</li>
+            <li>适配代理评测：每条需求都能独立被判定是否满足。</li>
+        </ul>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 820 260" role="img" aria-label="DevAI requirement graph" class="w-full">
+                <rect x="24" y="24" width="772" height="212" rx="18" fill="#f8fafc" stroke="#e2e8f0" />
+                <text x="50" y="58" font-size="13" fill="#64748b">用户任务描述</text>
+                <rect x="50" y="70" width="220" height="60" rx="12" fill="#e0f2fe" stroke="#bae6fd" />
+                <text x="160" y="105" text-anchor="middle" font-size="13" fill="#0f172a">Query: 构建完整 AI 流程</text>
+
+                <text x="330" y="58" font-size="13" fill="#64748b">分层需求</text>
+                <rect x="310" y="70" width="140" height="44" rx="10" fill="#dcfce7" stroke="#86efac" />
+                <rect x="470" y="70" width="140" height="44" rx="10" fill="#dcfce7" stroke="#86efac" />
+                <rect x="630" y="70" width="140" height="44" rx="10" fill="#dcfce7" stroke="#86efac" />
+                <text x="380" y="98" text-anchor="middle" font-size="12" fill="#14532d">R0 数据准备</text>
+                <text x="540" y="98" text-anchor="middle" font-size="12" fill="#14532d">R1 训练流程</text>
+                <text x="700" y="98" text-anchor="middle" font-size="12" fill="#14532d">R2 评估报告</text>
+
+                <line x1="270" y1="100" x2="310" y2="92" stroke="#94a3b8" stroke-width="1.5" />
+                <line x1="270" y1="100" x2="310" y2="114" stroke="#94a3b8" stroke-width="1.5" />
+                <line x1="450" y1="92" x2="470" y2="92" stroke="#94a3b8" stroke-width="1.5" />
+                <line x1="610" y1="92" x2="630" y2="92" stroke="#94a3b8" stroke-width="1.5" />
+
+                <text x="330" y="162" font-size="13" fill="#64748b">证据与判定</text>
+                <rect x="310" y="170" width="180" height="44" rx="10" fill="#fee2e2" stroke="#fecaca" />
+                <rect x="510" y="170" width="180" height="44" rx="10" fill="#fee2e2" stroke="#fecaca" />
+                <text x="400" y="198" text-anchor="middle" font-size="12" fill="#7f1d1d">证据抓取</text>
+                <text x="600" y="198" text-anchor="middle" font-size="12" fill="#7f1d1d">需求级判定</text>
+                <line x1="540" y1="114" x2="400" y2="170" stroke="#cbd5f5" stroke-width="1.5" />
+                <line x1="700" y1="114" x2="560" y2="170" stroke="#cbd5f5" stroke-width="1.5" />
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">DevAI 以“需求图”的方式刻画任务，使评测更接近真实开发过程。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>评测指标：对齐率与偏移</h2>
+        <p>评测框架强调与人类共识的接近程度，常用两个核心指标：</p>
+        <div class="math-block" set:html={String.raw`$$\text{Alignment Rate} = \frac{1}{N}\sum_{i=1}^{N} \mathbb{1}[J_i = H_i]$$`}></div>
+        <p class="text-sm text-gray-600 mt-3">对齐率：判定结果与人类共识一致的比例，越高越好。</p>
+        <div class="math-block" set:html={String.raw`$$\text{Judge Shift} = \frac{1}{N}\sum_{i=1}^{N} |J_i - H_i|$$`}></div>
+        <p class="text-sm text-gray-600 mt-3">偏移度：评测结果偏离人类共识的程度，越低越好。</p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>判定粒度：</strong>DevAI 以需求为单位评测，最终可聚合为任务级完成度与整体模型对齐度。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Agent-as-a-Judge 架构：模块化评测代理</h2>
+        <p>评测代理由多个模块协同完成，核心在于“定位证据 + 需求判断”的闭环。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 900 260" role="img" aria-label="Agent-as-a-Judge modules" class="w-full">
+                <rect x="24" y="24" width="852" height="212" rx="18" fill="#f8fafc" stroke="#e2e8f0" />
+
+                <rect x="50" y="70" width="140" height="44" rx="10" fill="#e0f2fe" stroke="#bae6fd" />
+                <rect x="220" y="70" width="140" height="44" rx="10" fill="#e0f2fe" stroke="#bae6fd" />
+                <rect x="390" y="70" width="140" height="44" rx="10" fill="#e0f2fe" stroke="#bae6fd" />
+                <rect x="560" y="70" width="140" height="44" rx="10" fill="#e0f2fe" stroke="#bae6fd" />
+
+                <text x="120" y="98" text-anchor="middle" font-size="12" fill="#0f172a">graph</text>
+                <text x="290" y="98" text-anchor="middle" font-size="12" fill="#0f172a">locate</text>
+                <text x="460" y="98" text-anchor="middle" font-size="12" fill="#0f172a">read</text>
+                <text x="630" y="98" text-anchor="middle" font-size="12" fill="#0f172a">search</text>
+
+                <rect x="135" y="150" width="140" height="44" rx="10" fill="#dcfce7" stroke="#86efac" />
+                <rect x="305" y="150" width="140" height="44" rx="10" fill="#dcfce7" stroke="#86efac" />
+                <rect x="475" y="150" width="140" height="44" rx="10" fill="#dcfce7" stroke="#86efac" />
+                <rect x="645" y="150" width="140" height="44" rx="10" fill="#dcfce7" stroke="#86efac" />
+
+                <text x="205" y="178" text-anchor="middle" font-size="12" fill="#14532d">retrieve</text>
+                <text x="375" y="178" text-anchor="middle" font-size="12" fill="#14532d">ask</text>
+                <text x="545" y="178" text-anchor="middle" font-size="12" fill="#14532d">memory</text>
+                <text x="715" y="178" text-anchor="middle" font-size="12" fill="#14532d">planning</text>
+
+                <line x1="190" y1="92" x2="220" y2="92" stroke="#94a3b8" stroke-width="1.5" />
+                <line x1="360" y1="92" x2="390" y2="92" stroke="#94a3b8" stroke-width="1.5" />
+                <line x1="530" y1="92" x2="560" y2="92" stroke="#94a3b8" stroke-width="1.5" />
+
+                <line x1="290" y1="114" x2="205" y2="150" stroke="#cbd5f5" stroke-width="1.5" />
+                <line x1="460" y1="114" x2="375" y2="150" stroke="#cbd5f5" stroke-width="1.5" />
+                <line x1="630" y1="114" x2="545" y2="150" stroke="#cbd5f5" stroke-width="1.5" />
+                <line x1="700" y1="114" x2="715" y2="150" stroke="#cbd5f5" stroke-width="1.5" />
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">模块化设计强调证据检索与需求判定之间的闭环协作。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>评测流程：从轨迹到需求级判定</h2>
+        <p>Agent-as-a-Judge 会接入代码库、日志、轨迹等多源信息，并逐条评估需求。</p>
+        <ol class="list-decimal pl-6">
+            <li>构建项目结构图，定位与需求相关的文件与产物。</li>
+            <li>读取并解析多模态证据：代码、配置、数据、报告、图片。</li>
+            <li>对每条需求输出判定与证据引用，支持依赖关系的连锁检查。</li>
+            <li>将需求级结果聚合到任务完成度，并汇总评测指标。</li>
+        </ol>
+        <div class="note-box text-sm mt-4">
+            <p><strong>灰盒 vs 黑盒：</strong>灰盒评测可访问项目内容与轨迹，显著提高对齐率；黑盒只能看最终输出，更容易误判。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>实验发现：对齐更高，成本更低</h2>
+        <ul class="list-disc pl-6">
+            <li>GPT-Pilot 与 OpenHands 平均仅满足约 29% 的需求，完整完成任务的案例很少。</li>
+            <li>Agent-as-a-Judge 与人类共识对齐率约 90%+，显著高于 LLM-as-a-Judge（约 70%）。</li>
+            <li>相比三位人类专家，评测成本与时间降到约 2% 左右。</li>
+        </ul>
+        <p>这意味着评测可以从“人力瓶颈”变为“可规模化的反馈系统”。</p>
+    </div>
+
+    <div class="card">
+        <h2>落地启示：如何构建可复用的评测代理</h2>
+        <ul class="list-disc pl-6">
+            <li><strong>以需求为中心：</strong>需求必须可验证、可链接证据，避免含糊表述。</li>
+            <li><strong>优先高质量证据：</strong>噪声会放大误判，尤其在多步骤评测中。</li>
+            <li><strong>限制记忆链路：</strong>历史误判可能导致连锁错误，需可回滚。</li>
+            <li><strong>奖励过程信号：</strong>把中间证据转化为过程监督奖励，为代理自我改进提供信号。</li>
+        </ul>
+        <div class="note-box text-sm mt-4">
+            <p><strong>一句话总结：</strong>Agent-as-a-Judge 让评测从“终局检查”升级为“过程反馈引擎”。</p>
+        </div>
+    </div>
+</BaseLayout>
