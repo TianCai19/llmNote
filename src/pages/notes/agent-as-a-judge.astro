@@ -9,14 +9,14 @@ const createdAt = todayYmd();
     <header class="text-center mb-12">
         <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Evaluation / Agents</p>
         <h1 class="text-4xl font-bold mb-4 gradient-text">Agent-as-a-Judge：用代理评估代理</h1>
-        <p class="text-xl text-gray-500">把“评测”变成可扩展的过程反馈系统，而不是终点打分</p>
+        <p class="text-xl text-gray-500">从终点打分到过程监督：一套面向代理系统的评测范式</p>
         <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
     </header>
 
     <div class="card">
-        <h2>一句话理解</h2>
-        <p>Agent-as-a-Judge 的核心是：<span class="highlight">让一个能看懂项目与轨迹的代理来评测另一个代理</span>，并且对每条需求给出证据与判定，而不是只看最终输出。</p>
-        <p>它延伸自 LLM-as-a-Judge，但加上了“代理能力”（文件定位、检索、跨模态阅读、计划执行），因此能提供过程级反馈。</p>
+        <h2>1. 引言：为什么代理系统需要新的评测方式</h2>
+        <p>代理系统（agentic systems）以“分解任务—持续行动—多步产出”的方式工作：它们会创建文件、写代码、运行实验、生成报告，甚至与外部工具交互。传统评测通常只看最终输出（例如 pass@1 或是否通过测试），这种方式对长链路任务并不敏感，无法解释失败发生在哪一步，也无法提供可操作的中间反馈。</p>
+        <p>论文指出，当前评测方法要么忽略过程、要么依赖昂贵的人类评审。对于需要长时间规划与跨模态产出的代理系统，这类评测方式既不可靠也难以扩展。Agent-as-a-Judge 的目标是把评测“代理化”：<span class="highlight">让一个有检索、定位和多模态阅读能力的代理去评估另一个代理，并在全过程给出可追溯证据与判定</span>。</p>
         <div class="note-box text-sm mt-4">
             <p><strong>原文摘录：</strong></p>
             <p class="text-sm text-gray-600 italic">“We introduce the Agent-as-a-Judge framework, wherein agentic systems are used to evaluate agentic systems.”</p>
@@ -28,53 +28,9 @@ const createdAt = todayYmd();
     </div>
 
     <div class="card">
-        <h2>为什么传统评测不够用</h2>
-        <p>代理系统会长链路执行任务，产出代码、配置、数据、报告与中间结果。只看最终结果会错过过程问题，也难以定位瓶颈。</p>
-        <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
-            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
-                <h3 class="text-lg font-semibold text-slate-700">只看终点</h3>
-                <p class="text-sm text-gray-600">Pass@1 或整体完成率无法告诉你问题卡在哪一步。</p>
-            </div>
-            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
-                <h3 class="text-lg font-semibold text-slate-700">人力昂贵</h3>
-                <p class="text-sm text-gray-600">多步骤开发任务需要专家逐条评估，成本不可扩展。</p>
-            </div>
-            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
-                <h3 class="text-lg font-semibold text-slate-700">缺少过程信号</h3>
-                <p class="text-sm text-gray-600">没有中间反馈，难以做过程监督与自我改进。</p>
-            </div>
-        </div>
-        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
-            <svg viewBox="0 0 860 240" role="img" aria-label="Outcome vs process evaluation" class="w-full">
-                <rect x="24" y="24" width="812" height="192" rx="18" fill="#f8fafc" stroke="#e2e8f0" />
-                <text x="60" y="58" font-size="12" fill="#64748b">传统：只看终点</text>
-                <text x="480" y="58" font-size="12" fill="#64748b">Agent-as-a-Judge：看过程 + 证据</text>
-
-                <circle cx="110" cy="120" r="18" fill="#e2e8f0" />
-                <circle cx="180" cy="120" r="18" fill="#e2e8f0" />
-                <circle cx="250" cy="120" r="18" fill="#e2e8f0" />
-                <circle cx="320" cy="120" r="18" fill="#34d399" />
-                <line x1="128" y1="120" x2="162" y2="120" stroke="#cbd5f5" stroke-width="3" />
-                <line x1="198" y1="120" x2="232" y2="120" stroke="#cbd5f5" stroke-width="3" />
-                <line x1="268" y1="120" x2="302" y2="120" stroke="#cbd5f5" stroke-width="3" />
-                <text x="60" y="170" font-size="11" fill="#94a3b8">只判最终圆点是否成功</text>
-
-                <rect x="470" y="95" width="70" height="40" rx="10" fill="#e0f2fe" stroke="#bae6fd" />
-                <rect x="560" y="95" width="70" height="40" rx="10" fill="#e0f2fe" stroke="#bae6fd" />
-                <rect x="650" y="95" width="70" height="40" rx="10" fill="#e0f2fe" stroke="#bae6fd" />
-                <rect x="740" y="95" width="70" height="40" rx="10" fill="#34d399" stroke="#86efac" />
-                <line x1="540" y1="115" x2="560" y2="115" stroke="#94a3b8" stroke-width="2" />
-                <line x1="630" y1="115" x2="650" y2="115" stroke="#94a3b8" stroke-width="2" />
-                <line x1="720" y1="115" x2="740" y2="115" stroke="#94a3b8" stroke-width="2" />
-                <text x="480" y="170" font-size="11" fill="#94a3b8">逐步评估，每步都有证据</text>
-            </svg>
-            <figcaption class="text-sm text-gray-500 mt-3">从“终点判分”升级为“过程可追踪、可反馈”。</figcaption>
-        </figure>
-    </div>
-
-    <div class="card">
-        <h2>DevAI：真实 AI 开发任务基准</h2>
-        <p>论文发布 DevAI 数据集：<span class="highlight">55 个完整 AI 开发任务、365 条分层需求</span>。这些需求像真实开发 checklist，覆盖数据处理、训练、评估与报告。</p>
+        <h2>2. DevAI：面向真实开发流程的数据集</h2>
+        <p>为了验证这一评测范式，论文发布了 DevAI 数据集。它包含 <span class="highlight">55 个真实的 AI 开发任务与 365 条分层需求</span>，覆盖数据处理、训练、评估与报告等完整开发环节。与 HumanEval、MBPP 等小型算法题不同，DevAI 更接近真实生产环境：任务更长、需求更多、依赖更复杂。</p>
+        <p>DevAI 的关键设计在于“需求结构化”。每个任务由用户自然语言请求出发，被拆解成多条需求（requirements），并显式记录依赖关系。这样做的好处是：评测可以对每条需求给出独立判定，同时保留可追溯的证据链，而不是只给一个“整体通过/失败”的结果。</p>
         <div class="note-box text-sm mt-4">
             <p><strong>原文摘录：</strong></p>
             <p class="text-sm text-gray-600 italic">“we present DevAI, a new benchmark of 55 realistic automated AI development tasks. It includes rich manual annotations, like a total of 365 hierarchical user requirements.”</p>
@@ -83,9 +39,9 @@ const createdAt = todayYmd();
         <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div>
                 <ul class="list-disc pl-6">
-                    <li>任务描述贴近真实用户需求，不是单一算法题。</li>
-                    <li>每条需求可独立验证，支持依赖关系。</li>
-                    <li>更容易定位：模型在哪一步失分。</li>
+                    <li>任务来源更接近真实需求，包含长文本、多子目标与外部依赖。</li>
+                    <li>每条需求具备可验证标准，可与代码、配置、结果文件绑定。</li>
+                    <li>需求存在依赖关系，能体现真实流程的先后约束。</li>
                 </ul>
             </div>
             <div class="rounded-2xl border border-white/70 bg-white/80 p-4 text-sm text-gray-600">
@@ -93,7 +49,7 @@ const createdAt = todayYmd();
                 <p class="mt-2">R0: 按指定论文实现数据处理脚本</p>
                 <p>R1: 输出 1080p 结果图并保存到 results/</p>
                 <p>R2: 生成控制样例并人工验证</p>
-                <p class="mt-3 text-xs">需求带依赖：R1 -> R0，R2 -> R1</p>
+                <p class="mt-3 text-xs">依赖关系：R1 -> R0，R2 -> R1</p>
             </div>
         </div>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
@@ -127,8 +83,28 @@ const createdAt = todayYmd();
     </div>
 
     <div class="card">
-        <h2>Agent-as-a-Judge 架构：模块化评测代理</h2>
-        <p>评测代理不是单一模型，而是多模块协作系统。核心是“定位证据 + 判定需求”的闭环。</p>
+        <h2>3. 人工评测基线：Human-as-a-Judge</h2>
+        <p>为了建立可靠基线，论文使用专家人工评测（Human-as-a-Judge）。评测过程依赖三位评审的共识，并针对 365 条需求逐条判定。这种方式能提供高质量判断，但代价巨大：不仅耗时，还需要具备足够经验的评审者。</p>
+        <p>人工评测的价值在于“高可信度”，但缺点在于“不可扩展”。这正是 Agent-as-a-Judge 试图缓解的矛盾：用代理系统模拟人类评审流程，降低成本，同时保持接近人类的判断一致性。</p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>关键定位：</strong>Human-as-a-Judge 不是被取代，而是提供“可信参考标准”，用于衡量代理评测的对齐程度。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>4. 方法：Agent-as-a-Judge 的模块化架构</h2>
+        <p>Agent-as-a-Judge 不只是单一模型，而是一个包含多个模块的协作系统。其设计目标是模拟人类评审的三步流程：理解需求、查找证据、给出判定。</p>
+        <p>核心模块包括：</p>
+        <ul class="list-disc pl-6">
+            <li><strong>graph：</strong>构建项目结构图，识别文件、模块与依赖。</li>
+            <li><strong>locate：</strong>定位需求对应的文件或目录。</li>
+            <li><strong>read：</strong>读取并理解多模态证据（代码、图像、文档等）。</li>
+            <li><strong>search：</strong>在项目中快速检索相关片段并提供上下文。</li>
+            <li><strong>retrieve：</strong>从长文本或轨迹中抽取关键证据。</li>
+            <li><strong>ask：</strong>对单条需求输出判定与理由。</li>
+            <li><strong>memory：</strong>缓存历史评测信息，辅助一致性判断。</li>
+            <li><strong>planning：</strong>规划下一步的评测行动与检索路径。</li>
+        </ul>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
             <svg viewBox="0 0 900 280" role="img" aria-label="Agent-as-a-Judge modules" class="w-full">
                 <rect x="24" y="24" width="852" height="232" rx="18" fill="#f8fafc" stroke="#e2e8f0" />
@@ -165,18 +141,18 @@ const createdAt = todayYmd();
             <figcaption class="text-sm text-gray-500 mt-3">模块化设计强调证据检索与需求判定的协作闭环。</figcaption>
         </figure>
         <div class="note-box text-sm mt-4">
-            <p><strong>模块直觉：</strong>graph/locate/reading 负责“找到并看懂”，ask/decision 负责“对需求给结论”，planning 负责“下一步该查哪里”。</p>
+            <p><strong>模块直觉：</strong>graph/locate/read 负责“找到并看懂”，ask 负责“对需求给结论”，planning 负责“下一步该查哪里”。</p>
         </div>
     </div>
 
     <div class="card">
-        <h2>评测流程：从轨迹到需求判定</h2>
-        <p>Agent-as-a-Judge 不是只看最终输出，而是走完整流程：</p>
+        <h2>5. 评测流程：从轨迹到需求判定</h2>
+        <p>评测代理会从项目与轨迹中构建证据，逐条匹配需求。流程包括：</p>
         <ol class="list-decimal pl-6">
-            <li>构建项目结构图，定位需求相关文件与产物。</li>
-            <li>读取多模态证据：代码、配置、数据、报告、图片、日志。</li>
-            <li>逐条需求判定，并附带证据引用。</li>
-            <li>聚合为任务完成度与整体评测指标。</li>
+            <li>构建结构图与检索索引，定位需求相关文件。</li>
+            <li>读取多模态证据：代码、配置、实验日志、结果图与报告。</li>
+            <li>对每条需求输出判定，并给出证据引用。</li>
+            <li>聚合需求级结果，得到任务完成度与整体评测结果。</li>
         </ol>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
             <svg viewBox="0 0 860 250" role="img" aria-label="Evaluation pipeline" class="w-full">
@@ -201,12 +177,17 @@ const createdAt = todayYmd();
     </div>
 
     <div class="card">
-        <h2>评测指标：对齐率与偏移</h2>
-        <p>Agent-as-a-Judge 关注与人类共识的接近程度。常用指标：</p>
+        <h2>6. 评测指标：对齐率与偏移</h2>
+        <p>论文通过“对齐率（Alignment Rate）”与“偏移度（Judge Shift）”衡量代理评测与人类共识的接近程度：</p>
         <div class="math-block" set:html={String.raw`$$\text{Alignment Rate} = \frac{1}{N}\sum_{i=1}^{N} \mathbb{1}[J_i = H_i]$$`}></div>
         <p class="text-sm text-gray-600 mt-3">对齐率：判定结果与人类共识一致的比例，越高越好。</p>
         <div class="math-block" set:html={String.raw`$$\text{Judge Shift} = \frac{1}{N}\sum_{i=1}^{N} |J_i - H_i|$$`}></div>
         <p class="text-sm text-gray-600 mt-3">偏移度：评测偏离人类共识的程度，越低越好。</p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>原文摘录：</strong></p>
+            <p class="text-sm text-gray-600 italic">“Agent-as-a-Judge aligns more closely with the consensus of our human judges (90%) as compared to LLM-as-a-Judge (70%).”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/html/2410.10934v2" class="text-[color:var(--accent)] underline">arXiv:2410.10934v2</a> Introduction</p>
+        </div>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
             <svg viewBox="0 0 860 260" role="img" aria-label="Alignment comparison" class="w-full">
                 <rect x="24" y="24" width="812" height="212" rx="18" fill="#f8fafc" stroke="#e2e8f0" />
@@ -225,22 +206,24 @@ const createdAt = todayYmd();
 
                 <text x="640" y="110" font-size="12" fill="#64748b">趋势：Agent-as-a-Judge 接近人类共识</text>
             </svg>
-            <figcaption class="text-sm text-gray-500 mt-3">论文显示 Agent-as-a-Judge 与人类共识对齐率约 90%+，显著高于 LLM-as-a-Judge。</figcaption>
+            <figcaption class="text-sm text-gray-500 mt-3">代理评测与人类共识更接近，是可靠性的核心证据。</figcaption>
         </figure>
     </div>
 
     <div class="card">
-        <h2>实验结果：效果与成本</h2>
-        <ul class="list-disc pl-6">
-            <li>GPT-Pilot 与 OpenHands 平均只满足约 29% 的需求，完整完成任务很少。</li>
-            <li>Agent-as-a-Judge 与人类共识对齐率约 90%+，LLM-as-a-Judge 约 70%。</li>
-            <li>成本与时间：人类评测约 86.5 小时 / 1297 美元；Agent-as-a-Judge 约 118 分钟 / 30 美元。</li>
-        </ul>
+        <h2>7. 实验设置：被评测的代理系统</h2>
+        <p>论文选取三种开源代理系统进行评测：MetaGPT、GPT-Pilot、OpenHands。这些系统代表了不同的代理设计哲学与执行策略。</p>
+        <p>实验在 DevAI 任务上运行这些代理系统，并通过 Human-as-a-Judge、LLM-as-a-Judge 与 Agent-as-a-Judge 三种方式评估其结果。这样可以比较不同评测方案的可靠性与一致性。</p>
         <div class="note-box text-sm mt-4">
-            <p><strong>原文摘录：</strong></p>
-            <p class="text-sm text-gray-600 italic">“Agent-as-a-Judge aligns more closely with the consensus of our human judges (90%) as compared to LLM-as-a-Judge (70%).”</p>
-            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/html/2410.10934v2" class="text-[color:var(--accent)] underline">arXiv:2410.10934v2</a> Introduction</p>
+            <p><strong>关键问题：</strong>代理评测能否替代人工评测，同时比 LLM-as-a-Judge 更可靠？</p>
         </div>
+    </div>
+
+    <div class="card">
+        <h2>8. 实验结果：表现、对齐与成本</h2>
+        <p>从任务完成度来看，当前代理系统仍处于早期阶段：GPT-Pilot 与 OpenHands 平均仅满足约 29% 的需求，完整完成任务的案例很少。这表明 DevAI 对现有系统具有挑战性，也证明了该数据集的现实性。</p>
+        <p>在评测一致性方面，Agent-as-a-Judge 与人类共识的对齐率约 90%+，明显高于 LLM-as-a-Judge（约 70%）。此外，Agent-as-a-Judge 在有依赖关系的需求上也更稳定，说明其对任务结构的理解优于单纯基于文本的评测。</p>
+        <p>成本方面，人工评测约 86.5 小时 / 1297 美元，而 Agent-as-a-Judge 仅需约 118 分钟 / 30 美元，成本与时间缩减到 2%-3% 的量级。LLM-as-a-Judge 虽然更快，但缺少上下文选择能力，成本仍接近 Agent-as-a-Judge，且对齐率明显更低。</p>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
             <svg viewBox="0 0 860 260" role="img" aria-label="Cost comparison" class="w-full">
                 <rect x="24" y="24" width="812" height="212" rx="18" fill="#f8fafc" stroke="#e2e8f0" />
@@ -258,35 +241,17 @@ const createdAt = todayYmd();
                 <rect x="130" y="172" width="170" height="24" rx="6" fill="#34d399" />
                 <text x="310" y="190" font-size="11" fill="#64748b">118m / $30.6</text>
             </svg>
-            <figcaption class="text-sm text-gray-500 mt-3">Agent-as-a-Judge 在成本和对齐率之间取得更优折中。</figcaption>
+            <figcaption class="text-sm text-gray-500 mt-3">Agent-as-a-Judge 在成本与对齐率之间取得更优折中。</figcaption>
         </figure>
     </div>
 
     <div class="card">
-        <h2>为什么它更“像人类评测”</h2>
-        <p>人类评测通常会做三件事：理解需求、查找证据、给出判定。Agent-as-a-Judge 的模块化架构正是对这一过程的工程化复刻。</p>
-        <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
-            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
-                <h3 class="text-lg font-semibold text-slate-700">理解需求</h3>
-                <p class="text-sm text-gray-600">locate + graph 明确需求对应的文件与模块。</p>
-            </div>
-            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
-                <h3 class="text-lg font-semibold text-slate-700">收集证据</h3>
-                <p class="text-sm text-gray-600">read + search + retrieve 跨模态抓取证据。</p>
-            </div>
-            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
-                <h3 class="text-lg font-semibold text-slate-700">给出判定</h3>
-                <p class="text-sm text-gray-600">ask 模块输出判定并可追溯证据。</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>消融发现：哪些模块更关键</h2>
-        <p>论文在消融实验中发现，部分模块组合效果最好，说明评测代理对“高质量事实证据”非常敏感。</p>
+        <h2>9. 消融分析：哪些模块最重要</h2>
+        <p>论文进行了模块消融实验，发现某些模块组合效果最佳。尤其是 graph、locate、read、retrieve 与 ask 的组合对稳定性提升明显；而 memory 与 planning 在当前设计中可能带来噪声或不稳定。</p>
+        <p>这说明 Agent-as-a-Judge 对“高质量事实证据”高度敏感：只要证据链可靠，判定就稳定；一旦证据不足或被污染，错误会被放大。</p>
         <div class="note-box text-sm mt-4">
             <p><strong>有效组合：</strong>graph + locate + read + retrieve + ask。</p>
-            <p><strong>重要结论：</strong>memory 可能带来连锁错误；planning 目前不稳定，需要更强的策略设计。</p>
+            <p><strong>潜在问题：</strong>memory 可能引入连锁误判；planning 需要更稳健的策略。</p>
         </div>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
             <svg viewBox="0 0 860 240" role="img" aria-label="Ablation highlights" class="w-full">
@@ -304,20 +269,22 @@ const createdAt = todayYmd();
                 <rect x="500" y="60" width="160" height="80" rx="8" fill="#22c55e" />
                 <text x="580" y="170" text-anchor="middle" font-size="11" fill="#64748b">含 retrieve</text>
             </svg>
-            <figcaption class="text-sm text-gray-500 mt-3">读得到证据，评测才稳定；缺失关键模块会明显掉分。</figcaption>
+            <figcaption class="text-sm text-gray-500 mt-3">证据模块越完整，判定越稳定。</figcaption>
         </figure>
     </div>
 
     <div class="card">
-        <h2>落地启示：如何构建可复用评测代理</h2>
-        <ul class="list-disc pl-6">
-            <li><strong>需求必须可验证：</strong>每条需求都要能被证据支持或否定。</li>
-            <li><strong>证据链必须明确：</strong>避免“凭感觉判定”。</li>
-            <li><strong>控制记忆污染：</strong>历史错误会累积放大，需要可回滚机制。</li>
-            <li><strong>把过程信号变成奖励：</strong>为代理系统自我改进提供路径。</li>
-        </ul>
+        <h2>10. 讨论与展望：过程监督与自我改进</h2>
+        <p>论文强调，Agent-as-a-Judge 的最大价值不只是“更便宜的评测”，而是提供过程级反馈信号，使得代理系统可以在执行过程中自我纠错与迭代优化。它为构建过程监督奖励模型提供了基础，也可能驱动代理系统与评测系统共同进化。</p>
+        <p>未来方向包括：更稳定的 planning 策略、更可靠的证据选择、以及与自我改进闭环结合的训练框架。这些方向都基于一个前提：评测系统必须足够可靠，才能被用作训练或优化的信号源。</p>
         <div class="note-box text-sm mt-4">
-            <p><strong>一句话总结：</strong>Agent-as-a-Judge 让评测从“终局检查”升级为“过程反馈引擎”。</p>
+            <p><strong>一句话总结：</strong>Agent-as-a-Judge 把评测从“终局检查”升级为“过程反馈引擎”。</p>
         </div>
+    </div>
+
+    <div class="card">
+        <h2>11. 结论</h2>
+        <p>Agent-as-a-Judge 提供了一条可扩展评测代理系统的新路径：它以需求为单位，依赖证据链进行判定，在可靠性与成本之间取得更好的折中。DevAI 数据集为这一框架提供了真实任务场景与结构化需求，使评测从“黑盒评分”转向“可解释的过程评估”。</p>
+        <p>在当前阶段，Agent-as-a-Judge 已经能接近人类评测共识，并显著降低成本。更重要的是，它引入了过程监督信号，为未来的代理自我改进和自动化评测系统奠定了基础。</p>
     </div>
 </BaseLayout>
