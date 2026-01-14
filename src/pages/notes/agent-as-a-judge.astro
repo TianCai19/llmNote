@@ -17,6 +17,11 @@ const createdAt = todayYmd();
         <h2>1. 引言：为什么代理系统需要新的评测方式</h2>
         <p>代理系统（agentic systems）以“分解任务—持续行动—多步产出”的方式工作：它们会创建文件、写代码、运行实验、生成报告，甚至与外部工具交互。传统评测通常只看最终输出（例如 pass@1 或是否通过测试），这种方式对长链路任务并不敏感，无法解释失败发生在哪一步，也无法提供可操作的中间反馈。</p>
         <p>论文指出，当前评测方法要么忽略过程、要么依赖昂贵的人类评审。对于需要长时间规划与跨模态产出的代理系统，这类评测方式既不可靠也难以扩展。Agent-as-a-Judge 的目标是把评测“代理化”：<span class="highlight">让一个有检索、定位和多模态阅读能力的代理去评估另一个代理，并在全过程给出可追溯证据与判定</span>。</p>
+        <p>这套思路在论文的核心对比图中被清晰概括：Agent-as-a-Judge 介于 LLM-as-a-Judge 与 Human-as-a-Judge 之间，既保留了效率优势，又强调过程与证据。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/agent-as-a-judge/x1.png" alt="Figure 1: Agent-as-a-Judge overview" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 1. Agent-as-a-Judge、LLM-as-a-Judge 与 Human-as-a-Judge 的关系与定位。</figcaption>
+        </figure>
         <div class="note-box text-sm mt-4">
             <p><strong>原文摘录：</strong></p>
             <p class="text-sm text-gray-600 italic">“We introduce the Agent-as-a-Judge framework, wherein agentic systems are used to evaluate agentic systems.”</p>
@@ -31,6 +36,11 @@ const createdAt = todayYmd();
         <h2>2. DevAI：面向真实开发流程的数据集</h2>
         <p>为了验证这一评测范式，论文发布了 DevAI 数据集。它包含 <span class="highlight">55 个真实的 AI 开发任务与 365 条分层需求</span>，覆盖数据处理、训练、评估与报告等完整开发环节。与 HumanEval、MBPP 等小型算法题不同，DevAI 更接近真实生产环境：任务更长、需求更多、依赖更复杂。</p>
         <p>DevAI 的关键设计在于“需求结构化”。每个任务由用户自然语言请求出发，被拆解成多条需求（requirements），并显式记录依赖关系。这样做的好处是：评测可以对每条需求给出独立判定，同时保留可追溯的证据链，而不是只给一个“整体通过/失败”的结果。</p>
+        <p>论文给出了 DevAI 的任务分布与标签统计，展示了其对真实 AI 开发语境的覆盖范围。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/agent-as-a-judge/x2.png" alt="Figure 2: DevAI task distribution" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 2. DevAI 任务分布与统计特征。</figcaption>
+        </figure>
         <div class="note-box text-sm mt-4">
             <p><strong>原文摘录：</strong></p>
             <p class="text-sm text-gray-600 italic">“we present DevAI, a new benchmark of 55 realistic automated AI development tasks. It includes rich manual annotations, like a total of 365 hierarchical user requirements.”</p>
@@ -86,6 +96,17 @@ const createdAt = todayYmd();
         <h2>3. 人工评测基线：Human-as-a-Judge</h2>
         <p>为了建立可靠基线，论文使用专家人工评测（Human-as-a-Judge）。评测过程依赖三位评审的共识，并针对 365 条需求逐条判定。这种方式能提供高质量判断，但代价巨大：不仅耗时，还需要具备足够经验的评审者。</p>
         <p>人工评测的价值在于“高可信度”，但缺点在于“不可扩展”。这正是 Agent-as-a-Judge 试图缓解的矛盾：用代理系统模拟人类评审流程，降低成本，同时保持接近人类的判断一致性。</p>
+        <p>论文还展示了人类评审之间的分歧情况与误差率，强调单个评审可能存在偏差，因而需要共识机制。</p>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2 mt-6">
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/agent-as-a-judge/disagreement_meta.png" alt="Figure 4: Disagreement patterns" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 4. 人类评审分歧分布示意。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/agent-as-a-judge/human_error_rate_meta.png" alt="Figure 5: Human error rate" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 5. 人类评测误差率示意。</figcaption>
+            </figure>
+        </div>
         <div class="note-box text-sm mt-4">
             <p><strong>关键定位：</strong>Human-as-a-Judge 不是被取代，而是提供“可信参考标准”，用于衡量代理评测的对齐程度。</p>
         </div>
@@ -140,6 +161,11 @@ const createdAt = todayYmd();
             </svg>
             <figcaption class="text-sm text-gray-500 mt-3">模块化设计强调证据检索与需求判定的协作闭环。</figcaption>
         </figure>
+        <p>论文中的架构图进一步展示了模块的整体交互关系与实际实现的布局。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/agent-as-a-judge/x3.png" alt="Figure 6: Agent-as-a-Judge architecture" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 6. Agent-as-a-Judge 初始架构图。</figcaption>
+        </figure>
         <div class="note-box text-sm mt-4">
             <p><strong>模块直觉：</strong>graph/locate/read 负责“找到并看懂”，ask 负责“对需求给结论”，planning 负责“下一步该查哪里”。</p>
         </div>
@@ -171,6 +197,11 @@ const createdAt = todayYmd();
             </svg>
             <figcaption class="text-sm text-gray-500 mt-3">流程化评测让每条需求可追溯、可复查。</figcaption>
         </figure>
+        <p>论文还给出了更完整的流水线示意图，展示从需求输入到证据收集与判定的细粒度流程。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/agent-as-a-judge/x5.png" alt="Figure 9: Agent-as-a-Judge pipeline" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 9. Agent-as-a-Judge 评测流程管线。</figcaption>
+        </figure>
         <div class="note-box text-sm mt-4">
             <p><strong>灰盒 vs 黑盒：</strong>灰盒能访问项目与轨迹，显著提高对齐率；黑盒只看最终输出更容易误判。</p>
         </div>
@@ -188,6 +219,11 @@ const createdAt = todayYmd();
             <p class="text-sm text-gray-600 italic">“Agent-as-a-Judge aligns more closely with the consensus of our human judges (90%) as compared to LLM-as-a-Judge (70%).”</p>
             <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/html/2410.10934v2" class="text-[color:var(--accent)] underline">arXiv:2410.10934v2</a> Introduction</p>
         </div>
+        <p>在 PR 曲线对比中，Agent-as-a-Judge 的曲线更接近人工共识基准，说明其在不同阈值下都更稳定。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/agent-as-a-judge/pr_curves_meta.png" alt="Figure 7: PR curves" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 7. 各评测方法 PR 曲线对比。</figcaption>
+        </figure>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
             <svg viewBox="0 0 860 260" role="img" aria-label="Alignment comparison" class="w-full">
                 <rect x="24" y="24" width="812" height="212" rx="18" fill="#f8fafc" stroke="#e2e8f0" />
@@ -214,6 +250,11 @@ const createdAt = todayYmd();
         <h2>7. 实验设置：被评测的代理系统</h2>
         <p>论文选取三种开源代理系统进行评测：MetaGPT、GPT-Pilot、OpenHands。这些系统代表了不同的代理设计哲学与执行策略。</p>
         <p>实验在 DevAI 任务上运行这些代理系统，并通过 Human-as-a-Judge、LLM-as-a-Judge 与 Agent-as-a-Judge 三种方式评估其结果。这样可以比较不同评测方案的可靠性与一致性。</p>
+        <p>论文附录中展示了实验设计总览图，明确了评测流程与章节之间的对应关系。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/agent-as-a-judge/x4.png" alt="Appendix Figure: Experiment design" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Appendix Figure. 实验设计总览图。</figcaption>
+        </figure>
         <div class="note-box text-sm mt-4">
             <p><strong>关键问题：</strong>代理评测能否替代人工评测，同时比 LLM-as-a-Judge 更可靠？</p>
         </div>
@@ -249,10 +290,15 @@ const createdAt = todayYmd();
         <h2>9. 消融分析：哪些模块最重要</h2>
         <p>论文进行了模块消融实验，发现某些模块组合效果最佳。尤其是 graph、locate、read、retrieve 与 ask 的组合对稳定性提升明显；而 memory 与 planning 在当前设计中可能带来噪声或不稳定。</p>
         <p>这说明 Agent-as-a-Judge 对“高质量事实证据”高度敏感：只要证据链可靠，判定就稳定；一旦证据不足或被污染，错误会被放大。</p>
+        <p>论文在附录给出了一组“证据示例”，用于展示评测代理如何从真实项目中提取与需求对应的证据。</p>
         <div class="note-box text-sm mt-4">
             <p><strong>有效组合：</strong>graph + locate + read + retrieve + ask。</p>
             <p><strong>潜在问题：</strong>memory 可能引入连锁误判；planning 需要更稳健的策略。</p>
         </div>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/agent-as-a-judge/x6.png" alt="Appendix Figure: Evidence examples" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Appendix Figure. 评测证据示例集合。</figcaption>
+        </figure>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
             <svg viewBox="0 0 860 240" role="img" aria-label="Ablation highlights" class="w-full">
                 <rect x="24" y="24" width="812" height="192" rx="18" fill="#f8fafc" stroke="#e2e8f0" />
