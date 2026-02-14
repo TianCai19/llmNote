@@ -1,0 +1,190 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+---
+
+<BaseLayout title="RLVR：带可验证奖励的强化学习隐式提升推理能力">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">RL / Reasoning / LLMs</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">RLVR：带可验证奖励的强化学习隐式提升推理能力</h1>
+        <p class="text-xl text-gray-500">Reinforcement Learning with Verifiable Rewards Implicitly Incentivizes Correct Reasoning</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt} • arXiv:2506.14245v2</p>
+    </header>
+
+    <div class="card">
+        <h2>核心发现：答案正确 ≠ 推理正确</h2>
+        <p>研究指出一个关键问题：传统的 RLHF（人类反馈强化学习）或 RLVR（带可验证奖励的强化学习）只优化<strong>最终答案的正确性</strong>，但忽略了<strong>推理过程的质量</strong>。</p>
+        <p>令人惊讶的发现是：<span class="highlight">RLVR 能隐式地激励基础 LLMs 产生正确的 CoT（思维链）推理，即使奖励信号仅基于答案正确性</span>。</p>
+        <div class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <h3 class="font-semibold text-slate-700 mb-2">现象对比</h3>
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div class="rounded-xl border border-white/70 bg-white/80 p-4">
+                    <h4 class="text-sm font-medium text-slate-600 mb-2">传统优化（只看答案）</h4>
+                    <p class="text-sm text-gray-600">
+                        模型可能通过“猜测”或“记忆”直接输出正确答案，但推理过程错误或不完整。
+                    </p>
+                </div>
+                <div class="rounded-xl border border-white/70 bg-white/80 p-4">
+                    <h4 class="text-sm font-medium text-slate-600 mb-2">RLVR 优化</h4>
+                    <p class="text-sm text-gray-600">
+                        模型会产生高质量的推理过程，不仅答案正确，<strong>推理路径也正确</strong>。
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>方法创新：CoT-Pass@K 指标</h2>
+        <p>为了同时评估答案和推理的正确性，研究提出了新指标：</p>
+        <div class="math-block" set:html={String.raw`$$\text{CoT-Pass@K} = \text{Pr}(\text{答案正确} \land \text{推理路径正确})$$`}></div>
+        <p>该指标使用 DeepSeek-R1-0528-Qwen3-8B 作为 CoT 验证器，对模型输出的推理过程进行评估。</p>
+        <div class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <h3 class="font-semibold text-slate-700 mb-3">评估流程</h3>
+            <ol class="list-decimal pl-6 space-y-2 text-sm text-gray-600">
+                <li>模型生成答案 + CoT 推理</li>
+                <li>CoT 验证器评估推理过程是否正确</li>
+                <li>判断答案是否匹配真实值</li>
+                <li>只有两者都正确，才视为通过</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>实验结果：数学与代码任务的显著提升</h2>
+        <h3 class="font-semibold text-slate-700 mb-3">数学任务（AIME 2024/2025）</h3>
+        <p>使用 DAPO-Qwen-32B 模型进行测试：</p>
+        <div class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div class="rounded-xl border border-white/70 bg-white/80 p-4">
+                    <h4 class="text-sm font-medium text-slate-600 mb-2">Qwen2.5-32B（SFT）</h4>
+                    <p class="text-2xl font-bold text-[color:var(--accent-strong)]">基础性能</p>
+                    <p class="text-sm text-gray-600 mt-2">只经过监督微调的版本</p>
+                </div>
+                <div class="rounded-xl border border-white/70 bg-white/80 p-4">
+                    <h4 class="text-sm font-medium text-slate-600 mb-2">DAPO-Qwen-32B（RLVR）</h4>
+                    <p class="text-2xl font-bold text-[color:var(--accent-strong)]">显著提升</p>
+                    <p class="text-sm text-gray-600 mt-2">CoT-Pass@K 指标大幅优于 SFT 版本</p>
+                </div>
+            </div>
+        </div>
+
+        <h3 class="font-semibold text-slate-700 mt-8 mb-3">代码任务（LiveCodeBench）</h3>
+        <p>在代码生成任务上的表现：</p>
+        <div class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div class="rounded-xl border border-white/70 bg-white/80 p-4">
+                    <h4 class="text-sm font-medium text-slate-600 mb-2">AceReason-Nemotron-7B</h4>
+                    <p class="text-2xl font-bold text-[color:var(--accent-strong)]">边界扩展</p>
+                    <p class="text-sm text-gray-600 mt-2">Pass@K 指标有显著提升</p>
+                </div>
+                <div class="rounded-xl border border-white/70 bg-white/80 p-4">
+                    <h4 class="text-sm font-medium text-slate-600 mb-2">Skywork-OR1</h4>
+                    <p class="text-2xl font-bold text-[color:var(--accent-strong)]">性能增强</p>
+                    <p class="text-sm text-gray-600 mt-2">同样显示出推理质量的改善</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>理论分析：为什么 RLVR 能隐式提升推理</h2>
+        <p>研究给出了理论证明：<span class="highlight">在特定逻辑先验假设下，GRPO（广义相对策略优化）梯度会增加正确 CoT 推理的概率</span>。</p>
+        <div class="math-block mt-4" set:html={String.raw`$$\nabla_{\theta} J(\theta) \propto \mathbb{E}\left[\log \frac{p(y|\text{correct CoT})}{p(y|\text{incorrect CoT})}\right]$$`}></div>
+        <p>这个公式表明：<strong>奖励信号对正确答案的偏好，会通过梯度传递给产生正确答案的推理过程</strong>。</p>
+        <div class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <h3 class="font-semibold text-slate-700 mb-2">逻辑先验假设</h3>
+            <p class="text-sm text-gray-600">
+                假设“正确的推理过程更可能产生正确的答案”，即：
+            </p>
+            <div class="math-block mt-2" set:html={String.raw`$$p(y_{\text{correct}}|\text{correct CoT}) > p(y_{\text{correct}}|\text{incorrect CoT})$$`}></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>训练动力学：推理质量如何演变</h2>
+        <p>研究跟踪了 RLVR 训练过程中 CoT 质量的变化：</p>
+        <div class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <ol class="list-decimal pl-6 space-y-3 text-sm text-gray-600">
+                <li>
+                    <strong>早期阶段（1-2k steps）：</strong>模型开始显示推理质量提升的迹象
+                </li>
+                <li>
+                    <strong>中期阶段（5-10k steps）：</strong>CoT 质量显著改善，出现完整且正确的推理链
+                </li>
+                <li>
+                    <strong>后期阶段（20k+ steps）：</strong>推理质量趋于稳定，能泛化到未见过的问题类型
+                </li>
+            </ol>
+        </div>
+        <h3 class="font-semibold text-slate-700 mt-6 mb-3">SFT 复制性能</h3>
+        <p>一个有趣的实验是：将 RLVR 不同阶段的 CoT 进行 SFT（监督微调），发现：</p>
+        <div class="mt-3 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <p class="text-sm text-gray-600">
+                <span class="highlight">RLVR 后期阶段的 CoT 样本能训练出比早期阶段更好的 SFT 模型</span>，这表明这些 CoT 确实具有更高的质量。
+            </p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>结论与启示：推理优化的新视角</h2>
+        <h3 class="font-semibold text-slate-700 mb-3">核心结论</h3>
+        <p>RLVR（带可验证奖励的强化学习）不仅仅优化答案正确性，还能：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li>隐式激励模型产生高质量的 CoT 思维链推理</li>
+            <li>生成的推理过程更完整、逻辑更清晰</li>
+            <li>这种改善可通过 SFT 复制，证明推理质量的提升是实质性的</li>
+        </ul>
+        <h3 class="font-semibold text-slate-700 mt-6 mb-3">对研究和应用的启示</h3>
+        <div class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div class="rounded-xl border border-white/70 bg-white/80 p-4">
+                    <h4 class="text-sm font-medium text-slate-600 mb-2">对 RLHF 的改进</h4>
+                    <p class="text-sm text-gray-600">
+                        传统 RLHF 应更关注推理过程的评估，而不只是答案正确性
+                    </p>
+                </div>
+                <div class="rounded-xl border border-white/70 bg-white/80 p-4">
+                    <h4 class="text-sm font-medium text-slate-600 mb-2">训练数据优化</h4>
+                    <p class="text-sm text-gray-600">
+                        RLVR 产生的高质量 CoT 可用于改进 SFT 数据集
+                    </p>
+                </div>
+                <div class="rounded-xl border border-white/70 bg-white/80 p-4">
+                    <h4 class="text-sm font-medium text-slate-600 mb-2">模型评估</h4>
+                    <p class="text-sm text-gray-600">
+                        提出的 CoT-Pass@K 指标应成为推理质量评估的新标准
+                    </p>
+                </div>
+                <div class="rounded-xl border border-white/70 bg-white/80 p-4">
+                    <h4 class="text-sm font-medium text-slate-600 mb-2">基础模型能力</h4>
+                    <p class="text-sm text-gray-600">
+                        基础 LLMs 具有通过隐式学习提升推理能力的潜力
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>代码与资源</h2>
+        <p>论文提到的主要工具和资源：</p>
+        <div class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+                <li><strong>模型：</strong>DeepSeek-R1-0528-Qwen3-8B（CoT 验证器）</li>
+                <li><strong>数据集：</strong>AIME 2024/2025（数学）、LiveCodeBench（代码）</li>
+                <li><strong>算法：</strong>GRPO（广义相对策略优化）</li>
+                <li><strong>指标：</strong>CoT-Pass@K（综合评估答案与推理）</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>原文链接</h2>
+        <p class="text-sm text-gray-600">
+            论文链接：<a href="https://arxiv.org/html/2506.14245v2" target="_blank" rel="noopener noreferrer" class="text-[color:var(--accent)] hover:underline">https://arxiv.org/html/2506.14245v2</a>
+        </p>
+    </div>
+</BaseLayout>
