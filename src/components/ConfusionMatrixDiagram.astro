@@ -1,0 +1,85 @@
+<!-- Confusion Matrix Diagram: Guard Dog Example -->
+<div class="svg-container">
+    <svg viewBox="0 0 720 420" role="img" aria-label="Confusion matrix with guard dog example" class="w-full">
+        <defs>
+            <linearGradient id="cmGreen" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#34d399" />
+                <stop offset="100%" stop-color="#10b981" />
+            </linearGradient>
+            <linearGradient id="cmRed" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#fca5a5" />
+                <stop offset="100%" stop-color="#f87171" />
+            </linearGradient>
+            <linearGradient id="cmHeader" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#0f766e" />
+                <stop offset="100%" stop-color="#0d9488" />
+            </linearGradient>
+        </defs>
+
+        <!-- Title -->
+        <text x="360" y="30" text-anchor="middle" font-size="16" font-weight="bold" fill="#1e293b">混淆矩阵（Confusion Matrix）</text>
+
+        <!-- Matrix area offset -->
+        <g transform="translate(180, 50)">
+            <!-- Axis labels -->
+            <text x="170" y="20" text-anchor="middle" font-size="13" font-weight="600" fill="#475569">预测值</text>
+            <text x="-20" y="180" text-anchor="middle" font-size="13" font-weight="600" fill="#475569" transform="rotate(-90, -20, 180)">真实值</text>
+
+            <!-- Column headers -->
+            <rect x="60" y="30" width="120" height="36" rx="8" fill="url(#cmHeader)" />
+            <text x="120" y="54" text-anchor="middle" font-size="12" fill="white" font-weight="600">盗贼（正类）</text>
+            <rect x="190" y="30" width="120" height="36" rx="8" fill="url(#cmHeader)" />
+            <text x="250" y="54" text-anchor="middle" font-size="12" fill="white" font-weight="600">动物（负类）</text>
+
+            <!-- Row headers -->
+            <rect x="-70" y="76" width="120" height="50" rx="8" fill="url(#cmHeader)" />
+            <text x="-10" y="105" text-anchor="middle" font-size="12" fill="white" font-weight="600">盗贼（正类）</text>
+            <rect x="-70" y="136" width="120" height="50" rx="8" fill="url(#cmHeader)" />
+            <text x="-10" y="165" text-anchor="middle" font-size="12" fill="white" font-weight="600">动物（负类）</text>
+
+            <!-- TP cell -->
+            <rect x="60" y="76" width="120" height="50" rx="8" fill="url(#cmGreen)" opacity="0.85" />
+            <text x="120" y="98" text-anchor="middle" font-size="11" font-weight="600" fill="#065f46">TP = 4</text>
+            <text x="120" y="116" text-anchor="middle" font-size="10" fill="#065f46">真阳性</text>
+
+            <!-- FN cell -->
+            <rect x="190" y="76" width="120" height="50" rx="8" fill="url(#cmRed)" opacity="0.7" />
+            <text x="250" y="98" text-anchor="middle" font-size="11" font-weight="600" fill="#991b1b">FN = 2</text>
+            <text x="250" y="116" text-anchor="middle" font-size="10" fill="#991b1b">假阴性</text>
+
+            <!-- FP cell -->
+            <rect x="60" y="136" width="120" height="50" rx="8" fill="url(#cmRed)" opacity="0.7" />
+            <text x="120" y="158" text-anchor="middle" font-size="11" font-weight="600" fill="#991b1b">FP = 1</text>
+            <text x="120" y="176" text-anchor="middle" font-size="10" fill="#991b1b">假阳性</text>
+
+            <!-- TN cell -->
+            <rect x="190" y="136" width="120" height="50" rx="8" fill="url(#cmGreen)" opacity="0.85" />
+            <text x="250" y="158" text-anchor="middle" font-size="11" font-weight="600" fill="#065f46">TN = 3</text>
+            <text x="250" y="176" text-anchor="middle" font-size="10" fill="#065f46">真阴性</text>
+
+            <!-- Row/Column totals -->
+            <text x="340" y="105" font-size="11" fill="#64748b">= 6 盗贼</text>
+            <text x="340" y="165" font-size="11" fill="#64748b">= 4 动物</text>
+            <text x="120" y="210" text-anchor="middle" font-size="11" fill="#64748b">预测 5 盗贼</text>
+            <text x="250" y="210" text-anchor="middle" font-size="11" fill="#64748b">预测 5 动物</text>
+        </g>
+
+        <!-- Legend at bottom -->
+        <g transform="translate(60, 310)">
+            <rect x="0" y="0" width="600" height="100" rx="14" fill="#f8fafc" stroke="#e2e8f0" />
+            <text x="300" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">四个关键指标</text>
+
+            <rect x="20" y="38" width="12" height="12" rx="3" fill="url(#cmGreen)" />
+            <text x="38" y="49" font-size="11" fill="#475569"><tspan font-weight="600">TP（真阳性）</tspan>：判为盗贼，确实是盗贼</text>
+
+            <rect x="310" y="38" width="12" height="12" rx="3" fill="url(#cmRed)" />
+            <text x="328" y="49" font-size="11" fill="#475569"><tspan font-weight="600">FN（假阴性）</tspan>：判为动物，实际是盗贼</text>
+
+            <rect x="20" y="64" width="12" height="12" rx="3" fill="url(#cmRed)" />
+            <text x="38" y="75" font-size="11" fill="#475569"><tspan font-weight="600">FP（假阳性）</tspan>：判为盗贼，实际是动物</text>
+
+            <rect x="310" y="64" width="12" height="12" rx="3" fill="url(#cmGreen)" />
+            <text x="328" y="75" font-size="11" fill="#475569"><tspan font-weight="600">TN（真阴性）</tspan>：判为动物，确实是动物</text>
+        </g>
+    </svg>
+</div>
