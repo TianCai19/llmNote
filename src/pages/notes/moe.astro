@@ -1,0 +1,222 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import MoERoutingDiagram from '../../components/MoERoutingDiagram.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+---
+
+<BaseLayout title="LLM Mixture of Experts (MoE) 详解">
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Mixture of Experts (MoE) in LLMs</h1>
+        <p class="text-xl text-gray-500">用稀疏激活扩展参数规模：从路由机制到主流模型对比</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>什么是 MoE？</h2>
+        <p>
+            <span class="highlight">Mixture of Experts (MoE)</span> 是一种把模型参数“拆分成多个专家子网络”的架构。
+            对每个 token，模型只激活少量专家（如 top-1 或 top-2），而不是让全部参数都参与前向计算。
+            这让模型在保持单次计算成本可控的前提下，把总参数规模提升到远大于“稠密模型”的水平。
+        </p>
+        <div class="bg-emerald-50 p-4 rounded-lg border border-emerald-100">
+            <strong>一句话理解：</strong>
+            Dense 模型像“全科医生一起会诊”，MoE 像“先分诊，再找最匹配的专科医生”。
+        </div>
+        <p class="mt-4">
+            在现代 LLM 里，MoE 通常只替换 Transformer block 中的 FFN（MLP）部分，注意力层仍保持共享。
+            因此它常被称为 <strong>Sparse MoE Transformer</strong>。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>MoE 是如何工作的？</h2>
+        <h3>1. Router 为每个 token 打分</h3>
+        <p>
+            给定 token 表示 <span set:html={"$x$"}></span>，路由器先计算专家概率分布：
+        </p>
+        <div class="math-block" set:html={String.raw`$$p(e\mid x)=\text{softmax}(W_r x)$$`}></div>
+
+        <h3>2. Top-k 选择专家</h3>
+        <p>
+            路由器选择概率最高的 <span set:html={"$k$"}></span> 个专家（如 top-2），只有这些专家会真正执行 FFN 前向，形成稀疏计算路径。
+        </p>
+
+        <h3>3. 加权聚合专家输出</h3>
+        <p>
+            把被选专家输出按路由权重加权求和：
+        </p>
+        <div class="math-block" set:html={String.raw`$$y=\sum_{i\in\text{Top-}k(x)} p_i(x)\,E_i(x)$$`}></div>
+
+        <h3>4. 负载均衡辅助损失</h3>
+        <p>
+            训练时常加入 load-balancing loss，避免所有 token 都拥挤到少数专家，缓解“专家塌缩”。
+            以 Switch Transformer 风格写法为例：
+        </p>
+        <div class="math-block" set:html={String.raw`$$\mathcal{L}_{aux}=\alpha\,N\sum_{i=1}^{N} f_i\,P_i$$`}></div>
+        <p>
+            其中 <span set:html={"$f_i$"}></span> 是专家 <span set:html={"$i$"}></span> 的 token 分配比例，
+            <span set:html={"$P_i$"}></span> 是路由概率均值，<span set:html={"$N$"}></span> 是专家数。
+        </p>
+
+        <MoERoutingDiagram />
+    </div>
+
+    <div class="card">
+        <h2>训练与推理流程（工程视角）</h2>
+        <h3>训练阶段</h3>
+        <ol class="list-decimal pl-6 mb-4 space-y-2 text-gray-600">
+            <li>前向时按 router 的 top-k 把 token 分发给不同专家。</li>
+            <li>计算主任务损失（next-token prediction）+ 路由辅助损失（负载均衡/稳定性）。</li>
+            <li>通过 all-to-all 通信跨设备交换 token（大规模训练中通信开销很关键）。</li>
+            <li>反向传播同时更新共享层、专家参数和路由器参数。</li>
+        </ol>
+
+        <h3>推理阶段</h3>
+        <ol class="list-decimal pl-6 mb-4 space-y-2 text-gray-600">
+            <li>每个 token 仅执行少量专家，单 token FLOPs 接近中等规模稠密模型。</li>
+            <li>总参数虽大，但“激活参数”较小，因此吞吐与延迟可控。</li>
+            <li>批量很小时，路由分散可能导致专家利用率不足，需要 serving 侧调度优化。</li>
+        </ol>
+
+        <div class="note-box text-sm mt-6">
+            <p><strong>实践要点：</strong>MoE 的瓶颈通常不是矩阵乘法本身，而是跨卡通信、负载不均和调度实现。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>主流 LLM MoE 模型</h2>
+        <p>
+            下表聚焦你指定的 5 个代表模型：<strong>Mixtral、DBRX、Grok、Qwen-MoE、DeepSeek-MoE</strong>。
+            参数与机制来自官方技术报告、模型卡或官方仓库页面（见文末链接）。
+        </p>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Model</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">MoE 结构</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">关键数字</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">特点</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Mixtral 8x7B</td>
+                        <td class="px-4 py-3">SMoE, top-2 routing</td>
+                        <td class="px-4 py-3">总参数约 46.7B；每 token 激活约 12.9B</td>
+                        <td class="px-4 py-3">开源高性能 MoE 代表，强调“高质量 + 可部署性”。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">DBRX</td>
+                        <td class="px-4 py-3">MoE Transformer, fine-grained experts</td>
+                        <td class="px-4 py-3">总参数约 132B；每 token 激活约 36B</td>
+                        <td class="px-4 py-3">Databricks 训练流程公开较多，强调数据与系统协同优化。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Grok-1</td>
+                        <td class="px-4 py-3">MoE</td>
+                        <td class="px-4 py-3">总参数约 314B；每 token 激活约 25%</td>
+                        <td class="px-4 py-3">xAI 发布的开源权重版本，展示超大参数 MoE 路线。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Qwen1.5-MoE-A2.7B</td>
+                        <td class="px-4 py-3">MoE with activated-params design</td>
+                        <td class="px-4 py-3">总参数约 14.3B；每 token 激活约 2.7B</td>
+                        <td class="px-4 py-3">面向高性价比部署，主打“小激活参数 + 强能力”。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">DeepSeekMoE 16B</td>
+                        <td class="px-4 py-3">MoE + shared experts</td>
+                        <td class="px-4 py-3">总参数约 16.4B；每 token 激活约 2.8B</td>
+                        <td class="px-4 py-3">通过 shared/specialized experts 缓解知识冗余与路由冲突。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 class="text-teal-700 mt-8">模型简评</h3>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>Mixtral：</strong>开源社区最常见的“实战型” MoE 基线之一。</li>
+            <li><strong>DBRX：</strong>强调端到端数据工程、训练系统与 MoE 架构联动。</li>
+            <li><strong>Grok：</strong>展示“超大总参数 + 稀疏激活”的扩展路线。</li>
+            <li><strong>Qwen-MoE：</strong>在较小激活参数预算下追求与更大稠密模型接近的效果。</li>
+            <li><strong>DeepSeek-MoE：</strong>重点解决专家冗余和知识共享，影响后续多代模型设计。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>MoE 的优势</h2>
+        <h3>1. 参数规模与计算成本解耦</h3>
+        <p>
+            稠密模型增大参数会线性增加每 token 计算；MoE 可以在“每 token 激活参数近似不变”时持续增大总参数，
+            往往带来更强的知识容量与泛化能力。
+        </p>
+
+        <h3>2. 更高的训练/推理性价比</h3>
+        <p>
+            在相同推理预算下，MoE 常可达到更高质量；在相同质量目标下，MoE 常能降低单次推理成本。
+            这也是 MoE 在开源与工业界快速普及的核心原因。
+        </p>
+
+        <h3>3. 专家分工带来的能力分化</h3>
+        <p>
+            不同专家可在训练中形成不同“功能偏好”（如代码、数学、长文本），
+            使模型更接近“模块化知识系统”。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>MoE 的挑战</h2>
+        <h3>1. 路由不稳定与专家塌缩</h3>
+        <p>
+            路由器若过度偏向少数专家，会造成负载不均、训练震荡、甚至能力退化；
+            因此辅助损失、噪声路由、容量限制（capacity factor）都很关键。
+        </p>
+
+        <h3>2. 通信开销高</h3>
+        <p>
+            多机多卡训练时，token 需要在专家所在设备间 all-to-all 交换。
+            当序列长、batch 大或路由分散时，通信会成为主要瓶颈。
+        </p>
+
+        <h3>3. Serving 系统复杂度上升</h3>
+        <p>
+            线上推理不仅要做 KV cache 管理，还要解决专家并发、跨卡调度、动态 batching 与 tail latency。
+            因此“模型好”不等于“服务好”，部署层优化同样重要。
+        </p>
+
+        <h3>4. 评估与可解释性难题</h3>
+        <p>
+            当输出由动态专家组合产生时，定位错误来源、解释行为偏差会更难，
+            尤其在长链条 reasoning 和 agent 场景中。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>什么时候该用 MoE？</h2>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li>你希望显著提升模型容量，但单 token 计算预算不能同比增加。</li>
+            <li>你有较强的分布式训练/推理基础设施，能处理通信与调度复杂度。</li>
+            <li>你更关注“质量-成本”比，而不是最简洁的模型工程实现。</li>
+        </ul>
+        <div class="bg-orange-50 p-4 rounded-lg border border-orange-100">
+            <strong>经验法则：</strong>先把 Dense baseline 做强，再切到 MoE。否则容易把数据/优化问题误判为“架构问题”。
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>参考资料（Primary Sources）</h2>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2401.04088" target="_blank" rel="noopener noreferrer">Mixtral of Experts (Mistral AI, arXiv)</a></li>
+            <li><a class="text-teal-700 underline" href="https://www.databricks.com/blog/introducing-dbrx-new-state-art-open-llm" target="_blank" rel="noopener noreferrer">Introducing DBRX (Databricks)</a></li>
+            <li><a class="text-teal-700 underline" href="https://github.com/xai-org/grok-1" target="_blank" rel="noopener noreferrer">Grok-1 Official Repository (xAI)</a></li>
+            <li><a class="text-teal-700 underline" href="https://qwenlm.github.io/blog/qwen-moe/" target="_blank" rel="noopener noreferrer">Qwen1.5-MoE Blog (Qwen Team)</a></li>
+            <li><a class="text-teal-700 underline" href="https://huggingface.co/Qwen/Qwen1.5-MoE-A2.7B" target="_blank" rel="noopener noreferrer">Qwen1.5-MoE-A2.7B Model Card</a></li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2401.06066" target="_blank" rel="noopener noreferrer">DeepSeekMoE: Towards Ultimate Expert Specialization (arXiv)</a></li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2101.03961" target="_blank" rel="noopener noreferrer">Switch Transformers (Google, arXiv)</a></li>
+        </ul>
+    </div>
+</BaseLayout>
