@@ -1,0 +1,72 @@
+<!-- Evaluation Metrics Overview: Regression vs Classification -->
+<div class="svg-container">
+    <svg viewBox="0 0 720 340" role="img" aria-label="Model evaluation metrics overview" class="w-full">
+        <defs>
+            <linearGradient id="moBlue" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#3b82f6" />
+                <stop offset="100%" stop-color="#6366f1" />
+            </linearGradient>
+            <linearGradient id="moTeal" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#0f766e" />
+                <stop offset="100%" stop-color="#0d9488" />
+            </linearGradient>
+            <linearGradient id="moOrange" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#f97316" />
+                <stop offset="100%" stop-color="#fb923c" />
+            </linearGradient>
+        </defs>
+
+        <!-- Center node -->
+        <rect x="260" y="10" width="200" height="50" rx="25" fill="url(#moTeal)" />
+        <text x="360" y="41" text-anchor="middle" font-size="14" font-weight="bold" fill="white">模型评估指标</text>
+
+        <!-- Left branch: Regression -->
+        <line x1="310" y1="60" x2="160" y2="100" stroke="#3b82f6" stroke-width="2" stroke-dasharray="6 3" />
+        <rect x="40" y="85" width="240" height="40" rx="20" fill="url(#moBlue)" />
+        <text x="160" y="111" text-anchor="middle" font-size="13" font-weight="600" fill="white">回归指标</text>
+
+        <!-- Regression metrics -->
+        <rect x="20" y="140" width="125" height="44" rx="10" fill="#eff6ff" stroke="#bfdbfe" />
+        <text x="82" y="157" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">MSE</text>
+        <text x="82" y="173" text-anchor="middle" font-size="9" fill="#3b82f6">均方误差</text>
+
+        <rect x="155" y="140" width="125" height="44" rx="10" fill="#eff6ff" stroke="#bfdbfe" />
+        <text x="217" y="157" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">RMSE</text>
+        <text x="217" y="173" text-anchor="middle" font-size="9" fill="#3b82f6">均方根误差</text>
+
+        <rect x="20" y="196" width="125" height="44" rx="10" fill="#eff6ff" stroke="#bfdbfe" />
+        <text x="82" y="213" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">MAE</text>
+        <text x="82" y="229" text-anchor="middle" font-size="9" fill="#3b82f6">平均绝对误差</text>
+
+        <rect x="155" y="196" width="125" height="44" rx="10" fill="#eff6ff" stroke="#bfdbfe" />
+        <text x="217" y="213" text-anchor="middle" font-size="11" font-weight="600" fill="#1e40af">R²</text>
+        <text x="217" y="229" text-anchor="middle" font-size="9" fill="#3b82f6">判定系数</text>
+
+        <!-- Right branch: Classification -->
+        <line x1="410" y1="60" x2="560" y2="100" stroke="#f97316" stroke-width="2" stroke-dasharray="6 3" />
+        <rect x="440" y="85" width="240" height="40" rx="20" fill="url(#moOrange)" />
+        <text x="560" y="111" text-anchor="middle" font-size="13" font-weight="600" fill="white">分类指标</text>
+
+        <!-- Classification metrics -->
+        <rect x="420" y="140" width="125" height="44" rx="10" fill="#fff7ed" stroke="#fed7aa" />
+        <text x="482" y="157" text-anchor="middle" font-size="11" font-weight="600" fill="#9a3412">混淆矩阵</text>
+        <text x="482" y="173" text-anchor="middle" font-size="9" fill="#ea580c">TP/FP/FN/TN</text>
+
+        <rect x="555" y="140" width="125" height="44" rx="10" fill="#fff7ed" stroke="#fed7aa" />
+        <text x="617" y="157" text-anchor="middle" font-size="11" font-weight="600" fill="#9a3412">准确率</text>
+        <text x="617" y="173" text-anchor="middle" font-size="9" fill="#ea580c">Accuracy</text>
+
+        <rect x="420" y="196" width="125" height="44" rx="10" fill="#fff7ed" stroke="#fed7aa" />
+        <text x="482" y="213" text-anchor="middle" font-size="11" font-weight="600" fill="#9a3412">精确率 / 召回率</text>
+        <text x="482" y="229" text-anchor="middle" font-size="9" fill="#ea580c">Precision / Recall</text>
+
+        <rect x="555" y="196" width="125" height="44" rx="10" fill="#fff7ed" stroke="#fed7aa" />
+        <text x="617" y="213" text-anchor="middle" font-size="11" font-weight="600" fill="#9a3412">F1 / ROC-AUC</text>
+        <text x="617" y="229" text-anchor="middle" font-size="9" fill="#ea580c">综合指标</text>
+
+        <!-- Bottom summary -->
+        <rect x="120" y="270" width="480" height="55" rx="14" fill="#f8fafc" stroke="#e2e8f0" />
+        <text x="360" y="293" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">根据任务类型和业务场景选择合适的评估指标</text>
+        <text x="360" y="312" text-anchor="middle" font-size="11" fill="#64748b">回归 → 关注预测偏差 | 分类 → 关注分类效果与错误类型</text>
+    </svg>
+</div>
