@@ -1,0 +1,91 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+---
+
+<BaseLayout title="Agentic Memory + MCP：新一代 Agent 知识系统">
+    <header class="mb-12 text-center">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Agent / Memory / MCP</p>
+        <h1 class="mb-4 text-4xl font-bold gradient-text">Agentic Memory + MCP</h1>
+        <p class="text-xl text-gray-500">把工具调用、长期记忆与检索增强连接成可落地的 Agent 知识闭环</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt} • 14 min</p>
+    </header>
+
+    <div class="card">
+        <h2>为什么这是“新一代” Agent 基础设施？</h2>
+        <p>2025 年的 Agent 系统正在从“单次问答”转向“持续工作流”。核心变化是：模型不再只依赖上下文窗口，而是通过外部记忆、检索和工具协议来维护长期状态。MCP（Model Context Protocol）让 Agent 以统一接口连接文件、数据库、代码仓库和 SaaS 工具，降低集成成本。</p>
+    </div>
+
+    <div class="card">
+        <h2>三层知识架构：短期、长期、外部事实</h2>
+        <ul class="mt-4 list-disc space-y-2 pl-6">
+            <li><strong>短期记忆（Session Memory）</strong>：当前任务窗口内的对话状态、草稿和中间推理。</li>
+            <li><strong>长期记忆（Persistent Memory）</strong>：用户偏好、历史决策、反复复用的任务模板。</li>
+            <li><strong>外部事实（RAG / Tools）</strong>：通过向量检索、SQL、API 获取最新且可验证信息。</li>
+        </ul>
+        <p class="mt-4">这三层必须分离存储、统一路由：短期保证连贯，长期保证个性化，外部事实保证实时与可证据化。</p>
+    </div>
+
+    <div class="card">
+        <h2>Agent 记忆写入准则：不是所有内容都该“记住”</h2>
+        <p>常见实践是引入 <strong>Memory Gate</strong>（记忆门控）：只有在“高价值、可复用、低时效风险”条件下才写入长期记忆，以降低污染与遗忘成本。</p>
+        <div class="mt-4 rounded-xl bg-slate-100 p-4 text-center text-sm text-slate-700"><code>s = α·r_reuse + β·r_importance - γ·r_staleness，若 s &gt; τ 则写入长期记忆</code></div>
+        <p class="mt-4 text-sm text-gray-600">其中 <code>r_reuse</code> 是复用潜力，<code>r_importance</code> 是任务重要度，<code>r_staleness</code> 是过期风险，<code>τ</code> 为写入阈值。</p>
+    </div>
+
+    <div class="card">
+        <h2>MCP 在系统中的作用</h2>
+        <p>MCP 的价值不是“又一个 API”，而是把工具接入变成标准化能力描述：</p>
+        <ul class="mt-4 list-disc space-y-2 pl-6">
+            <li><strong>统一资源发现</strong>：Agent 可以查询可用数据源和能力边界。</li>
+            <li><strong>结构化调用</strong>：通过 schema 化参数降低工具调用错误率。</li>
+            <li><strong>可观测性</strong>：每次调用都有输入、输出和上下文，便于回放与评估。</li>
+            <li><strong>跨工具编排</strong>：检索、计算、写回系统可以在一个任务图中串联。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>典型执行流（Agentic RAG + Memory）</h2>
+        <ol class="list-decimal space-y-3 pl-6">
+            <li>解析用户意图并生成任务计划。</li>
+            <li>查询短期记忆，恢复会话状态与约束。</li>
+            <li>通过 MCP 发现并调用检索工具（向量库、SQL、文档搜索）。</li>
+            <li>对检索结果进行来源打分与冲突消解。</li>
+            <li>生成回答并附带证据片段。</li>
+            <li>根据门控策略写入长期记忆，并记录可审计日志。</li>
+        </ol>
+    </div>
+
+    <div class="card">
+        <h2>落地建议：先做“可控”，再做“聪明”</h2>
+        <ul class="list-disc space-y-2 pl-6">
+            <li><strong>先定义记忆 schema</strong>：例如 <code>preference</code>、<code>project_context</code>、<code>decision_log</code>。</li>
+            <li><strong>引入记忆 TTL</strong>：高时效知识自动过期，降低幻觉放大。</li>
+            <li><strong>要求证据链</strong>：关键结论必须可追溯到检索片段或工具结果。</li>
+            <li><strong>做离线回放评估</strong>：比较“有记忆/无记忆”的任务成功率与错误类型。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>你可以立刻尝试的最小原型</h2>
+        <div class="grid gap-4 md:grid-cols-4 text-sm">
+            <div class="rounded-xl border border-slate-200 p-3 text-center">LLM Planner</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">MCP Tool Router</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">Vector + SQL Store</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">Memory Gate + Audit Log</div>
+        </div>
+        <p class="mt-4 text-sm text-gray-600">先跑通“可用闭环”，再迭代召回策略、重排模型与长期记忆质量评估。</p>
+    </div>
+
+    <div class="card">
+        <h2>参考资料</h2>
+        <ul class="list-disc space-y-2 pl-6">
+            <li><a class="text-emerald-700" href="https://modelcontextprotocol.io/introduction">Model Context Protocol 官方文档</a></li>
+            <li><a class="text-emerald-700" href="https://www.anthropic.com/news/model-context-protocol">Anthropic: Introducing MCP</a></li>
+            <li><a class="text-emerald-700" href="https://arxiv.org/abs/2005.11401">RAG: Retrieval-Augmented Generation</a></li>
+            <li><a class="text-emerald-700" href="https://arxiv.org/abs/2302.04761">Toolformer</a></li>
+        </ul>
+    </div>
+</BaseLayout>
