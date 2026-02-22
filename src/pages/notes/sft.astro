@@ -9,82 +9,164 @@ const createdAt = todayYmd();
     <header class="text-center mb-12">
         <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">SFT / Fine-tuning / Alignment</p>
         <h1 class="text-4xl font-bold mb-4 gradient-text">Supervised Fine-Tuning (SFT)</h1>
-        <p class="text-xl text-gray-500">LLM 对齐的核心技术：从训练目标到数据策略</p>
-        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt} • 10 min</p>
+        <p class="text-xl text-gray-500">从目标函数到数据模板的完整工程路径</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt} • 18 min</p>
     </header>
 
     <div class="card">
         <h2>什么是 SFT？</h2>
-        <p>Supervised Fine-Tuning (SFT) 是训练大型语言模型的关键步骤，在预训练模型的基础上，使用人工标注的指令-响应对数据集进行进一步训练，使模型的输出更符合人类期望的行为和能力。</p>
+        <p>SFT（Supervised Fine-Tuning）是用高质量“指令-响应/对话”数据继续训练预训练模型，使其更擅长遵循指令、对话协作和输出指定格式。SFT 的核心作用是把通用语言模型转化为可用的助手型模型。</p>
     </div>
 
     <div class="card">
-        <h2>背景</h2>
-        <p>在大规模无标注文本上进行预训练后，LLM 具备了通用的语言理解能力，但缺乏指令跟随能力，可能产生不够有用或不安全的输出。SFT 通过以下方式弥补这一差距：</p>
+        <h2>什么时候需要 SFT？</h2>
+        <p>Hugging Face 课程的建议是：先评估提示工程是否足够，只有当提示无法满足需求时再进入 SFT，因为它需要额外的算力和工程投入。</p>
         <ul class="list-disc pl-6 mt-4 space-y-2">
-            <li><strong>有用性 (Helpful)</strong>：准确且相关地回答用户问题</li>
-            <li><strong>诚实性 (Honest)</strong>：承认不确定性和局限性</li>
-            <li><strong>无害性 (Harmless)</strong>：避免有毒或危险内容</li>
+            <li><strong>格式强约束</strong>：需要稳定输出 JSON、表格、固定模板或多段结构</li>
+            <li><strong>领域适配</strong>：需要术语、风格和规则与行业场景一致</li>
+            <li><strong>一致性需求</strong>：提示难以复现或难以维护的复杂行为</li>
         </ul>
     </div>
 
     <div class="card">
-        <h2>训练目标</h2>
-        <p>SFT 使用交叉熵损失函数，衡量模型预测的 token 分布与训练数据中标准响应之间的差异：</p>
-        <div class="mt-4 bg-slate-100 rounded-xl p-4 text-center">
-            <p set:html={"$\\mathcal{L}_{SFT} = -\\sum_{i=1}^{N} \\sum_{t=1}^{T_i} \\log p_\\theta(y_t^i | y_{<t}^i, x^i)$"}></p>
+        <h2>训练目标与损失</h2>
+        <p>SFT 通常沿用因果语言建模目标（预测下一个 token），并以交叉熵损失最大化目标响应的似然。</p>
+        <div class="mt-4 bg-slate-100 rounded-xl p-4 text-center" set:html={String.raw`$$\mathcal{L}_{SFT} = -\sum_{i=1}^{N} \sum_{t=1}^{T_i} \log p_\theta(y_t^i \mid y_{\lt t}^i, x^i)$$`}></div>
+        <p class="mt-4 text-sm text-gray-600">其中：$x^i$ 是输入提示，$y^i$ 是目标响应，$T_i$ 是样本长度，$\\theta$ 为模型参数。</p>
+    </div>
+
+    <div class="card">
+        <h2>数据结构与格式</h2>
+        <p>Unsloth 文档对常见 SFT 数据格式做了区分：单轮指令（Alpaca）、多轮对话（ShareGPT），以及通用的 ChatML 结构。格式差异主要体现在角色标记与消息结构。</p>
+        <ul class="list-disc pl-6 mt-4 space-y-2">
+            <li><strong>Alpaca</strong>：instruction / input / output 三列，适用于单轮指令任务</li>
+            <li><strong>ShareGPT</strong>：多轮对话，常用 <code>from</code>/<code>value</code> 字段，角色多为 <code>human</code>/<code>gpt</code></li>
+            <li><strong>ChatML</strong>：多轮对话，角色多为 <code>user</code>/<code>assistant</code>，更通用</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>聊天模板：训练与推理要一致</h2>
+        <p>HF 文档强调：聊天模型仍是“文本续写”，需要用 <code>apply_chat_template</code> 把消息转成训练所需的控制 token。训练时推荐在数据预处理阶段应用模板，并设置 <code>add_generation_prompt=False</code>。</p>
+        <div class="mt-4 bg-slate-100 rounded-xl p-4 text-sm text-slate-700">
+            关键实践：训练与推理使用同一套 chat template，以保持 token 分布一致。
         </div>
-        <p class="mt-4 text-sm text-gray-600">其中：</p>
-        <ul class="list-disc pl-6 mt-2 space-y-1 text-sm text-gray-600">
-            <li>$\theta$ 是模型参数</li>
-            <li>$x^i$ 是输入提示</li>
-            <li>$y^i$ 是目标响应</li>
-            <li>$N$ 是训练样本数量</li>
-        </ul>
     </div>
 
     <div class="card">
-        <h2>数据收集</h2>
-        <p>高质量的 SFT 数据集通常包括：</p>
-        <ol class="list-decimal pl-6 mt-4 space-y-3">
-            <li><strong>人工演示</strong>：标注员编写理想的响应</li>
-            <li><strong>人类偏好数据</strong>：从多个候选中选出最佳响应</li>
-            <li><strong>合成数据</strong>：模型生成的响应经人工优化</li>
-        </ol>
+        <h2>流程示意</h2>
+        <div class="grid gap-4 md:grid-cols-5 text-sm">
+            <div class="rounded-xl border border-slate-200 p-3 text-center">预训练模型</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">格式化数据</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">应用模板</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">SFT 训练</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">指令模型</div>
+        </div>
+        <p class="mt-4 text-sm text-gray-600">数据格式与模板处理在 SFT 中尤为关键，决定了模型看到的真实 token 分布。</p>
     </div>
 
     <div class="card">
-        <h2>训练细节</h2>
-        <ul class="list-disc pl-6 space-y-2">
-            <li><strong>Epochs</strong>：通常 1-3 个 epoch 以避免过拟合</li>
-            <li><strong>学习率</strong>：常用 1e-5 到 5e-6，带 warmup</li>
-            <li><strong>Batch size</strong>：小批量 (4-16)，受 GPU 内存限制</li>
-            <li><strong>序列长度</strong>：完整响应长度，通常 4K-8K tokens</li>
-        </ul>
-    </div>
-
-    <div class="card">
-        <h2>实践建议</h2>
-        <ol class="list-decimal pl-6 space-y-3">
-            <li><strong>数据质量 > 数据量</strong>：高质量小数据集通常优于低质量大数据集</li>
-            <li><strong>多样性很重要</strong>：覆盖各种任务类型和领域</li>
-            <li><strong>响应长度</strong>：在简洁性和完整性之间取得平衡</li>
-            <li><strong>避免能力退化</strong>：SFT 可能导致某些能力下降</li>
-        </ol>
-    </div>
-
-    <div class="card">
-        <h2>讨论</h2>
-        <p>SFT 仍然是对齐 LLM 的主流方法，但也存在局限性：</p>
+        <h2>HF/TRL 工具链：SFTTrainer</h2>
+        <p>TRL 的 <code>SFTTrainer</code> 是 HF 生态里最常见的 SFT 入口，支持文本字段映射、格式化函数和样本 packing。</p>
         <ul class="list-disc pl-6 mt-4 space-y-2">
-            <li><strong>可扩展性</strong>：人工标注成本高昂</li>
-            <li><strong>泛化能力</strong>：模型可能无法泛化到未见过任务</li>
-            <li><strong>奖励黑客</strong>：可能产生表面模式被"破解"</li>
+            <li><strong>dataset_text_field</strong>：指定文本字段，自动构造训练样本</li>
+            <li><strong>formatting_func</strong>：多字段拼接为训练文本（常见于 QA 样式）</li>
+            <li><strong>packing</strong>：将多个样本拼到固定长度序列，提升吞吐</li>
+            <li><strong>max_seq_length</strong>：控制最大序列长度与截断行为</li>
         </ul>
     </div>
 
     <div class="card">
-        <h2>结论</h2>
-        <p>Supervised Fine-Tuning 是 LLM 开发中的关键步骤，将基础模型转化为有用的、遵循指令的助手。结合 RLHF 和 DPO，形成了现代 LLM 对齐流程的核心。</p>
+        <h2>Unsloth 视角：LoRA 与 QLoRA</h2>
+        <p>Unsloth 的指南强调：在资源受限时优先考虑 LoRA/QLoRA。LoRA 使用 16-bit 适配器，QLoRA 结合 4-bit 量化，显著降低显存占用。</p>
+        <ul class="list-disc pl-6 mt-4 space-y-2">
+            <li><strong>LoRA</strong>：速度更快、精度略高，但显存开销更大</li>
+            <li><strong>QLoRA</strong>：显存需求显著降低，适合大模型或单卡环境</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>超参数建议（LoRA/QLoRA）</h2>
+        <p>以下参考 Unsloth 的 LoRA 超参建议，适合作为起点，根据数据规模和目标任务再微调。</p>
+        <div class="mt-4 overflow-x-auto">
+            <table class="min-w-full text-left text-sm">
+                <thead class="text-slate-600">
+                    <tr>
+                        <th class="py-2 pr-4">参数</th>
+                        <th class="py-2 pr-4">作用</th>
+                        <th class="py-2">建议范围</th>
+                    </tr>
+                </thead>
+                <tbody class="text-slate-700">
+                    <tr class="border-t border-slate-200">
+                        <td class="py-2 pr-4">Learning Rate</td>
+                        <td class="py-2 pr-4">学习率</td>
+                        <td class="py-2">2e-4 起步（LoRA/QLoRA），范围 2e-4 至 5e-6</td>
+                    </tr>
+                    <tr class="border-t border-slate-200">
+                        <td class="py-2 pr-4">LoRA Rank (r)</td>
+                        <td class="py-2 pr-4">适配器容量</td>
+                        <td class="py-2">16 或 32</td>
+                    </tr>
+                    <tr class="border-t border-slate-200">
+                        <td class="py-2 pr-4">LoRA Alpha</td>
+                        <td class="py-2 pr-4">缩放因子</td>
+                        <td class="py-2">r 或 2r</td>
+                    </tr>
+                    <tr class="border-t border-slate-200">
+                        <td class="py-2 pr-4">LoRA Dropout</td>
+                        <td class="py-2 pr-4">正则化</td>
+                        <td class="py-2">0 至 0.1</td>
+                    </tr>
+                    <tr class="border-t border-slate-200">
+                        <td class="py-2 pr-4">Weight Decay</td>
+                        <td class="py-2 pr-4">防止过拟合</td>
+                        <td class="py-2">0.01 至 0.1</td>
+                    </tr>
+                    <tr class="border-t border-slate-200">
+                        <td class="py-2 pr-4">Warmup Steps</td>
+                        <td class="py-2 pr-4">学习率预热</td>
+                        <td class="py-2">总步数的 5% 至 10%</td>
+                    </tr>
+                    <tr class="border-t border-slate-200">
+                        <td class="py-2 pr-4">Target Modules</td>
+                        <td class="py-2 pr-4">注入 LoRA 的层</td>
+                        <td class="py-2">q/k/v/o + gate/up/down</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>常见问题与诊断</h2>
+        <ul class="list-disc pl-6 space-y-2">
+            <li><strong>格式不一致</strong>：训练时未应用 chat template，导致推理时 token 分布不一致</li>
+            <li><strong>数据混用</strong>：Alpaca/ShareGPT/ChatML 未统一映射，训练样本结构混乱</li>
+            <li><strong>packing 误用</strong>：packing 改变了样本边界，需要明确序列截断策略</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>最小可行流程（Checklist）</h2>
+        <ol class="list-decimal pl-6 space-y-3">
+            <li>确认提示工程是否足够，不足再做 SFT</li>
+            <li>选定数据格式并统一映射（Alpaca/ShareGPT/ChatML）</li>
+            <li>用正确 chat template 预处理训练数据，训练时关闭 <code>add_generation_prompt</code></li>
+            <li>选择 LoRA 或 QLoRA 并评估显存预算</li>
+            <li>配置 SFTTrainer 的字段、packing 与序列长度</li>
+        </ol>
+    </div>
+
+    <div class="card">
+        <h2>参考资料</h2>
+        <ul class="list-disc pl-6 space-y-2">
+            <li><a class="text-emerald-700" href="https://huggingface.co/learn/nlp-course/chapter11/3">Hugging Face Course: Supervised Fine-Tuning</a></li>
+            <li><a class="text-emerald-700" href="https://huggingface.co/docs/transformers/main/chat_template_basics">HF Transformers: Chat Template Basics</a></li>
+            <li><a class="text-emerald-700" href="https://huggingface.co/docs/trl/sft_trainer">TRL: SFTTrainer Docs</a></li>
+            <li><a class="text-emerald-700" href="https://docs.unsloth.ai/basics/datasets-guide">Unsloth: Datasets Guide</a></li>
+            <li><a class="text-emerald-700" href="https://docs.unsloth.ai/get-started/fine-tuning-llms-guide">Unsloth: Fine-tuning LLMs Guide</a></li>
+            <li><a class="text-emerald-700" href="https://docs.unsloth.ai/get-started/fine-tuning-guide/lora-hyperparameters-guide">Unsloth: LoRA Hyperparameters Guide</a></li>
+        </ul>
     </div>
 </BaseLayout>
