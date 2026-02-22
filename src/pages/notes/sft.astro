@@ -31,9 +31,7 @@ const createdAt = todayYmd();
     <div class="card">
         <h2>训练目标与损失</h2>
         <p>SFT 通常沿用因果语言建模目标（预测下一个 token），并以交叉熵损失最大化目标响应的似然。</p>
-        <div class="mt-4 bg-slate-100 rounded-xl p-4 text-center">
-            <p set:html={"$\\mathcal{L}_{SFT} = -\\sum_{i=1}^{N} \\sum_{t=1}^{T_i} \\log p_\\theta(y_t^i | y_{<t}^i, x^i)$"}></p>
-        </div>
+        <div class="mt-4 bg-slate-100 rounded-xl p-4 text-center" set:html={String.raw`$\mathcal{L}_{SFT} = -\sum_{i=1}^{N} \sum_{t=1}^{T_i} \log p_\theta(y_t^i | y_{<t}^i, x^i)$`}></div>
         <p class="mt-4 text-sm text-gray-600">其中：$x^i$ 是输入提示，$y^i$ 是目标响应，$T_i$ 是样本长度，$\\theta$ 为模型参数。</p>
     </div>
 
