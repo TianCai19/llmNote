@@ -1,0 +1,92 @@
+---
+// Animated line chart showing EMA smoothing vs raw data
+// Simulated noisy data and its EMA smoothing
+const rawData = [10, 15, 8, 20, 12, 25, 18, 30, 14, 22, 28, 16, 32, 20, 26];
+const alpha = 0.3;
+const emaData: number[] = [rawData[0]];
+for (let i = 1; i < rawData.length; i++) {
+    emaData.push(alpha * rawData[i] + (1 - alpha) * emaData[i - 1]);
+}
+
+const chartLeft = 60;
+const chartRight = 660;
+const chartTop = 60;
+const chartBottom = 200;
+const xStep = (chartRight - chartLeft) / (rawData.length - 1);
+const yMin = 0;
+const yMax = 35;
+const toX = (i: number) => chartLeft + i * xStep;
+const toY = (v: number) => chartBottom - ((v - yMin) / (yMax - yMin)) * (chartBottom - chartTop);
+
+const rawPath = rawData.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ');
+const emaPath = emaData.map((v, i) => `${i === 0 ? 'M' : 'L'}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(' ');
+const pathLength = 1200;
+---
+
+<div class="svg-container">
+    <svg viewBox="0 0 720 290" role="img" aria-label="EMA 指数移动平均平滑动画" class="w-full max-w-3xl">
+        <defs>
+            <linearGradient id="emaFill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="#0f766e" stop-opacity="0.15" />
+                <stop offset="100%" stop-color="#0f766e" stop-opacity="0" />
+            </linearGradient>
+        </defs>
+
+        <text x="360" y="30" text-anchor="middle" font-size="15" font-weight="700" fill="var(--ink)">
+            EMA 平滑效果（α = 0.3）
+        </text>
+
+        <!-- Y axis -->
+        <line x1={chartLeft} y1={chartTop} x2={chartLeft} y2={chartBottom} stroke="#cbd5e1" stroke-width="1" />
+        {[0, 10, 20, 30].map(v => {
+            const y = toY(v);
+            return (
+                <g>
+                    <line x1={chartLeft - 5} y1={y} x2={chartRight} y2={y} stroke="#e2e8f0" stroke-width="0.5" stroke-dasharray="4 4" />
+                    <text x={chartLeft - 10} y={y + 4} text-anchor="end" font-size="10" fill="#94a3b8">{v}</text>
+                </g>
+            );
+        })}
+        <!-- X axis -->
+        <line x1={chartLeft} y1={chartBottom} x2={chartRight} y2={chartBottom} stroke="#cbd5e1" stroke-width="1" />
+
+        <!-- Raw data line (gray, jagged) -->
+        <path d={rawPath} fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3" />
+        {rawData.map((v, i) => (
+            <circle cx={toX(i)} cy={toY(v)} r="3" fill="#94a3b8" opacity="0.7" />
+        ))}
+
+        <!-- EMA line (smooth, animated draw) -->
+        <path d={emaPath} fill="none" stroke="#0f766e" stroke-width="3" stroke-linecap="round"
+              stroke-dasharray={pathLength} stroke-dashoffset={pathLength}>
+            <animate attributeName="stroke-dashoffset" from={pathLength} to="0" dur="2s" fill="freeze" begin="0.3s" calcMode="spline" keySplines="0.25 0.1 0.25 1" />
+        </path>
+
+        <!-- EMA dots appear sequentially -->
+        {emaData.map((v, i) => (
+            <circle cx={toX(i)} cy={toY(v)} r="4" fill="#0f766e" opacity="0">
+                <animate attributeName="opacity" from="0" to="1" dur="0.2s" fill="freeze" begin={`${0.3 + i * (2 / rawData.length)}s`} />
+            </circle>
+        ))}
+
+        <!-- Legend -->
+        <g transform="translate(100, 228)">
+            <line x1="0" y1="8" x2="25" y2="8" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3" />
+            <circle cx="12" cy="8" r="3" fill="#94a3b8" />
+            <text x="32" y="12" font-size="12" fill="#64748b">原始数据（波动大）</text>
+        </g>
+        <g transform="translate(300, 228)">
+            <line x1="0" y1="8" x2="25" y2="8" stroke="#0f766e" stroke-width="3" stroke-linecap="round" />
+            <circle cx="12" cy="8" r="4" fill="#0f766e" />
+            <text x="32" y="12" font-size="12" fill="#0f766e" font-weight="600">EMA 平滑结果</text>
+        </g>
+
+        <!-- Formula -->
+        <g transform="translate(100, 258)">
+            <rect x="0" y="0" width="480" height="28" rx="10" fill="white" stroke="#e2e8f0" />
+            <text x="240" y="19" text-anchor="middle" font-size="11" fill="#475569">
+                EMA_t = α × x_t + (1 − α) × EMA_{'{t-1}'}　｜　α 越大 → 越跟踪最新值，α 越小 → 越平滑
+            </text>
+        </g>
+    </svg>
+</div>
