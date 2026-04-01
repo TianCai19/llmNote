@@ -1,0 +1,364 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import MeanComparisonDiagram from '../../components/MeanComparisonDiagram.astro';
+import MeanBarChartDiagram from '../../components/MeanBarChartDiagram.astro';
+import WeightedMeanDiagram from '../../components/WeightedMeanDiagram.astro';
+import EMAAnimationDiagram from '../../components/EMAAnimationDiagram.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+---
+
+<BaseLayout title="不同平均数的直觉与应用">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Math / Statistics / Fundamentals</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">不同平均数的直觉与应用</h1>
+        <p class="text-xl text-gray-500">算术平均、几何平均、调和平均、加权平均、均方根、EMA —— 它们各自在「平均」什么？</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">{createdAt}</p>
+    </header>
+
+    <!-- ==================== 总览 ==================== -->
+    <div class="card">
+        <h2>为什么有这么多种「平均」？</h2>
+        <p>日常生活中说的「平均」几乎总是<strong>算术平均</strong>，但实际上不同的场景需要不同的「代表值」。选错平均数可能得出完全错误的结论。</p>
+        <div class="bg-amber-50 p-4 rounded-lg border border-amber-100">
+            <strong>一个经典陷阱：</strong>股票第一年涨 100%（×2），第二年跌 50%（×0.5）。算术平均收益率 = (100% + (−50%)) / 2 = <strong>25%</strong>，看起来赚了？但实际：100 × 2 × 0.5 = 100，<strong>一分没赚</strong>。用几何平均才能正确算出年化收益 = 0%。
+        </div>
+        <p class="mt-4">下面我们逐一拆解六种常见平均数，每种都给出<span class="highlight">公式 → 直觉 → 真实例子 → 可视化</span>。</p>
+    </div>
+
+    <!-- ==================== 1. 算术平均 ==================== -->
+    <div class="card">
+        <h2>1. 算术平均数（Arithmetic Mean）</h2>
+        <div class="math-block" set:html={String.raw`$$\bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i = \frac{x_1 + x_2 + \cdots + x_n}{n}$$`}></div>
+
+        <h3>直觉</h3>
+        <p>把所有值加起来「均摊」。想象把一堆沙子堆平 —— 每个位置的高度就是算术平均。</p>
+
+        <h3>例子：全班考试成绩</h3>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 mt-2">
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <p class="text-sm text-gray-600 mb-2"><strong>数据：</strong>5 个同学成绩</p>
+                <div class="flex gap-2 flex-wrap">
+                    {[78, 85, 92, 88, 72].map(s => (
+                        <span class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 font-bold text-lg">{s}</span>
+                    ))}
+                </div>
+            </div>
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <p class="text-sm text-gray-600 mb-2"><strong>计算：</strong></p>
+                <p class="text-sm text-gray-600" set:html={String.raw`$\bar{x} = \frac{78+85+92+88+72}{5} = \frac{415}{5} = 83$`}></p>
+                <p class="text-sm mt-2 text-gray-500">全班平均分 <strong class="text-emerald-600">83</strong> 分。</p>
+            </div>
+        </div>
+
+        <h3>优缺点</h3>
+        <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead><tr><th class="px-4 py-2 text-left text-gray-500">优点</th><th class="px-4 py-2 text-left text-gray-500">缺点</th></tr></thead>
+            <tbody>
+                <tr><td class="px-4 py-2">计算简单，直觉明确</td><td class="px-4 py-2">对离群值极度敏感</td></tr>
+                <tr><td class="px-4 py-2">数学性质好（最小化平方误差之和）</td><td class="px-4 py-2">不适合比率、增长率类数据</td></tr>
+            </tbody>
+        </table>
+
+        <div class="note-box text-sm mt-4">
+            <strong>ML 中的身影：</strong>训练损失通常就是对 batch 内所有样本 loss 取算术平均。SGD 中梯度也是 mini-batch 梯度的算术平均。
+        </div>
+    </div>
+
+    <!-- ==================== 2. 几何平均 ==================== -->
+    <div class="card">
+        <h2>2. 几何平均数（Geometric Mean）</h2>
+        <div class="math-block" set:html={String.raw`$$G = \left(\prod_{i=1}^{n} x_i\right)^{1/n} = \sqrt[n]{x_1 \cdot x_2 \cdots x_n}$$`}></div>
+
+        <h3>直觉</h3>
+        <p>把所有值「相乘再开 n 次方」。几何平均关心的是<strong>连乘关系</strong>（增长率、比率），而不是加法关系。</p>
+        <p>另一个视角：<span class="highlight">几何平均 = 对数空间下的算术平均，再还原回去</span>。所以它天然适合处理成倍变化的数据。</p>
+
+        <h3>例子：投资年化回报率</h3>
+        <div class="rounded-2xl border border-white/70 bg-white/80 p-5 mt-2">
+            <p class="text-sm text-gray-600">一笔投资连续 3 年的回报倍数：<strong>1.10</strong>（+10%）、<strong>1.25</strong>（+25%）、<strong>0.90</strong>（−10%）</p>
+            <div class="math-block mt-3" set:html={String.raw`$$G = \sqrt[3]{1.10 \times 1.25 \times 0.90} = \sqrt[3]{1.2375} \approx 1.0737$$`}></div>
+            <p class="text-sm text-gray-600 mt-3">年化收益率 ≈ <strong class="text-amber-600">7.37%</strong>。如果用算术平均 (10+25+(−10))/3 = 8.33%，会高估真实收益。</p>
+        </div>
+
+        <h3>为什么算术平均在这里会出错？</h3>
+        <p>因为投资回报是<strong>复利（乘法）</strong>关系。100 元 → 110 → 137.5 → 123.75。只有几何平均能正确还原这个过程。</p>
+
+        <div class="note-box text-sm mt-4">
+            <strong>ML 中的身影：</strong>F-score 就是精确率和召回率的调和平均（见下文），而多个 F-score 在不同数据集上汇总时常用几何平均，避免单个高分掩盖其他低分。
+        </div>
+    </div>
+
+    <!-- ==================== 3. 调和平均 ==================== -->
+    <div class="card">
+        <h2>3. 调和平均数（Harmonic Mean）</h2>
+        <div class="math-block" set:html={String.raw`$$H = \frac{n}{\sum_{i=1}^{n} \frac{1}{x_i}} = \frac{n}{\frac{1}{x_1} + \frac{1}{x_2} + \cdots + \frac{1}{x_n}}$$`}></div>
+
+        <h3>直觉</h3>
+        <p>调和平均是<strong>「倒数的算术平均」的倒数</strong>。它天然偏向较小值 —— 任何一个值很小都会显著拉低结果。</p>
+        <p>核心场景：<span class="highlight">当数据本身是「率」（rate = 量/时间），且分子固定时，用调和平均</span>。</p>
+
+        <h3>例子：往返平均速度</h3>
+        <div class="rounded-2xl border border-white/70 bg-white/80 p-5 mt-2">
+            <p class="text-sm text-gray-600">从 A 到 B 距离 60km。去程 60 km/h（1 小时），回程 30 km/h（2 小时）。</p>
+
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-2 mt-3">
+                <div class="bg-red-50 p-3 rounded-xl border border-red-100">
+                    <p class="text-sm"><strong class="text-red-600">❌ 算术平均：</strong></p>
+                    <p class="text-sm text-gray-600" set:html={String.raw`$(60 + 30) / 2 = 45$ km/h`}></p>
+                </div>
+                <div class="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
+                    <p class="text-sm"><strong class="text-emerald-600">✅ 调和平均：</strong></p>
+                    <p class="text-sm text-gray-600" set:html={String.raw`$\frac{2}{\frac{1}{60} + \frac{1}{30}} = \frac{2}{\frac{1}{20}} = 40$ km/h`}></p>
+                </div>
+            </div>
+            <p class="text-sm text-gray-500 mt-3">验证：总距离 120km ÷ 总时间 3h = <strong>40 km/h</strong> ✓。算术平均高估了 12.5%。</p>
+        </div>
+
+        <div class="note-box text-sm mt-4">
+            <strong>ML 中的身影：</strong><span set:html={String.raw`$F_1 = \frac{2 \cdot P \cdot R}{P + R}$`}></span> 就是精确率 P 和召回率 R 的调和平均。如果其中一个极低，F1 也会被拉得很低 —— 这正是我们想要的：一个「偏科」的模型不应该得高分。
+        </div>
+    </div>
+
+    <!-- ==================== 不等式可视化 ==================== -->
+    <MeanComparisonDiagram />
+
+    <!-- ==================== 4. 加权平均 ==================== -->
+    <div class="card">
+        <h2>4. 加权平均数（Weighted Mean）</h2>
+        <div class="math-block" set:html={String.raw`$$\bar{x}_w = \frac{\sum_{i=1}^{n} w_i \cdot x_i}{\sum_{i=1}^{n} w_i}$$`}></div>
+
+        <h3>直觉</h3>
+        <p>不是所有数据点都一样重要。加权平均让你给「更重要」的数据点更大的话语权。算术平均其实是加权平均的特例（所有权重相等）。</p>
+
+        <h3>例子：课程成绩</h3>
+        <div class="rounded-2xl border border-white/70 bg-white/80 p-5 mt-2">
+            <table class="min-w-full text-sm">
+                <thead><tr>
+                    <th class="px-4 py-2 text-left text-gray-500">项目</th>
+                    <th class="px-4 py-2 text-left text-gray-500">成绩</th>
+                    <th class="px-4 py-2 text-left text-gray-500">权重</th>
+                    <th class="px-4 py-2 text-left text-gray-500">贡献</th>
+                </tr></thead>
+                <tbody>
+                    <tr><td class="px-4 py-2">期末考试</td><td class="px-4 py-2">90</td><td class="px-4 py-2">50%</td><td class="px-4 py-2 font-semibold">45</td></tr>
+                    <tr><td class="px-4 py-2">平时作业</td><td class="px-4 py-2">70</td><td class="px-4 py-2">30%</td><td class="px-4 py-2 font-semibold">21</td></tr>
+                    <tr><td class="px-4 py-2">课堂参与</td><td class="px-4 py-2">85</td><td class="px-4 py-2">20%</td><td class="px-4 py-2 font-semibold">17</td></tr>
+                </tbody>
+                <tfoot><tr><td class="px-4 py-2 font-bold" colspan="3">加权平均</td><td class="px-4 py-2 font-bold text-[color:var(--accent)]">83</td></tr></tfoot>
+            </table>
+            <p class="text-sm text-gray-500 mt-2">如果用算术平均：(90+70+85)/3 ≈ 81.7，因为忽略了期末考试占大头这一事实。</p>
+        </div>
+    </div>
+
+    <WeightedMeanDiagram />
+
+    <div class="card">
+        <p><strong>加权平均的变体无处不在：</strong></p>
+        <ul class="list-disc pl-6 space-y-2 text-gray-600">
+            <li><strong>注意力机制（Attention）：</strong>输出 = <span set:html={String.raw`$\sum_i \alpha_i \cdot v_i$`}></span>，其中 <span set:html={String.raw`$\alpha_i$`}></span> 是注意力权重。整个 Transformer 的核心就是在学习「如何加权平均」。</li>
+            <li><strong>类别不平衡处理：</strong>给少数类样本更高的 loss 权重，本质就是加权平均。</li>
+            <li><strong>集成学习：</strong>多个模型预测的加权组合。</li>
+        </ul>
+    </div>
+
+    <!-- ==================== 5. 均方根 ==================== -->
+    <div class="card">
+        <h2>5. 均方根（Root Mean Square, RMS）</h2>
+        <div class="math-block" set:html={String.raw`$$\text{RMS} = \sqrt{\frac{1}{n}\sum_{i=1}^{n} x_i^{2}}$$`}></div>
+
+        <h3>直觉</h3>
+        <p>先平方（放大大值、消除正负号）→ 取平均 → 再开方回到原量纲。RMS 对<strong>大值特别敏感</strong>，因为平方把离群值放大了。</p>
+        <p>核心特点：<span class="highlight">RMS ≥ AM ≥ GM ≥ HM</span>（对正数成立）。RMS 是这些平均数里最「宽容」的 —— 它给大值更多权重。</p>
+
+        <h3>例子：交流电的有效电压</h3>
+        <div class="rounded-2xl border border-white/70 bg-white/80 p-5 mt-2">
+            <p class="text-sm text-gray-600">家用交流电的电压是正弦波，峰值 ±311V，但电表显示 220V。这个 220V 就是 RMS 值：</p>
+            <div class="math-block mt-3" set:html={String.raw`$$V_{\text{RMS}} = \frac{V_{\text{peak}}}{\sqrt{2}} = \frac{311}{\sqrt{2}} \approx 220 \text{V}$$`}></div>
+            <p class="text-sm text-gray-500 mt-3">RMS 电压表示「与这个正弦波产生相同热量的等效直流电压」，这就是为什么用 RMS 而不是算术平均（正弦波算术平均为零！）。</p>
+        </div>
+
+        <div class="note-box text-sm mt-4">
+            <p><strong>ML 中的身影：</strong></p>
+            <ul class="list-disc pl-6 space-y-1 mt-1">
+                <li><strong>RMSE（均方根误差）：</strong>回归模型最常见的评估指标之一。</li>
+                <li><strong>RMSProp / Adam 优化器：</strong>用梯度的 RMS 来自适应调整学习率。梯度波动大的参数自动获得更小的有效学习率。</li>
+                <li><strong>RMSNorm：</strong>LLaMA 等模型使用的归一化方式，比 LayerNorm 更简洁，就是用 RMS 做归一化。</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- ==================== 离群值对比图 ==================== -->
+    <MeanBarChartDiagram />
+
+    <!-- ==================== 6. EMA ==================== -->
+    <div class="card">
+        <h2>6. 指数移动平均（Exponential Moving Average, EMA）</h2>
+        <div class="math-block" set:html={String.raw`$$\text{EMA}_t = \alpha \cdot x_t + (1 - \alpha) \cdot \text{EMA}_{t-1}$$`}></div>
+
+        <h3>直觉</h3>
+        <p>EMA 是一种<strong>「有记忆的」加权平均</strong>，越新的数据权重越大，越老的数据权重指数衰减。参数 <span set:html={String.raw`$\alpha \in (0, 1)$`}></span> 控制「遗忘速度」：</p>
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 mt-2">
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <p class="text-sm"><strong class="text-blue-600">α → 1（快遗忘）：</strong></p>
+                <p class="text-sm text-gray-600">几乎只看最新值，反应灵敏但噪声大</p>
+            </div>
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <p class="text-sm"><strong class="text-purple-600">α → 0（慢遗忘）：</strong></p>
+                <p class="text-sm text-gray-600">充分考虑历史，曲线平滑但反应迟钝</p>
+            </div>
+        </div>
+
+        <h3>展开来看权重分布</h3>
+        <p>把递推公式展开：</p>
+        <div class="math-block" set:html={String.raw`$$\text{EMA}_t = \alpha \sum_{k=0}^{t} (1-\alpha)^{k} \cdot x_{t-k}$$`}></div>
+        <p>第 k 步之前的数据权重为 <span set:html={String.raw`$\alpha(1-\alpha)^k$`}></span>，呈指数衰减 —— 这就是「指数」移动平均的由来。</p>
+
+        <h3>例子：TensorBoard 中的 loss 曲线</h3>
+        <div class="rounded-2xl border border-white/70 bg-white/80 p-5 mt-2">
+            <p class="text-sm text-gray-600">训练时每个 step 的 loss 波动很大。TensorBoard 默认用 EMA（smoothing = 0.6）来平滑曲线，让你看到趋势而不是噪声。</p>
+            <p class="text-sm text-gray-500 mt-2">这也是为什么 TensorBoard 有个 Smoothing 滑块 —— 它其实就是在调 α 值。</p>
+        </div>
+    </div>
+
+    <EMAAnimationDiagram />
+
+    <div class="card">
+        <p><strong>EMA 在深度学习中的关键应用：</strong></p>
+        <ul class="list-disc pl-6 space-y-2 text-gray-600">
+            <li><strong>Adam/AdamW 优化器：</strong>一阶矩估计（梯度的 EMA）和二阶矩估计（梯度平方的 EMA），分别用 <span set:html={String.raw`$\\beta_1 = 0.9$`}></span> 和 <span set:html={String.raw`$\\beta_2 = 0.999$`}></span>。</li>
+            <li><strong>模型权重 EMA：</strong>训练时维护一份模型参数的 EMA 副本（如 PyTorch 的 <code>torch.optim.swa_utils.AveragedModel</code>），推理时用 EMA 参数，通常比最终参数更稳定。</li>
+            <li><strong>Batch Normalization：</strong>running_mean 和 running_var 就是用 EMA（默认 momentum=0.1）在训练过程中积累的统计量。</li>
+        </ul>
+    </div>
+
+    <!-- ==================== 总结对照表 ==================== -->
+    <div class="card">
+        <h2>总结对照表</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead>
+                    <tr>
+                        <th class="px-4 py-3 text-left text-gray-500">类型</th>
+                        <th class="px-4 py-3 text-left text-gray-500">一句话</th>
+                        <th class="px-4 py-3 text-left text-gray-500">典型场景</th>
+                        <th class="px-4 py-3 text-left text-gray-500">ML 应用</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    <tr>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">算术平均 AM</td>
+                        <td class="px-4 py-3">加起来均摊</td>
+                        <td class="px-4 py-3">考试成绩、身高体重</td>
+                        <td class="px-4 py-3">Batch loss、梯度平均</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-semibold text-amber-600">几何平均 GM</td>
+                        <td class="px-4 py-3">乘起来开方</td>
+                        <td class="px-4 py-3">投资回报率、增长率</td>
+                        <td class="px-4 py-3">多数据集 F-score 汇总</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-semibold text-red-600">调和平均 HM</td>
+                        <td class="px-4 py-3">倒数平均的倒数</td>
+                        <td class="px-4 py-3">平均速度、平均价格</td>
+                        <td class="px-4 py-3">F1-score</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-semibold text-violet-600">加权平均 WM</td>
+                        <td class="px-4 py-3">重要的多算</td>
+                        <td class="px-4 py-3">GPA、投票、评分</td>
+                        <td class="px-4 py-3">Attention、类别加权 loss</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-semibold text-blue-600">均方根 RMS</td>
+                        <td class="px-4 py-3">平方平均再开方</td>
+                        <td class="px-4 py-3">交流电压、误差评估</td>
+                        <td class="px-4 py-3">RMSE、RMSProp、RMSNorm</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-semibold text-teal-600">EMA</td>
+                        <td class="px-4 py-3">新数据权重大，老数据指数衰减</td>
+                        <td class="px-4 py-3">股价技术分析、信号平滑</td>
+                        <td class="px-4 py-3">Adam 优化器、BatchNorm、模型 EMA</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ==================== 选择指南 ==================== -->
+    <div class="card">
+        <h2>如何选择？一张决策流程</h2>
+        <div class="svg-container">
+            <svg viewBox="0 0 600 420" role="img" aria-label="平均数选择决策流程" class="w-full max-w-2xl">
+                <defs>
+                    <filter id="decShadow"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08" /></filter>
+                </defs>
+
+                {/* Start */}
+                <rect x="200" y="10" width="200" height="40" rx="20" fill="var(--accent)" filter="url(#decShadow)" />
+                <text x="300" y="35" text-anchor="middle" font-size="13" font-weight="600" fill="white">你的数据是什么关系？</text>
+
+                {/* Branch lines */}
+                <line x1="240" y1="50" x2="100" y2="90" stroke="#cbd5e1" stroke-width="1.5" />
+                <line x1="300" y1="50" x2="300" y2="90" stroke="#cbd5e1" stroke-width="1.5" />
+                <line x1="360" y1="50" x2="500" y2="90" stroke="#cbd5e1" stroke-width="1.5" />
+
+                {/* Addition */}
+                <rect x="20" y="90" width="160" height="36" rx="12" fill="#ecfdf5" stroke="#34d399" filter="url(#decShadow)" />
+                <text x="100" y="113" text-anchor="middle" font-size="12" fill="#065f46">加法关系</text>
+                <line x1="100" y1="126" x2="100" y2="160" stroke="#cbd5e1" stroke-width="1.5" />
+
+                {/* Multiplication */}
+                <rect x="220" y="90" width="160" height="36" rx="12" fill="#fffbeb" stroke="#fbbf24" filter="url(#decShadow)" />
+                <text x="300" y="113" text-anchor="middle" font-size="12" fill="#92400e">乘法/增长率</text>
+                <line x1="300" y1="126" x2="300" y2="160" stroke="#cbd5e1" stroke-width="1.5" />
+
+                {/* Rate */}
+                <rect x="420" y="90" width="160" height="36" rx="12" fill="#fef2f2" stroke="#f87171" filter="url(#decShadow)" />
+                <text x="500" y="113" text-anchor="middle" font-size="12" fill="#991b1b">率/比率（分子固定）</text>
+                <line x1="500" y1="126" x2="500" y2="160" stroke="#cbd5e1" stroke-width="1.5" />
+
+                {/* Answers row 1 */}
+                <rect x="20" y="160" width="160" height="36" rx="12" fill="white" stroke="#e2e8f0" filter="url(#decShadow)" />
+                <text x="100" y="183" text-anchor="middle" font-size="12" font-weight="600" fill="#065f46">→ 算术平均 AM</text>
+
+                <rect x="220" y="160" width="160" height="36" rx="12" fill="white" stroke="#e2e8f0" filter="url(#decShadow)" />
+                <text x="300" y="183" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">→ 几何平均 GM</text>
+
+                <rect x="420" y="160" width="160" height="36" rx="12" fill="white" stroke="#e2e8f0" filter="url(#decShadow)" />
+                <text x="500" y="183" text-anchor="middle" font-size="12" font-weight="600" fill="#991b1b">→ 调和平均 HM</text>
+
+                {/* Second question */}
+                <line x1="100" y1="196" x2="100" y2="240" stroke="#cbd5e1" stroke-width="1.5" />
+                <rect x="20" y="240" width="160" height="36" rx="12" fill="#f5f3ff" stroke="#a78bfa" filter="url(#decShadow)" />
+                <text x="100" y="263" text-anchor="middle" font-size="12" fill="#5b21b6">权重不等？</text>
+                <line x1="100" y1="276" x2="100" y2="310" stroke="#cbd5e1" stroke-width="1.5" />
+                <rect x="20" y="310" width="160" height="36" rx="12" fill="white" stroke="#e2e8f0" filter="url(#decShadow)" />
+                <text x="100" y="333" text-anchor="middle" font-size="12" font-weight="600" fill="#5b21b6">→ 加权平均 WM</text>
+
+                {/* RMS branch */}
+                <line x1="300" y1="196" x2="300" y2="240" stroke="#cbd5e1" stroke-width="1.5" />
+                <rect x="220" y="240" width="160" height="36" rx="12" fill="#eff6ff" stroke="#60a5fa" filter="url(#decShadow)" />
+                <text x="300" y="263" text-anchor="middle" font-size="12" fill="#1e40af">需要放大大值？</text>
+                <line x1="300" y1="276" x2="300" y2="310" stroke="#cbd5e1" stroke-width="1.5" />
+                <rect x="220" y="310" width="160" height="36" rx="12" fill="white" stroke="#e2e8f0" filter="url(#decShadow)" />
+                <text x="300" y="333" text-anchor="middle" font-size="12" font-weight="600" fill="#1e40af">→ 均方根 RMS</text>
+
+                {/* EMA branch */}
+                <line x1="500" y1="196" x2="500" y2="240" stroke="#cbd5e1" stroke-width="1.5" />
+                <rect x="420" y="240" width="160" height="36" rx="12" fill="#f0fdfa" stroke="#2dd4bf" filter="url(#decShadow)" />
+                <text x="500" y="263" text-anchor="middle" font-size="12" fill="#115e59">时间序列？新数据更重要？</text>
+                <line x1="500" y1="276" x2="500" y2="310" stroke="#cbd5e1" stroke-width="1.5" />
+                <rect x="420" y="310" width="160" height="36" rx="12" fill="white" stroke="#e2e8f0" filter="url(#decShadow)" />
+                <text x="500" y="333" text-anchor="middle" font-size="12" font-weight="600" fill="#115e59">→ EMA</text>
+
+                {/* Bottom note */}
+                <rect x="100" y="370" width="400" height="36" rx="14" fill="white" stroke="#e2e8f0" />
+                <text x="300" y="393" text-anchor="middle" font-size="11" fill="#64748b">💡 实际场景中这些平均数经常组合使用（如 Adam = EMA + RMS）</text>
+            </svg>
+        </div>
+    </div>
+</BaseLayout>
