@@ -1,0 +1,144 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { todayYmd } from '../utils/date';
+
+const createdAt = todayYmd();
+
+const categories = [
+    {
+        title: '可视化与图解',
+        icon: '🎨',
+        resources: [
+            {
+                name: 'LLM-RL-Visualized',
+                url: 'https://github.com/changyeyu/LLM-RL-Visualized',
+                tags: ['RL', 'LLM', '图解'],
+                description: '100+ 原创算法架构图（SVG 矢量），覆盖 LLM 基础、SFT、DPO、PPO、RLHF、推理增强等 11 大板块。配套《大模型算法：强化学习、微调与对齐》一书，是目前最系统的 RL+LLM 可视化资源。'
+            },
+            {
+                name: 'Jay Alammar 的博客',
+                url: 'https://jalammar.github.io/',
+                tags: ['Transformer', 'NLP', '经典'],
+                description: '《The Illustrated Transformer》等图解系列的出处。用动画和色块把 Attention、GPT、BERT 讲得极其直观，是理解 Transformer 家族的最佳起点之一。'
+            },
+            {
+                name: 'Lilian Weng 的博客',
+                url: 'https://lilianweng.github.io/',
+                tags: ['综合', 'Survey', '深度'],
+                description: 'OpenAI 研究员的技术博客，每篇都是某一方向的迷你综述（如 Prompt Engineering、RLHF、Agent）。公式与直觉并重，适合需要系统梳理某个主题的时候查阅。'
+            }
+        ]
+    },
+    {
+        title: '交互式课程与教程',
+        icon: '📚',
+        resources: [
+            {
+                name: 'Hugging Face 学习资源',
+                url: 'https://huggingface.co/learn',
+                tags: ['NLP', 'RL', '实操'],
+                description: '包含 NLP Course、Deep RL Course、Diffusion Course 等多门免费课程。最大优势是边学边练 —— 课程内嵌 Colab 和 Spaces，跑通代码再理解理论，学习曲线非常平滑。'
+            },
+            {
+                name: 'Andrej Karpathy 的视频',
+                url: 'https://www.youtube.com/@AndrejKarpathy',
+                tags: ['LLM', 'GPT', '从零实现'],
+                description: '前 OpenAI 联合创始人的 YouTube 频道。《Let\'s build GPT from scratch》《Neural Networks: Zero to Hero》系列从最基础的梯度开始，一步步手搓出完整模型，极适合想真正理解底层原理的人。'
+            },
+            {
+                name: 'Stanford CS231n / CS224n',
+                url: 'https://web.stanford.edu/class/cs231n/',
+                tags: ['CV', 'NLP', '学术'],
+                description: '斯坦福经典的计算机视觉（CS231n）和自然语言处理（CS224n）课程，讲义和作业都公开。如果想补齐 CNN/RNN/Attention 的学术基础，这两门课是标准路径。'
+            }
+        ]
+    },
+    {
+        title: '实践工具文档',
+        icon: '🔧',
+        resources: [
+            {
+                name: 'Unsloth 文档',
+                url: 'https://docs.unsloth.ai/',
+                tags: ['微调', 'LoRA', '高效'],
+                description: '极简风格的 LLM 微调工具文档。几行代码就能跑通 QLoRA 微调，速度比原生快 2-5 倍且显存减半。文档写得非常清晰，是上手大模型微调最省力的入口。'
+            },
+            {
+                name: 'Hugging Face Transformers 文档',
+                url: 'https://huggingface.co/docs/transformers',
+                tags: ['Transformers', 'API', '工程'],
+                description: '事实标准的模型库文档。除了 API 参考外，还有大量 Task Guide 和 Conceptual Guide，几乎所有主流模型都能在这里找到加载、推理、微调的完整示例。'
+            },
+            {
+                name: 'PyTorch 官方教程',
+                url: 'https://pytorch.org/tutorials/',
+                tags: ['PyTorch', '基础', '实操'],
+                description: '从张量操作到分布式训练的官方教程集合。特别推荐「60 Minute Blitz」快速入门和「Training a Classifier」实战，是打好深度学习工程基础的必经之路。'
+            }
+        ]
+    },
+    {
+        title: '论文与前沿追踪',
+        icon: '📄',
+        resources: [
+            {
+                name: 'Papers With Code',
+                url: 'https://paperswithcode.com/',
+                tags: ['论文', 'SOTA', '代码'],
+                description: '论文 + 代码 + 排行榜三位一体。想了解某个任务当前最好的方法是什么、有没有开源实现，来这里搜一下就行。'
+            },
+            {
+                name: 'Hugging Face Daily Papers',
+                url: 'https://huggingface.co/papers',
+                tags: ['论文', '每日', '社区'],
+                description: '社区投票筛选的每日 AI 论文精选，带摘要和讨论。比直接刷 arXiv 高效得多，适合每天花 10 分钟快速了解前沿动态。'
+            },
+            {
+                name: 'The Batch by Andrew Ng',
+                url: 'https://www.deeplearning.ai/the-batch/',
+                tags: ['周刊', '综合', '入门友好'],
+                description: 'Andrew Ng（吴恩达）主编的 AI 周刊，每期精选本周最重要的 AI 新闻和论文，配以简明解读。适合保持对行业大方向的感知而不被信息洪流淹没。'
+            }
+        ]
+    }
+];
+---
+
+<BaseLayout title="学习资料推荐" description="精选 AI/LLM 学习资源：课程、工具、论文与可视化">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Resources / Curated</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">学习资料推荐</h1>
+        <p class="text-xl text-gray-500">精选一些真正帮到过我的学习资源，附上推荐理由</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">{createdAt}</p>
+    </header>
+
+    {categories.map(category => (
+        <div class="card">
+            <h2>
+                <span class="mr-2">{category.icon}</span>{category.title}
+            </h2>
+            <div class="grid gap-4 mt-4">
+                {category.resources.map(resource => (
+                    <a href={resource.url} target="_blank" rel="noopener noreferrer" class="group block rounded-2xl border border-white/70 bg-white/80 p-5 transition hover:shadow-md hover:border-[color:var(--accent)]/30">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="flex-1">
+                                <h3 class="font-display text-lg font-semibold text-[color:var(--ink)] group-hover:text-[color:var(--accent-strong)] transition-colors">
+                                    {resource.name}
+                                    <svg class="inline-block ml-1 h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                </h3>
+                                <p class="mt-2 text-sm text-[color:var(--muted)] leading-relaxed">{resource.description}</p>
+                                <div class="flex flex-wrap gap-2 mt-3">
+                                    {resource.tags.map(tag => (
+                                        <span class="chip">{tag}</span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+                ))}
+            </div>
+        </div>
+    ))}
+</BaseLayout>
