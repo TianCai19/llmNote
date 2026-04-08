@@ -144,9 +144,125 @@ export const meta = {
         </div>
     </div>
 
-    <!-- 第四章：实验结果 -->
+    <!-- Projection Head 深入理解 -->
     <div class="card">
-        <h2>4. 实验结果</h2>
+        <h2>4. Projection Head 深入理解</h2>
+        <p>Projection Head 是 UniCLIP 架构中容易被忽视但极其关键的设计。它决定了<strong>编码器能为下游任务保留多少信息</strong>。</p>
+
+        <h3 class="text-blue-600">h 和 z：两个不同的表示</h3>
+        <p>编码器（如 ViT）输出一个高维表示 <span set:html={"$\\mathbf{h}$"}></span>（如 768 维），Projection Head 将它映射到更低维的 <span set:html={"$\\mathbf{z}$"}></span>（如 256 维）。对比损失在 <span set:html={"$\\mathbf{z}$"}></span> 上计算，但<strong>下游任务用的是 <span set:html={"$\\mathbf{h}$"}></span></strong>：</p>
+        <pre class="language-python"><code>{`# 训练时
+h = encoder(image)           # h: [B, 768] — 编码器输出
+z = projection_head(h)       # z: [B, 256] — 只用于对比损失
+z = F.normalize(z, dim=-1)
+loss = contrastive_loss(z)   # 在 z 上计算
+
+# 下游任务时
+h = encoder(image)           # 只用 h，projection_head 直接丢弃
+output = classifier(h)       # 在 h 上接下游任务头`}</code></pre>
+
+        <h3 class="text-blue-600">为什么不直接在 h 上做对比？</h3>
+        <p>SimCLR 的实验给出了清晰的答案：</p>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Projection Head 配置</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ImageNet Linear Probe</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-sm">
+                    <tr>
+                        <td class="px-6 py-4 text-gray-600">无（直接在 h 上对比）</td>
+                        <td class="px-6 py-4 text-gray-600">~60%</td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 text-gray-600">线性层（CLIP 方式）</td>
+                        <td class="px-6 py-4 text-gray-600">~63%</td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 font-medium text-blue-600">MLP 2 层（UniCLIP 方式）</td>
+                        <td class="px-6 py-4 font-medium text-blue-600">~66%</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p>对比损失只关心"这两个东西像不像"，会主动丢弃对匹配无用但对下游有用的信息（如颜色、纹理、空间位置）。Projection Head 充当<strong>信息缓冲层</strong> —— 让 <span set:html={"$\\mathbf{z}$"}></span> 承受信息损失，而 <span set:html={"$\\mathbf{h}$"}></span> 保留完整语义。</p>
+
+        <h3 class="text-blue-600">CLIP vs UniCLIP 的 Projection Head</h3>
+        <pre class="language-python"><code>{`import torch.nn as nn
+
+# CLIP：简单线性投影（只有一个对比目标）
+class CLIPProjection(nn.Module):
+    def __init__(self, encoder_dim=768, proj_dim=512):
+        super().__init__()
+        self.proj = nn.Linear(encoder_dim, proj_dim)
+
+    def forward(self, h):
+        return self.proj(h)  # 768 → 512
+
+# UniCLIP：MLP 投影头（三路对比需要更强表达力）
+class MLPProjectionHead(nn.Module):
+    def __init__(self, encoder_dim=768, hidden_dim=2048, proj_dim=256):
+        super().__init__()
+        self.head = nn.Sequential(
+            nn.Linear(encoder_dim, hidden_dim),   # 768 → 2048
+            nn.BatchNorm1d(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),    # 2048 → 2048
+            nn.BatchNorm1d(hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, proj_dim)       # 2048 → 256
+        )
+
+    def forward(self, h):
+        return self.head(h)`}</code></pre>
+
+        <h3 class="text-blue-600">下游任务实例</h3>
+        <p>训练好的编码器（输出 <span set:html={"$\\mathbf{h}$"}></span>）可以直接应用到各种下游任务，以下是几个典型例子：</p>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">下游任务</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">做法</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">实例</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-sm">
+                    <tr>
+                        <td class="px-6 py-4 font-medium text-blue-600">图像分类</td>
+                        <td class="px-6 py-4 text-gray-600">冻结编码器，在 h 上加线性分类头（linear probe）</td>
+                        <td class="px-6 py-4 text-gray-600">医学影像诊断：X光片 → ViT → h → Linear → "正常/肺炎/肿瘤"</td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 font-medium text-blue-600">图像检索</td>
+                        <td class="px-6 py-4 text-gray-600">直接用 h 做最近邻搜索，无需额外训练</td>
+                        <td class="px-6 py-4 text-gray-600">电商拍照搜同款：用户拍照 → h₁，与商品库所有 hᵢ 算距离</td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 font-medium text-blue-600">目标检测</td>
+                        <td class="px-6 py-4 text-gray-600">ViT 当 backbone，后接检测头（DETR/YOLO）</td>
+                        <td class="px-6 py-4 text-gray-600">自动驾驶：街景 → ViT → 特征图 → 检测头 → 行人框、车辆框</td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 font-medium text-blue-600">VLM 视觉编码器</td>
+                        <td class="px-6 py-4 text-gray-600">编码器直接作为多模态大模型的"眼睛"</td>
+                        <td class="px-6 py-4 text-gray-600">LLaVA：图像 → ViT → h → 连接器 → LLM → "图里有一只橘猫"</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="note-box">
+            <strong>核心直觉：</strong> Projection Head 就像派了一个"替身"去参加对比学习的考试。替身（z）可以被考试压缩变形，但编码器本人（h）保持完整。UniCLIP 因为要同时参加三场考试（ITC/IIC/TTC），所以需要一个更强的替身（MLP 而不是线性层）。
+        </div>
+    </div>
+
+    <!-- 第五章：实验结果 -->
+    <div class="card">
+        <h2>5. 实验结果</h2>
         <p>UniCLIP 在多个基准上超越了同等规模的 CLIP：</p>
 
         <h3 class="text-blue-600">零样本分类</h3>
@@ -231,7 +347,7 @@ export const meta = {
 
     <!-- 第五章：与 CLIP 对比 -->
     <div class="card">
-        <h2>5. UniCLIP vs CLIP：核心差异</h2>
+        <h2>6. UniCLIP vs CLIP：核心差异</h2>
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
@@ -279,7 +395,7 @@ export const meta = {
 
     <!-- 第六章：伪代码 -->
     <div class="card">
-        <h2>6. PyTorch 伪代码</h2>
+        <h2>7. PyTorch 伪代码</h2>
         <pre class="language-python"><code>{`# UniCLIP 统一对比损失（伪代码）
 import torch
 import torch.nn.functional as F
