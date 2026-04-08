@@ -1,0 +1,132 @@
+---
+// CLIP 对比损失函数详解图：N×N 余弦相似度矩阵 + 对称交叉熵
+---
+<div class="svg-container">
+  <svg width="820" height="460" viewBox="0 0 820 460" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="clMatchGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#0f766e;stop-opacity:0.7" />
+        <stop offset="100%" style="stop-color:#059669;stop-opacity:0.9" />
+      </linearGradient>
+      <filter id="clShadow">
+        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f766e" flood-opacity="0.1"/>
+      </filter>
+    </defs>
+
+    <text x="410" y="30" text-anchor="middle" font-size="17" font-weight="700" fill="#1e2932">对比预训练：N×N 相似度矩阵</text>
+
+    <!-- 左侧：图像嵌入列 -->
+    <g transform="translate(30, 70)">
+      <text x="55" y="-5" text-anchor="middle" font-size="12" font-weight="600" fill="#0f766e">图像嵌入</text>
+      <rect x="0" y="10" width="110" height="36" rx="8" fill="#0f766e" opacity="0.15" stroke="#0f766e" stroke-width="1"/>
+      <text x="55" y="33" text-anchor="middle" font-size="12" font-weight="500" fill="#0f766e">I₁  🐕</text>
+
+      <rect x="0" y="56" width="110" height="36" rx="8" fill="#0f766e" opacity="0.15" stroke="#0f766e" stroke-width="1"/>
+      <text x="55" y="79" text-anchor="middle" font-size="12" font-weight="500" fill="#0f766e">I₂  🐈</text>
+
+      <rect x="0" y="102" width="110" height="36" rx="8" fill="#0f766e" opacity="0.15" stroke="#0f766e" stroke-width="1"/>
+      <text x="55" y="125" text-anchor="middle" font-size="12" font-weight="500" fill="#0f766e">I₃  🚗</text>
+
+      <rect x="0" y="148" width="110" height="36" rx="8" fill="#0f766e" opacity="0.15" stroke="#0f766e" stroke-width="1"/>
+      <text x="55" y="171" text-anchor="middle" font-size="12" font-weight="500" fill="#0f766e">I₄  🌸</text>
+
+      <rect x="0" y="194" width="110" height="36" rx="8" fill="#0f766e" opacity="0.15" stroke="#0f766e" stroke-width="1"/>
+      <text x="55" y="217" text-anchor="middle" font-size="12" font-weight="500" fill="#0f766e">I₅  🏔️</text>
+    </g>
+
+    <!-- 顶部：文本嵌入行 -->
+    <g transform="translate(175, 48)">
+      <text x="50" y="0" text-anchor="middle" font-size="11" font-weight="500" fill="#7c3aed">T₁ "dog"</text>
+      <text x="152" y="0" text-anchor="middle" font-size="11" font-weight="500" fill="#7c3aed">T₂ "cat"</text>
+      <text x="254" y="0" text-anchor="middle" font-size="11" font-weight="500" fill="#7c3aed">T₃ "car"</text>
+      <text x="356" y="0" text-anchor="middle" font-size="11" font-weight="500" fill="#7c3aed">T₄ "flower"</text>
+      <text x="458" y="0" text-anchor="middle" font-size="11" font-weight="500" fill="#7c3aed">T₅ "mountain"</text>
+    </g>
+
+    <!-- 5×5 相似度矩阵 -->
+    <g transform="translate(175, 55)">
+      <!-- 行1 -->
+      <rect x="0" y="25" width="90" height="36" rx="6" fill="url(#clMatchGrad)"/>
+      <text x="45" y="48" text-anchor="middle" font-size="13" font-weight="700" fill="white">0.95</text>
+      <rect x="102" y="25" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="147" y="48" text-anchor="middle" font-size="12" fill="#94a3b8">0.12</text>
+      <rect x="204" y="25" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="249" y="48" text-anchor="middle" font-size="12" fill="#94a3b8">0.05</text>
+      <rect x="306" y="25" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="351" y="48" text-anchor="middle" font-size="12" fill="#94a3b8">0.08</text>
+      <rect x="408" y="25" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="453" y="48" text-anchor="middle" font-size="12" fill="#94a3b8">0.03</text>
+
+      <!-- 行2 -->
+      <rect x="0" y="71" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="45" y="94" text-anchor="middle" font-size="12" fill="#94a3b8">0.15</text>
+      <rect x="102" y="71" width="90" height="36" rx="6" fill="url(#clMatchGrad)"/>
+      <text x="147" y="94" text-anchor="middle" font-size="13" font-weight="700" fill="white">0.92</text>
+      <rect x="204" y="71" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="249" y="94" text-anchor="middle" font-size="12" fill="#94a3b8">0.04</text>
+      <rect x="306" y="71" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="351" y="94" text-anchor="middle" font-size="12" fill="#94a3b8">0.10</text>
+      <rect x="408" y="71" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="453" y="94" text-anchor="middle" font-size="12" fill="#94a3b8">0.06</text>
+
+      <!-- 行3 -->
+      <rect x="0" y="117" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="45" y="140" text-anchor="middle" font-size="12" fill="#94a3b8">0.03</text>
+      <rect x="102" y="117" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="147" y="140" text-anchor="middle" font-size="12" fill="#94a3b8">0.07</text>
+      <rect x="204" y="117" width="90" height="36" rx="6" fill="url(#clMatchGrad)"/>
+      <text x="249" y="140" text-anchor="middle" font-size="13" font-weight="700" fill="white">0.91</text>
+      <rect x="306" y="117" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="351" y="140" text-anchor="middle" font-size="12" fill="#94a3b8">0.02</text>
+      <rect x="408" y="117" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="453" y="140" text-anchor="middle" font-size="12" fill="#94a3b8">0.09</text>
+
+      <!-- 行4 -->
+      <rect x="0" y="163" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="45" y="186" text-anchor="middle" font-size="12" fill="#94a3b8">0.06</text>
+      <rect x="102" y="163" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="147" y="186" text-anchor="middle" font-size="12" fill="#94a3b8">0.11</text>
+      <rect x="204" y="163" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="249" y="186" text-anchor="middle" font-size="12" fill="#94a3b8">0.04</text>
+      <rect x="306" y="163" width="90" height="36" rx="6" fill="url(#clMatchGrad)"/>
+      <text x="351" y="186" text-anchor="middle" font-size="13" font-weight="700" fill="white">0.93</text>
+      <rect x="408" y="163" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="453" y="186" text-anchor="middle" font-size="12" fill="#94a3b8">0.05</text>
+
+      <!-- 行5 -->
+      <rect x="0" y="209" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="45" y="232" text-anchor="middle" font-size="12" fill="#94a3b8">0.02</text>
+      <rect x="102" y="209" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="147" y="232" text-anchor="middle" font-size="12" fill="#94a3b8">0.04</text>
+      <rect x="204" y="209" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="249" y="232" text-anchor="middle" font-size="12" fill="#94a3b8">0.07</text>
+      <rect x="408" y="209" width="90" height="36" rx="6" fill="url(#clMatchGrad)"/>
+      <text x="453" y="232" text-anchor="middle" font-size="13" font-weight="700" fill="white">0.94</text>
+      <rect x="306" y="209" width="90" height="36" rx="6" fill="#f1f5f9"/>
+      <text x="351" y="232" text-anchor="middle" font-size="12" fill="#94a3b8">0.01</text>
+    </g>
+
+    <!-- 底部说明 -->
+    <g transform="translate(30, 340)">
+      <rect x="0" y="0" width="760" height="110" rx="14" fill="white" stroke="#e2e8f0" stroke-width="1" filter="url(#clShadow)"/>
+
+      <!-- 训练目标 -->
+      <text x="380" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="#1e2932">训练目标：对称交叉熵损失</text>
+
+      <!-- 行方向 -->
+      <g transform="translate(30, 45)">
+        <rect width="14" height="14" rx="3" fill="#0f766e" opacity="0.8"/>
+        <text x="22" y="12" font-size="12" fill="#1e2932">按行 softmax：给定图像 Iᵢ，找到正确文本 Tᵢ</text>
+      </g>
+
+      <!-- 列方向 -->
+      <g transform="translate(30, 70)">
+        <rect width="14" height="14" rx="3" fill="#7c3aed" opacity="0.8"/>
+        <text x="22" y="12" font-size="12" fill="#1e2932">按列 softmax：给定文本 Tᵢ，找到正确图像 Iᵢ</text>
+      </g>
+
+      <!-- 公式提示 -->
+      <text x="380" y="100" text-anchor="middle" font-size="12" fill="#5f6b6a">L = (L_image + L_text) / 2 — 双向对称，图文互相"找对方"</text>
+    </g>
+  </svg>
+</div>
