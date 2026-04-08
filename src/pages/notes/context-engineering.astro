@@ -1,0 +1,279 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import GSSCPipelineDiagram from '../../components/GSSCPipelineDiagram.astro';
+import ContextLayersDiagram from '../../components/ContextLayersDiagram.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+
+export const meta = {
+    number: '21',
+    title: '上下文工程：Agent 的隐形基础设施',
+    description: '从 Prompt Engineering 到 Context Engineering —— GSSC 流水线、长程任务管理与三层记忆架构',
+    tags: ['Agent', 'Context', 'Engineering'],
+    readTime: '20 min'
+};
+---
+
+<BaseLayout title="上下文工程：Agent 的隐形基础设施" description="从 Prompt Engineering 到 Context Engineering">
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">上下文工程：Agent 的隐形基础设施</h1>
+        <p class="text-xl text-gray-500">从 Prompt Engineering 到 Context Engineering —— 管理进入模型的每一个 token</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+    </header>
+
+    <!-- 前言 -->
+    <div class="card">
+        <h2>前言：Prompt Engineering 不够用了</h2>
+        <p>大多数人对 LLM 的理解停留在"写好 prompt"就行。但当你构建一个真正的 Agent 系统时，会发现 prompt 只是上下文窗口的一小部分。</p>
+        <p><span class="highlight">上下文工程 (Context Engineering)</span> 的核心问题不是"如何写指令"，而是 <strong>"如何战略性地管理推理时进入上下文窗口的所有信息"</strong> —— 包括系统提示、工具描述、外部数据、消息历史、记忆检索结果。</p>
+        <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+            <strong>核心观点：</strong> 上下文窗口是一种<strong>真正稀缺的资源</strong>。每个无关的 token 都在稀释模型的注意力。上下文工程就是用工程方法来最大化这个窗口的信号密度。
+        </div>
+    </div>
+
+    <!-- 上下文腐化 -->
+    <div class="card">
+        <h2>1. 上下文腐化 (Context Rot)</h2>
+        <p>为什么不能简单地把所有信息塞进上下文？因为存在 <strong>上下文腐化</strong> 现象：模型性能会随着上下文长度增加而退化。</p>
+
+        <h3 class="text-blue-600">退化的三个原因</h3>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>注意力稀释</strong>：Transformer 自注意力机制的复杂度为 <span set:html={"$O(n^2)$"}></span>，更多 token 意味着注意力被摊薄</li>
+            <li><strong>训练分布偏差</strong>：模型的训练数据偏向较短序列，对长上下文的处理"经验不足"</li>
+            <li><strong>噪声累积</strong>：无关信息不是零成本的 —— 它会主动干扰模型对关键信息的提取</li>
+        </ul>
+
+        <div class="note-box">
+            <strong>实践启示：</strong> 不要追求"放进更多信息"，而要追求"放进更对的信息"。128K 的上下文窗口不代表你应该填满它 —— 信号密度比信息量更重要。
+        </div>
+    </div>
+
+    <!-- GSSC 流水线 -->
+    <div class="card">
+        <h2>2. GSSC 流水线</h2>
+        <p>GSSC 是一套系统化的上下文构建方法论，将上下文管理拆解为四个阶段：</p>
+
+        <GSSCPipelineDiagram />
+
+        <h3 class="text-blue-600">Gather（收集）</h3>
+        <p>从所有可用来源收集候选信息：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>系统指令</strong>：角色定义、行为策略、安全边界</li>
+            <li><strong>记忆系统</strong>：短期（对话内）和长期（跨对话）记忆</li>
+            <li><strong>RAG 检索</strong>：基于查询从外部知识库召回的文档片段</li>
+            <li><strong>对话历史</strong>：用户和模型的交互记录</li>
+            <li><strong>工具输出</strong>：函数调用、API 响应、文件读取结果</li>
+        </ul>
+
+        <h3 class="text-blue-600">Select（筛选）</h3>
+        <p>对候选信息进行评分和排序，关键维度：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>相关性评分</strong>：与当前任务的语义匹配度</li>
+            <li><strong>时效性权重</strong>：最近的信息通常更重要</li>
+            <li><strong>Token 预算</strong>：设定硬上限，超出则丢弃低分候选</li>
+        </ul>
+
+        <h3 class="text-blue-600">Structure（组织）</h3>
+        <p>将筛选后的信息按功能分区排版：</p>
+        <pre class="language-python"><code>{`# 上下文模板结构
+[Role & Policies]   # 你是谁，你的行为边界
+[Task]              # 当前要完成的任务
+[Evidence]          # RAG 检索到的参考文档
+[Context]           # 对话历史、记忆、工具输出
+[Output]            # 输出格式要求`}</code></pre>
+        <p>分区的好处：模型可以快速定位不同类型的信息，减少"在长文本中找关键句"的认知负担。</p>
+
+        <h3 class="text-blue-600">Compress（压缩）</h3>
+        <p>当信息超出 token 预算时的兜底策略：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>摘要生成</strong>：用小模型对长文本做高保真摘要</li>
+            <li><strong>选择性截断</strong>：保留架构决策，丢弃冗余的命令输出</li>
+            <li><strong>渐进式压缩</strong>：先压缩最旧的信息，保留最新的完整性</li>
+        </ul>
+    </div>
+
+    <!-- 关键工具 -->
+    <div class="card">
+        <h2>3. 关键工具实现</h2>
+
+        <h3 class="text-blue-600">ContextBuilder</h3>
+        <p>统一管理 GSSC 流水线的核心组件，可配置参数：</p>
+        <pre class="language-python"><code>{`context_builder = ContextBuilder(
+    token_budget=4096,        # token 预算上限
+    relevance_threshold=0.6,  # 相关性阈值
+    recency_weight=0.3,       # 时效性权重
+    sections=[                # 分区模板
+        "role_and_policies",
+        "task",
+        "evidence",
+        "context",
+        "output_format"
+    ]
+)`}</code></pre>
+
+        <h3 class="text-blue-600">NoteTool（持久笔记）</h3>
+        <p>使用 <strong>Markdown + YAML</strong> 混合格式，兼顾机器解析和人类可读：</p>
+        <pre class="language-python"><code>{`# NoteTool 笔记格式示例
+---
+type: task_state          # 语义分类
+priority: high
+created: 2026-04-09
+tags: [auth, refactor]
+---
+
+## 认证模块重构进度
+
+### 已完成
+- 拆分 middleware 为独立模块
+- 新增 JWT 刷新逻辑
+
+### 待处理
+- 集成测试覆盖率不足
+- 需要处理并发 token 刷新`}</code></pre>
+        <p>YAML 元数据支持语义分类（task_state, conclusion, blocker, action），便于 ContextBuilder 按类型检索。Markdown 正文保持人类可读，兼容 Git 版本控制。</p>
+
+        <h3 class="text-blue-600">TerminalTool（安全终端）</h3>
+        <p>提供受限的文件系统访问能力：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>命令白名单</strong>：只允许只读操作（ls, cat, grep, find 等）</li>
+            <li><strong>工作区沙箱</strong>：限制访问范围到指定目录</li>
+            <li><strong>超时控制</strong>：防止长时间阻塞</li>
+            <li><strong>输出限制</strong>：截断过长的命令输出，避免撑爆上下文</li>
+        </ul>
+    </div>
+
+    <!-- 长程任务管理 -->
+    <div class="card">
+        <h2>4. 长程任务管理</h2>
+        <p>Agent 执行复杂任务时，往往需要跨越多轮对话甚至多个上下文窗口。三种互补策略：</p>
+
+        <h3 class="text-blue-600">策略一：Compaction（压实）</h3>
+        <p>当接近上下文限制时，对历史内容做高保真摘要：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li>保留架构决策和关键结论</li>
+            <li>丢弃中间过程的冗余输出（如重复的编译日志）</li>
+            <li>压缩比通常在 3:1 到 10:1 之间</li>
+        </ul>
+
+        <h3 class="text-blue-600">策略二：Structured Note-Taking（结构化笔记）</h3>
+        <p>定期将关键信息持久化到外部存储（NoteTool），在上下文重置后仍可检索：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li>每完成一个里程碑就写一条笔记</li>
+            <li>记录"为什么做了这个决策"而不只是"做了什么"</li>
+            <li>下次会话开始时，ContextBuilder 自动检索相关笔记</li>
+        </ul>
+
+        <h3 class="text-blue-600">策略三：Sub-agent Architecture（子代理）</h3>
+        <p>将复杂任务分解为独立子任务，每个子代理拥有干净的上下文窗口：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li>主代理负责任务分解和结果汇总</li>
+            <li>子代理专注单一子任务，上下文窗口不受其他子任务污染</li>
+            <li>子代理只返回压缩后的摘要给主代理</li>
+        </ul>
+
+        <div class="note-box">
+            <strong>关键洞察：</strong> 这三种策略不是互斥的，而是互补的。Compaction 处理"快到限制了怎么办"，Note-Taking 处理"跨会话怎么记住"，Sub-agent 处理"任务太复杂怎么拆"。
+        </div>
+    </div>
+
+    <!-- 三层记忆 -->
+    <div class="card">
+        <h2>5. 三层记忆架构</h2>
+        <p>一个成熟的 Agent 系统需要三个层次的信息访问能力：</p>
+
+        <ContextLayersDiagram />
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">层次</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">工具</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">生命周期</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">典型用途</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-sm">
+                    <tr>
+                        <td class="px-6 py-4 font-medium text-blue-600">即时访问</td>
+                        <td class="px-6 py-4 text-gray-600">TerminalTool</td>
+                        <td class="px-6 py-4 text-gray-600">实时</td>
+                        <td class="px-6 py-4 text-gray-600">查看文件、搜索代码、检查状态</td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 font-medium text-blue-600">会话记忆</td>
+                        <td class="px-6 py-4 text-gray-600">MemoryTool</td>
+                        <td class="px-6 py-4 text-gray-600">单次会话</td>
+                        <td class="px-6 py-4 text-gray-600">对话模式、中间结论、任务进度</td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 font-medium text-blue-600">持久笔记</td>
+                        <td class="px-6 py-4 text-gray-600">NoteTool</td>
+                        <td class="px-6 py-4 text-gray-600">跨会话</td>
+                        <td class="px-6 py-4 text-gray-600">架构决策、任务状态、长期知识</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p>三层独立运作，由 <strong>ContextBuilder</strong> 统一调度：根据当前任务的需求，智能选择从哪一层提取什么信息进入模型的上下文窗口。</p>
+    </div>
+
+    <!-- 实践指南 -->
+    <div class="card">
+        <h2>6. 实践指南</h2>
+
+        <h3 class="text-blue-600">上下文工程的核心原则</h3>
+        <ol class="list-decimal pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>信号密度优先</strong>：宁可少放信息也不要放无关信息</li>
+            <li><strong>按需检索</strong>：just-in-time 而不是 pre-computed，每次交互只拉取当下需要的</li>
+            <li><strong>渐进式披露</strong>：每轮交互产生的输出成为下轮的上下文输入</li>
+            <li><strong>人在回路</strong>：NoteTool 的纯文本格式支持人工审查和 Git 版本控制</li>
+        </ol>
+
+        <div class="quote-block">
+            <p>上下文工程的本质是：<strong>用工程方法对抗上下文窗口的有限性</strong>。不是让模型看得更多，而是让模型在有限的窗口里看到最对的东西。</p>
+        </div>
+    </div>
+
+    <!-- 总结 -->
+    <div class="card">
+        <h2>总结</h2>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">维度</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">要点</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-sm">
+                    <tr>
+                        <td class="px-6 py-4 font-medium text-blue-600">核心转变</td>
+                        <td class="px-6 py-4 text-gray-600">从"写好 prompt" 到 "管理好所有进入上下文的信息"</td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 font-medium text-blue-600">方法论</td>
+                        <td class="px-6 py-4 text-gray-600">GSSC 流水线：Gather → Select → Structure → Compress</td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 font-medium text-blue-600">关键工具</td>
+                        <td class="px-6 py-4 text-gray-600">ContextBuilder + NoteTool + TerminalTool</td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 font-medium text-blue-600">长程策略</td>
+                        <td class="px-6 py-4 text-gray-600">Compaction + Structured Notes + Sub-agent</td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 font-medium text-blue-600">记忆架构</td>
+                        <td class="px-6 py-4 text-gray-600">即时访问 / 会话记忆 / 持久笔记 三层分离</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="mt-8 text-center text-gray-500">
+        <p>Prompt Engineering 教你说对的话，Context Engineering 教你在对的时间把对的信息送到模型面前。</p>
+    </div>
+</BaseLayout>
