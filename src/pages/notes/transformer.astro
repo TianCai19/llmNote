@@ -5,6 +5,14 @@ import SelfAttention from '../../components/SelfAttention.astro';
 import { yesterdayYmd } from '../../utils/date';
 
 const createdAt = yesterdayYmd();
+
+export const meta = {
+    number: '03',
+    title: 'Transformer 架构',
+    description: '现代 AI 的基石：注意力机制与序列建模',
+    tags: ["NLP", "Attention", "基础"],
+    readTime: '12 min'
+};
 ---
 
 <BaseLayout title="Transformer 架构详解">

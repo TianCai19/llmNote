@@ -4,6 +4,14 @@ import MoERoutingDiagram from '../../components/MoERoutingDiagram.astro';
 import { todayYmd } from '../../utils/date';
 
 const createdAt = todayYmd();
+
+export const meta = {
+    number: '17',
+    title: 'LLM Mixture of Experts (MoE)',
+    description: '从路由到专家：MoE 架构原理、模型谱系与工程挑战',
+    tags: ["MoE", "LLM", "Architecture"],
+    readTime: '18 min'
+};
 ---
 
 <BaseLayout title="LLM Mixture of Experts (MoE) 详解">

@@ -5,6 +5,14 @@ import NMSDiagram from '../../components/NMSDiagram.astro';
 import { todayYmd } from '../../utils/date';
 
 const createdAt = todayYmd();
+
+export const meta = {
+    number: '00',
+    title: 'YOLO 原理解析',
+    description: '密集预测、正样本匹配、loss 与 NMS：把一阶段检测的链条串起来',
+    tags: ["CV", "Detection", "Quickstart"],
+    readTime: '8 min'
+};
 ---
 
 <BaseLayout title="YOLO 原理解析">

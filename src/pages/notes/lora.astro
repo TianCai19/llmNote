@@ -3,6 +3,14 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import { todayYmd } from '../../utils/date';
 
 const createdAt = todayYmd();
+
+export const meta = {
+    number: '09',
+    title: 'LoRA 低秩适配',
+    description: '冻结大模型、训练低秩矩阵：高效微调的核心思路',
+    tags: ["PEFT", "LoRA", "Finetune"],
+    readTime: '14 min'
+};
 ---
 
 <BaseLayout title="LoRA 低秩适配：用小模块改造大模型">

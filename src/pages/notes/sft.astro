@@ -3,6 +3,14 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import { todayYmd } from '../../utils/date';
 
 const createdAt = todayYmd();
+
+export const meta = {
+    number: '16',
+    title: 'Supervised Fine-Tuning (SFT)',
+    description: 'LLM 对齐的核心技术：从训练目标到数据策略',
+    tags: ["SFT", "Fine-tuning", "Alignment"],
+    readTime: '10 min'
+};
 ---
 
 <BaseLayout title="SFT：Supervised Fine-Tuning">

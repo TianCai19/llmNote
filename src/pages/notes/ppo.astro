@@ -6,6 +6,14 @@ import PPOClipAnimationDiagram from '../../components/PPOClipAnimationDiagram.as
 import { todayYmd } from '../../utils/date';
 
 const createdAt = todayYmd();
+
+export const meta = {
+    number: '08',
+    title: 'PPO 算法',
+    description: 'Clipped 目标、GAE 与 LLM 对齐实践要点',
+    tags: ["RL", "PPO", "Alignment"],
+    readTime: '20 min'
+};
 ---
 
 <BaseLayout title="PPO (Proximal Policy Optimization) | LLM Note" description="PPO 的目标函数、训练流程与在 LLM 对齐中的实践要点">

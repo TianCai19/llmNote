@@ -3,6 +3,14 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import { todayYmd } from '../../utils/date';
 
 const createdAt = todayYmd();
+
+export const meta = {
+    number: '14',
+    title: 'Venus：边缘记忆与检索',
+    description: 'VLM 在线视频理解系统：端云拆分、记忆构建与自适应检索',
+    tags: ["VLM", "Edge", "Retrieval"],
+    readTime: '28 min'
+};
 ---
 
 <BaseLayout title="Venus：VLM 在线视频理解的边缘记忆与检索系统">

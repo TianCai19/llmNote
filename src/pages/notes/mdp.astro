@@ -7,6 +7,14 @@ import ValueFunctionDiagram from '../../components/ValueFunctionDiagram.astro';
 import { yesterdayYmd } from '../../utils/date';
 
 const createdAt = yesterdayYmd();
+
+export const meta = {
+    number: '01',
+    title: '马尔可夫决策过程 (MDP)',
+    description: '强化学习的数学基础：智能体与环境的交互模型',
+    tags: ["RL", "基础", "数学"],
+    readTime: '18 min'
+};
 ---
 
 <BaseLayout title="马尔可夫决策过程 (MDP) | LLM Note" description="深入理解马尔可夫决策过程的数学原理和可视化解释">

@@ -7,6 +7,14 @@ import EMAAnimationDiagram from '../../components/EMAAnimationDiagram.astro';
 import { todayYmd } from '../../utils/date';
 
 const createdAt = todayYmd();
+
+export const meta = {
+    number: '18',
+    title: '不同平均数的直觉与应用',
+    description: '算术、几何、调和、加权、均方根、EMA —— 六种平均数的公式、直觉、例子与 ML 应用',
+    tags: ["Math", "Statistics", "基础"],
+    readTime: '18 min'
+};
 ---
 
 <BaseLayout title="不同平均数的直觉与应用">
