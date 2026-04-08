@@ -1,0 +1,89 @@
+---
+// 三层记忆架构：Immediate Access / Session Memory / Persistent Notes
+---
+<div class="svg-container">
+  <svg width="860" height="400" viewBox="0 0 860 400" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="clLayer1" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#0f766e;stop-opacity:0.12" />
+        <stop offset="100%" style="stop-color:#0f766e;stop-opacity:0.3" />
+      </linearGradient>
+      <linearGradient id="clLayer2" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:0.12" />
+        <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:0.3" />
+      </linearGradient>
+      <linearGradient id="clLayer3" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#f97316;stop-opacity:0.12" />
+        <stop offset="100%" style="stop-color:#f97316;stop-opacity:0.3" />
+      </linearGradient>
+      <linearGradient id="clCenterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#1e2932;stop-opacity:0.05" />
+        <stop offset="100%" style="stop-color:#1e2932;stop-opacity:0.15" />
+      </linearGradient>
+      <filter id="clShadow">
+        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f766e" flood-opacity="0.1"/>
+      </filter>
+      <marker id="clArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <polygon points="0 0, 8 4, 0 8" fill="#64748b"/>
+      </marker>
+    </defs>
+
+    <text x="430" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#1e2932">三层记忆架构</text>
+
+    <!-- 层1：Immediate Access -->
+    <g transform="translate(30, 55)">
+      <rect width="230" height="140" rx="14" fill="url(#clLayer1)" stroke="#0f766e" stroke-width="2" filter="url(#clShadow)"/>
+      <text x="115" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="#0f766e">即时访问层</text>
+      <text x="115" y="48" text-anchor="middle" font-size="11" fill="#5f6b6a">TerminalTool</text>
+      <line x1="20" y1="58" x2="210" y2="58" stroke="#0f766e" stroke-width="0.5" opacity="0.3"/>
+      <text x="25" y="78" font-size="11" fill="#0f766e">● 实时文件系统查询</text>
+      <text x="25" y="96" font-size="11" fill="#0f766e">● 命令白名单（只读）</text>
+      <text x="25" y="114" font-size="11" fill="#0f766e">● 工作区沙箱隔离</text>
+      <text x="25" y="132" font-size="11" fill="#5f6b6a">延迟：毫秒级</text>
+    </g>
+
+    <!-- 层2：Session Memory -->
+    <g transform="translate(310, 55)">
+      <rect width="230" height="140" rx="14" fill="url(#clLayer2)" stroke="#7c3aed" stroke-width="2" filter="url(#clShadow)"/>
+      <text x="115" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="#7c3aed">会话记忆层</text>
+      <text x="115" y="48" text-anchor="middle" font-size="11" fill="#5f6b6a">MemoryTool</text>
+      <line x1="20" y1="58" x2="210" y2="58" stroke="#7c3aed" stroke-width="0.5" opacity="0.3"/>
+      <text x="25" y="78" font-size="11" fill="#7c3aed">● 对话级模式识别</text>
+      <text x="25" y="96" font-size="11" fill="#7c3aed">● 上下文内摘要</text>
+      <text x="25" y="114" font-size="11" fill="#7c3aed">● 短期任务状态</text>
+      <text x="25" y="132" font-size="11" fill="#5f6b6a">生命周期：单次会话</text>
+    </g>
+
+    <!-- 层3：Persistent Notes -->
+    <g transform="translate(590, 55)">
+      <rect width="230" height="140" rx="14" fill="url(#clLayer3)" stroke="#f97316" stroke-width="2" filter="url(#clShadow)"/>
+      <text x="115" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="#c2410c">持久笔记层</text>
+      <text x="115" y="48" text-anchor="middle" font-size="11" fill="#5f6b6a">NoteTool</text>
+      <line x1="20" y1="58" x2="210" y2="58" stroke="#f97316" stroke-width="0.5" opacity="0.3"/>
+      <text x="25" y="78" font-size="11" fill="#c2410c">● Markdown + YAML 格式</text>
+      <text x="25" y="96" font-size="11" fill="#c2410c">● 跨会话任务连续性</text>
+      <text x="25" y="114" font-size="11" fill="#c2410c">● Git 版本控制兼容</text>
+      <text x="25" y="132" font-size="11" fill="#5f6b6a">生命周期：跨会话持久</text>
+    </g>
+
+    <!-- 中心：ContextBuilder -->
+    <g transform="translate(270, 240)">
+      <rect width="300" height="80" rx="16" fill="url(#clCenterGrad)" stroke="#1e2932" stroke-width="2" filter="url(#clShadow)"/>
+      <text x="150" y="32" text-anchor="middle" font-size="15" font-weight="700" fill="#1e2932">ContextBuilder</text>
+      <text x="150" y="55" text-anchor="middle" font-size="12" fill="#5f6b6a">智能选择 → 组装上下文窗口</text>
+      <text x="150" y="72" text-anchor="middle" font-size="10" fill="#5f6b6a">token 预算 · 相关性阈值 · 权重配置</text>
+    </g>
+
+    <!-- 连接线 -->
+    <path d="M 145 200 L 360 240" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#clArrow)"/>
+    <path d="M 425 200 L 420 238" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#clArrow)"/>
+    <path d="M 705 200 L 480 240" stroke="#f97316" stroke-width="1.5" stroke-dasharray="5,3" fill="none" marker-end="url(#clArrow)"/>
+
+    <!-- 输出 -->
+    <g transform="translate(320, 345)">
+      <rect width="200" height="40" rx="20" fill="#1e2932" opacity="0.85"/>
+      <text x="100" y="25" text-anchor="middle" font-size="13" font-weight="600" fill="white">LLM 上下文窗口</text>
+    </g>
+    <path d="M 420 325 L 420 343" stroke="#1e2932" stroke-width="2" marker-end="url(#clArrow)" fill="none"/>
+  </svg>
+</div>

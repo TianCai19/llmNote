@@ -1,0 +1,103 @@
+---
+// GSSC 四阶段上下文工程流水线：Gather → Select → Structure → Compress
+---
+<div class="svg-container">
+  <svg width="860" height="380" viewBox="0 0 860 380" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="gsGatherGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#0f766e;stop-opacity:0.15" />
+        <stop offset="100%" style="stop-color:#0f766e;stop-opacity:0.35" />
+      </linearGradient>
+      <linearGradient id="gsSelectGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:0.15" />
+        <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:0.35" />
+      </linearGradient>
+      <linearGradient id="gsStructGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#2563eb;stop-opacity:0.15" />
+        <stop offset="100%" style="stop-color:#2563eb;stop-opacity:0.35" />
+      </linearGradient>
+      <linearGradient id="gsCompGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#f97316;stop-opacity:0.15" />
+        <stop offset="100%" style="stop-color:#f97316;stop-opacity:0.35" />
+      </linearGradient>
+      <filter id="gsShadow">
+        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f766e" flood-opacity="0.12"/>
+      </filter>
+      <marker id="gsArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+        <polygon points="0 0, 10 5, 0 10" fill="#64748b"/>
+      </marker>
+    </defs>
+
+    <text x="430" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#1e2932">GSSC 上下文工程流水线</text>
+
+    <!-- Stage 1: Gather -->
+    <g transform="translate(20, 60)">
+      <rect width="180" height="180" rx="16" fill="url(#gsGatherGrad)" stroke="#0f766e" stroke-width="2" filter="url(#gsShadow)"/>
+      <text x="90" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#0f766e">1. Gather</text>
+      <text x="90" y="50" text-anchor="middle" font-size="11" fill="#5f6b6a">收集候选信息</text>
+      <line x1="20" y1="60" x2="160" y2="60" stroke="#0f766e" stroke-width="0.5" opacity="0.3"/>
+      <text x="30" y="82" font-size="11" fill="#0f766e">● 系统指令</text>
+      <text x="30" y="100" font-size="11" fill="#0f766e">● 记忆系统</text>
+      <text x="30" y="118" font-size="11" fill="#0f766e">● RAG 检索</text>
+      <text x="30" y="136" font-size="11" fill="#0f766e">● 对话历史</text>
+      <text x="30" y="154" font-size="11" fill="#0f766e">● 工具输出</text>
+      <text x="30" y="172" font-size="11" fill="#0f766e">● 自定义数据</text>
+    </g>
+
+    <!-- Arrow 1→2 -->
+    <path d="M 205 150 L 230 150" stroke="#64748b" stroke-width="2.5" marker-end="url(#gsArrow)" fill="none"/>
+
+    <!-- Stage 2: Select -->
+    <g transform="translate(240, 60)">
+      <rect width="170" height="180" rx="16" fill="url(#gsSelectGrad)" stroke="#7c3aed" stroke-width="2" filter="url(#gsShadow)"/>
+      <text x="85" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#7c3aed">2. Select</text>
+      <text x="85" y="50" text-anchor="middle" font-size="11" fill="#5f6b6a">评分与筛选</text>
+      <line x1="20" y1="60" x2="150" y2="60" stroke="#7c3aed" stroke-width="0.5" opacity="0.3"/>
+      <text x="30" y="82" font-size="11" fill="#7c3aed">● 相关性评分</text>
+      <text x="30" y="100" font-size="11" fill="#7c3aed">● 时效性权重</text>
+      <text x="30" y="118" font-size="11" fill="#7c3aed">● Token 预算</text>
+      <text x="30" y="136" font-size="11" fill="#7c3aed">● 优先级排序</text>
+      <text x="30" y="160" font-size="10" fill="#5f6b6a">丢弃低分候选</text>
+    </g>
+
+    <!-- Arrow 2→3 -->
+    <path d="M 415 150 L 440 150" stroke="#64748b" stroke-width="2.5" marker-end="url(#gsArrow)" fill="none"/>
+
+    <!-- Stage 3: Structure -->
+    <g transform="translate(450, 60)">
+      <rect width="170" height="180" rx="16" fill="url(#gsStructGrad)" stroke="#2563eb" stroke-width="2" filter="url(#gsShadow)"/>
+      <text x="85" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#2563eb">3. Structure</text>
+      <text x="85" y="50" text-anchor="middle" font-size="11" fill="#5f6b6a">组织与排版</text>
+      <line x1="20" y1="60" x2="150" y2="60" stroke="#2563eb" stroke-width="0.5" opacity="0.3"/>
+      <text x="30" y="82" font-size="11" fill="#2563eb">● [Role & Policies]</text>
+      <text x="30" y="100" font-size="11" fill="#2563eb">● [Task]</text>
+      <text x="30" y="118" font-size="11" fill="#2563eb">● [Evidence]</text>
+      <text x="30" y="136" font-size="11" fill="#2563eb">● [Context]</text>
+      <text x="30" y="154" font-size="11" fill="#2563eb">● [Output]</text>
+    </g>
+
+    <!-- Arrow 3→4 -->
+    <path d="M 625 150 L 650 150" stroke="#64748b" stroke-width="2.5" marker-end="url(#gsArrow)" fill="none"/>
+
+    <!-- Stage 4: Compress -->
+    <g transform="translate(660, 60)">
+      <rect width="170" height="180" rx="16" fill="url(#gsCompGrad)" stroke="#f97316" stroke-width="2" filter="url(#gsShadow)"/>
+      <text x="85" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#c2410c">4. Compress</text>
+      <text x="85" y="50" text-anchor="middle" font-size="11" fill="#5f6b6a">压缩与兜底</text>
+      <line x1="20" y1="60" x2="150" y2="60" stroke="#f97316" stroke-width="0.5" opacity="0.3"/>
+      <text x="30" y="82" font-size="11" fill="#c2410c">● 摘要生成</text>
+      <text x="30" y="100" font-size="11" fill="#c2410c">● 截断策略</text>
+      <text x="30" y="118" font-size="11" fill="#c2410c">● 保留关键决策</text>
+      <text x="30" y="136" font-size="11" fill="#c2410c">● 丢弃冗余输出</text>
+      <text x="30" y="160" font-size="10" fill="#5f6b6a">确保不超 token 限制</text>
+    </g>
+
+    <!-- 底部输出 -->
+    <g transform="translate(250, 280)">
+      <rect width="340" height="70" rx="14" fill="white" stroke="#e2e8f0" stroke-width="1" filter="url(#gsShadow)"/>
+      <text x="170" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="#1e2932">最终上下文窗口</text>
+      <text x="170" y="50" text-anchor="middle" font-size="12" fill="#5f6b6a">高信号密度 · 结构化 · 符合 token 预算</text>
+    </g>
+    <path d="M 430 245 L 430 278" stroke="#64748b" stroke-width="2" marker-end="url(#gsArrow)" fill="none"/>
+  </svg>
+</div>
