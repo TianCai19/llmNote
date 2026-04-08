@@ -1,0 +1,110 @@
+---
+// UniCLIP 统一对比学习框架：ITC + IIC + TTC 三路对比
+---
+<div class="svg-container">
+  <svg width="860" height="480" viewBox="0 0 860 480" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="ucImgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#0f766e;stop-opacity:0.15" />
+        <stop offset="100%" style="stop-color:#0f766e;stop-opacity:0.35" />
+      </linearGradient>
+      <linearGradient id="ucTxtGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:0.15" />
+        <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:0.35" />
+      </linearGradient>
+      <linearGradient id="ucLossGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#f97316;stop-opacity:0.15" />
+        <stop offset="100%" style="stop-color:#f97316;stop-opacity:0.4" />
+      </linearGradient>
+      <filter id="ucShadow">
+        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f766e" flood-opacity="0.12"/>
+      </filter>
+      <marker id="ucArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <polygon points="0 0, 8 4, 0 8" fill="#64748b"/>
+      </marker>
+    </defs>
+
+    <text x="430" y="30" text-anchor="middle" font-size="18" font-weight="700" fill="#1e2932">UniCLIP：统一三路对比学习</text>
+
+    <!-- ===== 图像分支 ===== -->
+    <g transform="translate(40, 60)">
+      <rect width="160" height="70" rx="12" fill="url(#ucImgGrad)" stroke="#0f766e" stroke-width="1.5" filter="url(#ucShadow)"/>
+      <text x="80" y="30" text-anchor="middle" font-size="13" font-weight="600" fill="#0f766e">输入图像</text>
+      <text x="80" y="50" text-anchor="middle" font-size="11" fill="#5f6b6a">x + augment(x)</text>
+    </g>
+    <path d="M 120 135 L 120 165" stroke="#0f766e" stroke-width="2" marker-end="url(#ucArrow)" fill="none"/>
+
+    <g transform="translate(30, 170)">
+      <rect width="180" height="90" rx="14" fill="url(#ucImgGrad)" stroke="#0f766e" stroke-width="2" filter="url(#ucShadow)"/>
+      <text x="90" y="30" text-anchor="middle" font-size="14" font-weight="700" fill="#0f766e">图像编码器</text>
+      <text x="90" y="50" text-anchor="middle" font-size="11" fill="#5f6b6a">ViT / ResNet</text>
+      <text x="90" y="70" text-anchor="middle" font-size="11" fill="#0f766e">+ Projection Head</text>
+    </g>
+
+    <!-- 图像嵌入 -->
+    <path d="M 120 265 L 120 300" stroke="#0f766e" stroke-width="2" marker-end="url(#ucArrow)" fill="none"/>
+    <g transform="translate(55, 305)">
+      <rect width="130" height="40" rx="20" fill="#0f766e" opacity="0.85"/>
+      <text x="65" y="25" text-anchor="middle" font-size="12" font-weight="600" fill="white">图像嵌入 I</text>
+    </g>
+
+    <!-- ===== 文本分支 ===== -->
+    <g transform="translate(620, 60)">
+      <rect width="200" height="70" rx="12" fill="url(#ucTxtGrad)" stroke="#7c3aed" stroke-width="1.5" filter="url(#ucShadow)"/>
+      <text x="100" y="30" text-anchor="middle" font-size="13" font-weight="600" fill="#7c3aed">输入文本</text>
+      <text x="100" y="50" text-anchor="middle" font-size="11" fill="#5f6b6a">t + dropout(t)</text>
+    </g>
+    <path d="M 720 135 L 720 165" stroke="#7c3aed" stroke-width="2" marker-end="url(#ucArrow)" fill="none"/>
+
+    <g transform="translate(630, 170)">
+      <rect width="180" height="90" rx="14" fill="url(#ucTxtGrad)" stroke="#7c3aed" stroke-width="2" filter="url(#ucShadow)"/>
+      <text x="90" y="30" text-anchor="middle" font-size="14" font-weight="700" fill="#7c3aed">文本编码器</text>
+      <text x="90" y="50" text-anchor="middle" font-size="11" fill="#5f6b6a">Transformer</text>
+      <text x="90" y="70" text-anchor="middle" font-size="11" fill="#7c3aed">+ Projection Head</text>
+    </g>
+
+    <!-- 文本嵌入 -->
+    <path d="M 720 265 L 720 300" stroke="#7c3aed" stroke-width="2" marker-end="url(#ucArrow)" fill="none"/>
+    <g transform="translate(655, 305)">
+      <rect width="130" height="40" rx="20" fill="#7c3aed" opacity="0.85"/>
+      <text x="65" y="25" text-anchor="middle" font-size="12" font-weight="600" fill="white">文本嵌入 T</text>
+    </g>
+
+    <!-- ===== 三路对比损失 ===== -->
+    <!-- ITC: 图文对比 -->
+    <g transform="translate(280, 155)">
+      <rect width="280" height="60" rx="12" fill="url(#ucLossGrad)" stroke="#f97316" stroke-width="2" filter="url(#ucShadow)"/>
+      <text x="140" y="25" text-anchor="middle" font-size="13" font-weight="700" fill="#c2410c">L_ITC：图文对比</text>
+      <text x="140" y="45" text-anchor="middle" font-size="11" fill="#5f6b6a">Image ↔ Text（同 CLIP）</text>
+    </g>
+    <!-- 连接线 -->
+    <path d="M 215 215 L 280 195" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="4,3" fill="none"/>
+    <path d="M 625 215 L 560 195" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,3" fill="none"/>
+
+    <!-- IIC: 图图对比 -->
+    <g transform="translate(280, 240)">
+      <rect width="280" height="60" rx="12" fill="url(#ucImgGrad)" stroke="#0f766e" stroke-width="1.5" filter="url(#ucShadow)"/>
+      <text x="140" y="25" text-anchor="middle" font-size="13" font-weight="700" fill="#0f766e">L_IIC：图图对比</text>
+      <text x="140" y="45" text-anchor="middle" font-size="11" fill="#5f6b6a">Image ↔ augment(Image)</text>
+    </g>
+    <path d="M 215 285 L 280 275" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="4,3" fill="none"/>
+
+    <!-- TTC: 文文对比 -->
+    <g transform="translate(280, 325)">
+      <rect width="280" height="60" rx="12" fill="url(#ucTxtGrad)" stroke="#7c3aed" stroke-width="1.5" filter="url(#ucShadow)"/>
+      <text x="140" y="25" text-anchor="middle" font-size="13" font-weight="700" fill="#7c3aed">L_TTC：文文对比</text>
+      <text x="140" y="45" text-anchor="middle" font-size="11" fill="#5f6b6a">Text ↔ dropout(Text)</text>
+    </g>
+    <path d="M 625 340 L 560 350" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,3" fill="none"/>
+
+    <!-- ===== 统一损失 ===== -->
+    <g transform="translate(250, 415)">
+      <rect width="340" height="50" rx="25" fill="#f97316" opacity="0.9" filter="url(#ucShadow)"/>
+      <text x="170" y="30" text-anchor="middle" font-size="14" font-weight="700" fill="white">L = L_ITC + α · L_IIC + β · L_TTC</text>
+    </g>
+    <!-- 汇聚箭头 -->
+    <path d="M 420 220 L 420 412" stroke="#f97316" stroke-width="2" marker-end="url(#ucArrow)" fill="none"/>
+    <path d="M 420 305 L 420 305" stroke="#f97316" stroke-width="0" fill="none"/>
+    <path d="M 420 390 L 420 390" stroke="#f97316" stroke-width="0" fill="none"/>
+  </svg>
+</div>
