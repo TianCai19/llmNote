@@ -4,6 +4,14 @@ import Qwen3VLTrainingStages from '../../components/Qwen3VLTrainingStages.astro'
 import { yesterdayYmd } from '../../utils/date';
 
 const createdAt = yesterdayYmd();
+
+export const meta = {
+    number: '05',
+    title: 'Qwen3-VL（Part 2）',
+    description: '四阶段预训练与数据配方全解析',
+    tags: ["Pretrain", "Data", "多模态"],
+    readTime: '40 min'
+};
 ---
 
 <BaseLayout title="Qwen3-VL：训练与数据配方（Part 2）" description="面向学生的训练全流程拆解：四阶段预训练 + 后训练 + 数据工程细节">

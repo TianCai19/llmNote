@@ -3,6 +3,14 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 import { todayYmd } from '../../utils/date';
 
 const createdAt = todayYmd();
+
+export const meta = {
+    number: '11',
+    title: '4-bit 量化与 QLoRA',
+    description: 'bitsandbytes、NF4 与 QLoRA：如何在 16GB 显存微调大模型',
+    tags: ["Quantization", "QLoRA", "PEFT"],
+    readTime: '18 min'
+};
 ---
 
 <BaseLayout title="4-bit 量化与 QLoRA：让大模型更亲民">

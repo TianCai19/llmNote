@@ -6,6 +6,14 @@ import VLMArchitecture from '../../components/VLMArchitecture.astro';
 import { yesterdayYmd } from '../../utils/date';
 
 const createdAt = yesterdayYmd();
+
+export const meta = {
+    number: '02',
+    title: 'Vision Transformer (ViT)',
+    description: '深入理解 ViT 如何让 AI 看懂图片',
+    tags: ["Vision", "Transformer", "VLM"],
+    readTime: '15 min'
+};
 ---
 
 <BaseLayout title="深入理解 Vision Transformer (ViT)">

@@ -5,6 +5,14 @@ import MetricsOverviewDiagram from '../../components/MetricsOverviewDiagram.astr
 import { todayYmd } from '../../utils/date';
 
 const createdAt = todayYmd();
+
+export const meta = {
+    number: '15',
+    title: '模型评估指标',
+    description: '从准确率到 F1 Score：混淆矩阵、精确率/召回率权衡与 ROC-AUC',
+    tags: ["ML", "Evaluation", "Metrics"],
+    readTime: '15 min'
+};
 ---
 
 <BaseLayout title="模型评估指标：从准确率到 F1 Score">
