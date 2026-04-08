@@ -1,0 +1,124 @@
+---
+// CLIP 零样本分类流程图
+---
+<div class="svg-container">
+  <svg width="860" height="420" viewBox="0 0 860 420" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="zsImgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#0f766e;stop-opacity:0.12" />
+        <stop offset="100%" style="stop-color:#0f766e;stop-opacity:0.3" />
+      </linearGradient>
+      <linearGradient id="zsTxtGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:0.12" />
+        <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:0.3" />
+      </linearGradient>
+      <linearGradient id="zsResultGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" style="stop-color:#f97316;stop-opacity:0.15" />
+        <stop offset="100%" style="stop-color:#f97316;stop-opacity:0.35" />
+      </linearGradient>
+      <filter id="zsShadow">
+        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f766e" flood-opacity="0.1"/>
+      </filter>
+      <marker id="zsArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <polygon points="0 0, 8 4, 0 8" fill="#64748b"/>
+      </marker>
+    </defs>
+
+    <text x="430" y="30" text-anchor="middle" font-size="17" font-weight="700" fill="#1e2932">零样本分类 (Zero-Shot Classification)</text>
+
+    <!-- Step 1: 输入图像 -->
+    <g transform="translate(30, 60)">
+      <rect width="130" height="130" rx="14" fill="url(#zsImgGrad)" stroke="#0f766e" stroke-width="1.5" filter="url(#zsShadow)"/>
+      <text x="65" y="55" text-anchor="middle" font-size="36">🐕</text>
+      <text x="65" y="90" text-anchor="middle" font-size="12" font-weight="600" fill="#0f766e">测试图像</text>
+      <text x="65" y="108" text-anchor="middle" font-size="11" fill="#5f6b6a">未见过的类别</text>
+    </g>
+
+    <!-- 箭头 1 -->
+    <path d="M 165 125 L 200 125" stroke="#64748b" stroke-width="2" marker-end="url(#zsArrow)" fill="none"/>
+
+    <!-- Step 2: 图像编码器 -->
+    <g transform="translate(210, 80)">
+      <rect width="120" height="90" rx="12" fill="url(#zsImgGrad)" stroke="#0f766e" stroke-width="2" filter="url(#zsShadow)"/>
+      <text x="60" y="35" text-anchor="middle" font-size="12" font-weight="700" fill="#0f766e">图像编码器</text>
+      <text x="60" y="55" text-anchor="middle" font-size="11" fill="#5f6b6a">ViT</text>
+      <text x="60" y="75" text-anchor="middle" font-size="10" fill="#5f6b6a">(预训练冻结)</text>
+    </g>
+
+    <!-- 箭头 2 -->
+    <path d="M 335 125 L 370 125" stroke="#64748b" stroke-width="2" marker-end="url(#zsArrow)" fill="none"/>
+
+    <!-- 图像嵌入 -->
+    <g transform="translate(380, 100)">
+      <rect width="90" height="50" rx="25" fill="#0f766e" opacity="0.85"/>
+      <text x="45" y="30" text-anchor="middle" font-size="12" font-weight="600" fill="white">图像嵌入</text>
+    </g>
+
+    <!-- Step 3: 文本 Prompt 模板 -->
+    <g transform="translate(210, 230)">
+      <rect width="260" height="170" rx="14" fill="url(#zsTxtGrad)" stroke="#7c3aed" stroke-width="1.5" filter="url(#zsShadow)"/>
+      <text x="130" y="28" text-anchor="middle" font-size="13" font-weight="700" fill="#7c3aed">Prompt 模板构造</text>
+      <text x="130" y="50" text-anchor="middle" font-size="11" fill="#5f6b6a" set:html={'"a photo of a &#123;class&#125;"'}></text>
+
+      <line x1="20" y1="62" x2="240" y2="62" stroke="#7c3aed" stroke-width="0.5" opacity="0.3"/>
+
+      <text x="20" y="82" font-size="11" fill="#7c3aed">→ "a photo of a dog"</text>
+      <text x="20" y="102" font-size="11" fill="#7c3aed">→ "a photo of a cat"</text>
+      <text x="20" y="122" font-size="11" fill="#7c3aed">→ "a photo of a car"</text>
+      <text x="20" y="142" font-size="11" fill="#7c3aed">→ "a photo of a bird"</text>
+      <text x="20" y="162" font-size="11" fill="#5f6b6a">→ ... (所有候选类别)</text>
+    </g>
+
+    <!-- 箭头：prompts → 编码 -->
+    <path d="M 475 315 L 520 315" stroke="#64748b" stroke-width="2" marker-end="url(#zsArrow)" fill="none"/>
+
+    <!-- 文本编码器 -->
+    <g transform="translate(530, 270)">
+      <rect width="120" height="90" rx="12" fill="url(#zsTxtGrad)" stroke="#7c3aed" stroke-width="2" filter="url(#zsShadow)"/>
+      <text x="60" y="30" text-anchor="middle" font-size="12" font-weight="700" fill="#7c3aed">文本编码器</text>
+      <text x="60" y="50" text-anchor="middle" font-size="11" fill="#5f6b6a">Transformer</text>
+      <text x="60" y="70" text-anchor="middle" font-size="10" fill="#5f6b6a">(预训练冻结)</text>
+    </g>
+
+    <!-- 文本嵌入集合 -->
+    <g transform="translate(530, 200)">
+      <rect width="120" height="50" rx="25" fill="#7c3aed" opacity="0.85"/>
+      <text x="60" y="22" text-anchor="middle" font-size="11" font-weight="600" fill="white">文本嵌入</text>
+      <text x="60" y="38" text-anchor="middle" font-size="10" fill="white" opacity="0.8">T₁ T₂ T₃ T₄ ...</text>
+    </g>
+    <path d="M 590 270 L 590 255" stroke="#7c3aed" stroke-width="2" marker-end="url(#zsArrow)" fill="none"/>
+
+    <!-- 余弦相似度计算 -->
+    <path d="M 475 125 L 680 125" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,3" fill="none"/>
+    <path d="M 655 225 L 680 225" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,3" fill="none"/>
+
+    <!-- 计算节点 -->
+    <g transform="translate(680, 130)">
+      <rect width="140" height="140" rx="14" fill="white" stroke="#f97316" stroke-width="2" filter="url(#zsShadow)"/>
+      <text x="70" y="28" text-anchor="middle" font-size="12" font-weight="700" fill="#c2410c">余弦相似度</text>
+
+      <!-- 柱状图示意 -->
+      <rect x="15" y="45" width="24" height="70" rx="4" fill="#0f766e" opacity="0.85"/>
+      <text x="27" y="130" text-anchor="middle" font-size="9" fill="#0f766e" font-weight="600">dog</text>
+      <text x="27" y="42" text-anchor="middle" font-size="9" font-weight="700" fill="#0f766e">0.93</text>
+
+      <rect x="47" y="85" width="24" height="30" rx="4" fill="#e2e8f0"/>
+      <text x="59" y="130" text-anchor="middle" font-size="9" fill="#94a3b8">cat</text>
+
+      <rect x="79" y="95" width="24" height="20" rx="4" fill="#e2e8f0"/>
+      <text x="91" y="130" text-anchor="middle" font-size="9" fill="#94a3b8">car</text>
+
+      <rect x="111" y="90" width="24" height="25" rx="4" fill="#e2e8f0"/>
+      <text x="123" y="130" text-anchor="middle" font-size="9" fill="#94a3b8">bird</text>
+    </g>
+
+    <!-- 结果标注 -->
+    <g transform="translate(690, 290)">
+      <rect width="120" height="40" rx="20" fill="#0f766e"/>
+      <text x="60" y="25" text-anchor="middle" font-size="13" font-weight="700" fill="white">预测：dog ✓</text>
+    </g>
+
+    <!-- 关键说明 -->
+    <text x="430" y="410" text-anchor="middle" font-size="12" fill="#5f6b6a">无需微调，无需标注数据 —— 直接用自然语言描述定义任意类别</text>
+  </svg>
+</div>

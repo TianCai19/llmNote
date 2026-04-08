@@ -1,0 +1,154 @@
+---
+// CLIP 双编码器架构图：Image Encoder + Text Encoder → 对比学习
+---
+<div class="svg-container">
+  <svg width="880" height="520" viewBox="0 0 880 520" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="clipImgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#0f766e;stop-opacity:0.15" />
+        <stop offset="100%" style="stop-color:#0f766e;stop-opacity:0.35" />
+      </linearGradient>
+      <linearGradient id="clipTxtGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:0.15" />
+        <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:0.35" />
+      </linearGradient>
+      <linearGradient id="clipEmbGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" style="stop-color:#f97316;stop-opacity:0.15" />
+        <stop offset="100%" style="stop-color:#f97316;stop-opacity:0.35" />
+      </linearGradient>
+      <filter id="clipShadow">
+        <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f766e" flood-opacity="0.12"/>
+      </filter>
+      <marker id="clipArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <polygon points="0 0, 8 4, 0 8" fill="#64748b"/>
+      </marker>
+      <marker id="clipArrowTeal" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <polygon points="0 0, 8 4, 0 8" fill="#0f766e"/>
+      </marker>
+      <marker id="clipArrowPurple" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <polygon points="0 0, 8 4, 0 8" fill="#7c3aed"/>
+      </marker>
+    </defs>
+
+    <!-- 标题 -->
+    <text x="440" y="32" text-anchor="middle" font-size="18" font-weight="700" fill="#1e2932">CLIP 双编码器架构</text>
+
+    <!-- ===== 图像分支 (左侧) ===== -->
+    <!-- 输入图像 -->
+    <g transform="translate(60, 70)">
+      <rect width="140" height="80" rx="12" fill="url(#clipImgGrad)" stroke="#0f766e" stroke-width="1.5" filter="url(#clipShadow)"/>
+      <text x="70" y="35" text-anchor="middle" font-size="13" font-weight="600" fill="#0f766e">🖼️ 输入图像</text>
+      <text x="70" y="55" text-anchor="middle" font-size="11" fill="#5f6b6a">224 × 224 × 3</text>
+    </g>
+    <!-- 箭头 -->
+    <path d="M 130 155 L 130 185" stroke="#0f766e" stroke-width="2" marker-end="url(#clipArrowTeal)" fill="none"/>
+
+    <!-- 图像编码器 -->
+    <g transform="translate(40, 190)">
+      <rect width="180" height="120" rx="14" fill="url(#clipImgGrad)" stroke="#0f766e" stroke-width="2" filter="url(#clipShadow)"/>
+      <text x="90" y="32" text-anchor="middle" font-size="14" font-weight="700" fill="#0f766e">图像编码器</text>
+      <text x="90" y="55" text-anchor="middle" font-size="11" fill="#5f6b6a">ViT-B/32 · ViT-L/14</text>
+      <text x="90" y="73" text-anchor="middle" font-size="11" fill="#5f6b6a">或 ResNet-50/101</text>
+      <line x1="20" y1="88" x2="160" y2="88" stroke="#0f766e" stroke-width="0.5" opacity="0.3"/>
+      <text x="90" y="106" text-anchor="middle" font-size="11" fill="#0f766e">Patch → Attention → [CLS]</text>
+    </g>
+    <!-- 箭头 -->
+    <path d="M 130 315 L 130 345" stroke="#0f766e" stroke-width="2" marker-end="url(#clipArrowTeal)" fill="none"/>
+
+    <!-- 图像 Projection -->
+    <g transform="translate(50, 350)">
+      <rect width="160" height="55" rx="10" fill="url(#clipEmbGrad)" stroke="#f97316" stroke-width="1.5" filter="url(#clipShadow)"/>
+      <text x="80" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="#c2410c">线性投影 W_i</text>
+      <text x="80" y="42" text-anchor="middle" font-size="11" fill="#5f6b6a">→ d 维嵌入空间</text>
+    </g>
+    <!-- 箭头 -->
+    <path d="M 130 410 L 130 440" stroke="#f97316" stroke-width="2" marker-end="url(#clipArrow)" fill="none"/>
+
+    <!-- 图像嵌入 -->
+    <g transform="translate(65, 445)">
+      <rect width="130" height="45" rx="22" fill="#0f766e" opacity="0.9"/>
+      <text x="65" y="28" text-anchor="middle" font-size="13" font-weight="600" fill="white">I₁, I₂, ... Iₙ</text>
+    </g>
+
+    <!-- ===== 文本分支 (右侧) ===== -->
+    <!-- 输入文本 -->
+    <g transform="translate(620, 70)">
+      <rect width="200" height="80" rx="12" fill="url(#clipTxtGrad)" stroke="#7c3aed" stroke-width="1.5" filter="url(#clipShadow)"/>
+      <text x="100" y="30" text-anchor="middle" font-size="13" font-weight="600" fill="#7c3aed">📝 输入文本</text>
+      <text x="100" y="50" text-anchor="middle" font-size="11" fill="#5f6b6a">"a photo of a dog"</text>
+      <text x="100" y="67" text-anchor="middle" font-size="11" fill="#5f6b6a">"a diagram of ..."</text>
+    </g>
+    <!-- 箭头 -->
+    <path d="M 720 155 L 720 185" stroke="#7c3aed" stroke-width="2" marker-end="url(#clipArrowPurple)" fill="none"/>
+
+    <!-- 文本编码器 -->
+    <g transform="translate(620, 190)">
+      <rect width="200" height="120" rx="14" fill="url(#clipTxtGrad)" stroke="#7c3aed" stroke-width="2" filter="url(#clipShadow)"/>
+      <text x="100" y="32" text-anchor="middle" font-size="14" font-weight="700" fill="#7c3aed">文本编码器</text>
+      <text x="100" y="55" text-anchor="middle" font-size="11" fill="#5f6b6a">Transformer (63M params)</text>
+      <text x="100" y="73" text-anchor="middle" font-size="11" fill="#5f6b6a">12 层 · 512 维 · 8 头</text>
+      <line x1="20" y1="88" x2="180" y2="88" stroke="#7c3aed" stroke-width="0.5" opacity="0.3"/>
+      <text x="100" y="106" text-anchor="middle" font-size="11" fill="#7c3aed">Tokenize → Attention → [EOS]</text>
+    </g>
+    <!-- 箭头 -->
+    <path d="M 720 315 L 720 345" stroke="#7c3aed" stroke-width="2" marker-end="url(#clipArrowPurple)" fill="none"/>
+
+    <!-- 文本 Projection -->
+    <g transform="translate(640, 350)">
+      <rect width="160" height="55" rx="10" fill="url(#clipEmbGrad)" stroke="#f97316" stroke-width="1.5" filter="url(#clipShadow)"/>
+      <text x="80" y="24" text-anchor="middle" font-size="12" font-weight="600" fill="#c2410c">线性投影 W_t</text>
+      <text x="80" y="42" text-anchor="middle" font-size="11" fill="#5f6b6a">→ d 维嵌入空间</text>
+    </g>
+    <!-- 箭头 -->
+    <path d="M 720 410 L 720 440" stroke="#f97316" stroke-width="2" marker-end="url(#clipArrow)" fill="none"/>
+
+    <!-- 文本嵌入 -->
+    <g transform="translate(655, 445)">
+      <rect width="130" height="45" rx="22" fill="#7c3aed" opacity="0.9"/>
+      <text x="65" y="28" text-anchor="middle" font-size="13" font-weight="600" fill="white">T₁, T₂, ... Tₙ</text>
+    </g>
+
+    <!-- ===== 中间：对比学习 ===== -->
+    <g transform="translate(310, 170)">
+      <rect width="220" height="200" rx="16" fill="white" stroke="#64748b" stroke-width="1" stroke-dasharray="6,3" opacity="0.8"/>
+      <text x="110" y="28" text-anchor="middle" font-size="14" font-weight="700" fill="#1e2932">对比学习目标</text>
+
+      <!-- 相似度矩阵示意 -->
+      <g transform="translate(30, 45)">
+        <!-- 对角线高亮 -->
+        <rect x="0" y="0" width="32" height="32" rx="4" fill="#0f766e" opacity="0.8"/>
+        <rect x="40" y="0" width="32" height="32" rx="4" fill="#e2e8f0"/>
+        <rect x="80" y="0" width="32" height="32" rx="4" fill="#e2e8f0"/>
+        <rect x="120" y="0" width="32" height="32" rx="4" fill="#e2e8f0"/>
+
+        <rect x="0" y="36" width="32" height="32" rx="4" fill="#e2e8f0"/>
+        <rect x="40" y="36" width="32" height="32" rx="4" fill="#0f766e" opacity="0.8"/>
+        <rect x="80" y="36" width="32" height="32" rx="4" fill="#e2e8f0"/>
+        <rect x="120" y="36" width="32" height="32" rx="4" fill="#e2e8f0"/>
+
+        <rect x="0" y="72" width="32" height="32" rx="4" fill="#e2e8f0"/>
+        <rect x="40" y="72" width="32" height="32" rx="4" fill="#e2e8f0"/>
+        <rect x="80" y="72" width="32" height="32" rx="4" fill="#0f766e" opacity="0.8"/>
+        <rect x="120" y="72" width="32" height="32" rx="4" fill="#e2e8f0"/>
+
+        <rect x="0" y="108" width="32" height="32" rx="4" fill="#e2e8f0"/>
+        <rect x="40" y="108" width="32" height="32" rx="4" fill="#e2e8f0"/>
+        <rect x="80" y="108" width="32" height="32" rx="4" fill="#e2e8f0"/>
+        <rect x="120" y="108" width="32" height="32" rx="4" fill="#0f766e" opacity="0.8"/>
+      </g>
+
+      <text x="110" y="198" text-anchor="middle" font-size="11" fill="#5f6b6a">对角线 = 匹配对 ✓</text>
+      <!-- 标签 -->
+      <text x="20" y="100" text-anchor="middle" font-size="10" fill="#0f766e" transform="rotate(-90, 20, 100)">Images</text>
+      <text x="110" y="42" text-anchor="middle" font-size="10" fill="#7c3aed">Texts</text>
+    </g>
+
+    <!-- 连接线：图像嵌入 → 对比矩阵 -->
+    <path d="M 200 467 Q 280 467 310 350" stroke="#0f766e" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#clipArrowTeal)"/>
+    <!-- 连接线：文本嵌入 → 对比矩阵 -->
+    <path d="M 650 467 Q 570 467 530 350" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="4,3" fill="none" marker-end="url(#clipArrowPurple)"/>
+
+    <!-- cosine similarity 标注 -->
+    <text x="440" y="500" text-anchor="middle" font-size="12" font-weight="600" fill="#64748b">cosine similarity → softmax cross-entropy</text>
+  </svg>
+</div>
