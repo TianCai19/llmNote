@@ -7,139 +7,192 @@ const createdAt = todayYmd();
 export const meta = {
     number: '16',
     title: 'Supervised Fine-Tuning (SFT)',
-    description: 'LLM 对齐的核心技术：从训练目标到数据策略',
-    tags: ["SFT", "Fine-tuning", "Alignment"],
-    readTime: '10 min'
+    description: '结合 code-your-own-llm Chapter08 理解 SFT 的目标掩码、多任务混合与评测变化',
+    tags: ["SFT", "Fine-tuning", "Alignment", "CodeYourOwnLLM"],
+    readTime: '16 min'
 };
 ---
 
 <BaseLayout title="SFT：Supervised Fine-Tuning">
     <header class="text-center mb-12">
-        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">SFT / Fine-tuning / Alignment</p>
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">SFT / Fine-tuning / Alignment / Code Your Own LLM</p>
         <h1 class="text-4xl font-bold mb-4 gradient-text">Supervised Fine-Tuning (SFT)</h1>
-        <p class="text-xl text-gray-500">从目标函数到数据模板的完整工程路径</p>
-        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt} • 18 min</p>
+        <p class="text-xl text-gray-500">从 Chapter08 的训练代码出发，理解模型如何从“续写器”变成“回答者”</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt} • 16 min</p>
     </header>
 
     <div class="card">
-        <h2>什么是 SFT？</h2>
-        <p>SFT（Supervised Fine-Tuning）是用高质量“指令-响应/对话”数据继续训练预训练模型，使其更擅长遵循指令、对话协作和输出指定格式。SFT 的核心作用是把通用语言模型转化为可用的助手型模型。</p>
+        <h2>Chapter08 想解决什么问题？</h2>
+        <p>在 <a class="text-emerald-700" href="https://github.com/datawhalechina/code-your-own-llm/blob/main/docs/Chapter08/SFT.md">code-your-own-llm Chapter08</a> 里，SFT 被放在预训练和对齐链路的中后段：模型已经具备基础语言建模能力，但还不会稳定地“按角色回答”。这一章的目标不是再教模型世界知识，而是用监督信号明确告诉模型：哪些 token 属于用户输入，哪些 token 才是需要认真学习的助手回复。</p>
+        <p class="mt-4">换句话说，SFT 的重点不是“让模型看见更多对话”，而是“让模型只在回答位置上被优化”。这正是 Chapter08 和很多泛泛而谈 SFT 教程最大的区别：它把训练目标、mask 构造和评测结果都串成了一条完整工程链路。</p>
     </div>
 
     <div class="card">
-        <h2>什么时候需要 SFT？</h2>
-        <p>Hugging Face 课程的建议是：先评估提示工程是否足够，只有当提示无法满足需求时再进入 SFT，因为它需要额外的算力和工程投入。</p>
-        <ul class="list-disc pl-6 mt-4 space-y-2">
-            <li><strong>格式强约束</strong>：需要稳定输出 JSON、表格、固定模板或多段结构</li>
-            <li><strong>领域适配</strong>：需要术语、风格和规则与行业场景一致</li>
-            <li><strong>一致性需求</strong>：提示难以复现或难以维护的复杂行为</li>
-        </ul>
-    </div>
-
-    <div class="card">
-        <h2>训练目标与损失</h2>
-        <p>SFT 通常沿用因果语言建模目标（预测下一个 token），并以交叉熵损失最大化目标响应的似然。</p>
-        <div class="mt-4 bg-slate-100 rounded-xl p-4 text-center" set:html={String.raw`$$\mathcal{L}_{SFT} = -\sum_{i=1}^{N} \sum_{t=1}^{T_i} \log p_\theta(y_t^i \mid y_{\lt t}^i, x^i)$$`}></div>
-        <p class="mt-4 text-sm text-gray-600">其中：$x^i$ 是输入提示，$y^i$ 是目标响应，$T_i$ 是样本长度，$\\theta$ 为模型参数。</p>
-    </div>
-
-    <div class="card">
-        <h2>数据结构与格式</h2>
-        <p>Unsloth 文档对常见 SFT 数据格式做了区分：单轮指令（Alpaca）、多轮对话（ShareGPT），以及通用的 ChatML 结构。格式差异主要体现在角色标记与消息结构。</p>
-        <ul class="list-disc pl-6 mt-4 space-y-2">
-            <li><strong>Alpaca</strong>：instruction / input / output 三列，适用于单轮指令任务</li>
-            <li><strong>ShareGPT</strong>：多轮对话，常用 <code>from</code>/<code>value</code> 字段，角色多为 <code>human</code>/<code>gpt</code></li>
-            <li><strong>ChatML</strong>：多轮对话，角色多为 <code>user</code>/<code>assistant</code>，更通用</li>
-        </ul>
-    </div>
-
-    <div class="card">
-        <h2>聊天模板：训练与推理要一致</h2>
-        <p>HF 文档强调：聊天模型仍是“文本续写”，需要用 <code>apply_chat_template</code> 把消息转成训练所需的控制 token。训练时推荐在数据预处理阶段应用模板，并设置 <code>add_generation_prompt=False</code>。</p>
-        <div class="mt-4 bg-slate-100 rounded-xl p-4 text-sm text-slate-700">
-            关键实践：训练与推理使用同一套 chat template，以保持 token 分布一致。
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>流程示意</h2>
-        <div class="grid gap-4 md:grid-cols-5 text-sm">
-            <div class="rounded-xl border border-slate-200 p-3 text-center">预训练模型</div>
-            <div class="rounded-xl border border-slate-200 p-3 text-center">格式化数据</div>
-            <div class="rounded-xl border border-slate-200 p-3 text-center">应用模板</div>
-            <div class="rounded-xl border border-slate-200 p-3 text-center">SFT 训练</div>
-            <div class="rounded-xl border border-slate-200 p-3 text-center">指令模型</div>
-        </div>
-        <p class="mt-4 text-sm text-gray-600">数据格式与模板处理在 SFT 中尤为关键，决定了模型看到的真实 token 分布。</p>
-    </div>
-
-    <div class="card">
-        <h2>HF/TRL 工具链：SFTTrainer</h2>
-        <p>TRL 的 <code>SFTTrainer</code> 是 HF 生态里最常见的 SFT 入口，支持文本字段映射、格式化函数和样本 packing。</p>
-        <ul class="list-disc pl-6 mt-4 space-y-2">
-            <li><strong>dataset_text_field</strong>：指定文本字段，自动构造训练样本</li>
-            <li><strong>formatting_func</strong>：多字段拼接为训练文本（常见于 QA 样式）</li>
-            <li><strong>packing</strong>：将多个样本拼到固定长度序列，提升吞吐</li>
-            <li><strong>max_seq_length</strong>：控制最大序列长度与截断行为</li>
-        </ul>
-    </div>
-
-    <div class="card">
-        <h2>Unsloth 视角：LoRA 与 QLoRA</h2>
-        <p>Unsloth 的指南强调：在资源受限时优先考虑 LoRA/QLoRA。LoRA 使用 16-bit 适配器，QLoRA 结合 4-bit 量化，显著降低显存占用。</p>
-        <ul class="list-disc pl-6 mt-4 space-y-2">
-            <li><strong>LoRA</strong>：速度更快、精度略高，但显存开销更大</li>
-            <li><strong>QLoRA</strong>：显存需求显著降低，适合大模型或单卡环境</li>
-        </ul>
-    </div>
-
-    <div class="card">
-        <h2>超参数建议（LoRA/QLoRA）</h2>
-        <p>以下参考 Unsloth 的 LoRA 超参建议，适合作为起点，根据数据规模和目标任务再微调。</p>
-        <div class="mt-4 overflow-x-auto">
+        <h2>Pretrain、Mid-train、SFT 的职责分工</h2>
+        <p>Chapter08 把训练过程拆成三个阶段来看：预训练负责搭知识底座，中间训练（mid-training）让模型逐渐适应问答/对话分布，而 SFT 则进一步把“看到问题后该如何回答”这件事变成明确监督目标。三者都还是自回归语言模型，但优化重点不同。</p>
+        <div class="mt-6 overflow-x-auto">
             <table class="min-w-full text-left text-sm">
                 <thead class="text-slate-600">
                     <tr>
-                        <th class="py-2 pr-4">参数</th>
-                        <th class="py-2 pr-4">作用</th>
-                        <th class="py-2">建议范围</th>
+                        <th class="py-2 pr-4">阶段</th>
+                        <th class="py-2 pr-4">训练数据</th>
+                        <th class="py-2 pr-4">计算损失的位置</th>
+                        <th class="py-2">主要目标</th>
                     </tr>
                 </thead>
                 <tbody class="text-slate-700">
                     <tr class="border-t border-slate-200">
-                        <td class="py-2 pr-4">Learning Rate</td>
-                        <td class="py-2 pr-4">学习率</td>
-                        <td class="py-2">2e-4 起步（LoRA/QLoRA），范围 2e-4 至 5e-6</td>
+                        <td class="py-2 pr-4">Pretrain</td>
+                        <td class="py-2 pr-4">大规模通用文本</td>
+                        <td class="py-2 pr-4">全部 token</td>
+                        <td class="py-2">学习语言统计规律与知识</td>
                     </tr>
                     <tr class="border-t border-slate-200">
-                        <td class="py-2 pr-4">LoRA Rank (r)</td>
-                        <td class="py-2 pr-4">适配器容量</td>
-                        <td class="py-2">16 或 32</td>
+                        <td class="py-2 pr-4">Mid-train</td>
+                        <td class="py-2 pr-4">问答 / 对话 / 推理混合数据</td>
+                        <td class="py-2 pr-4">全部 token</td>
+                        <td class="py-2">适应对话形态，缓冲分布切换</td>
                     </tr>
                     <tr class="border-t border-slate-200">
-                        <td class="py-2 pr-4">LoRA Alpha</td>
-                        <td class="py-2 pr-4">缩放因子</td>
-                        <td class="py-2">r 或 2r</td>
+                        <td class="py-2 pr-4">SFT</td>
+                        <td class="py-2 pr-4">带角色标记的高质量监督数据</td>
+                        <td class="py-2 pr-4">仅 assistant token</td>
+                        <td class="py-2">学习指令跟随和回答行为</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="mt-4 text-sm text-gray-600">最值得记住的一点：mid-training 仍然是“建模整段对话文本”，SFT 则是“看完整上下文，只对助手回复负责”。</p>
+    </div>
+
+    <div class="card">
+        <h2>SFT 的核心目标：只学习回答部分</h2>
+        <p>Chapter08 给出的实现非常直接：模型依然接收完整上下文，但损失函数只在助手回复的位置生效。用户提问部分会被保留下来作为条件上下文，却不会成为优化目标。这意味着模型学到的是“如何根据用户输入回答”，而不是“如何复写用户输入”。</p>
+        <div class="mt-4 bg-slate-100 rounded-xl p-4 text-center" set:html={String.raw`$$\mathcal{L}_{SFT} = -\sum_{t=1}^{T} m_t \log p_\theta(x_t \mid x_{\lt t}),\quad m_t \in \{0,1\}$$`}></div>
+        <p class="mt-4 text-sm text-gray-600">其中 <code>m_t = 1</code> 表示第 <code>t</code> 个目标 token 属于助手回复，<code>m_t = 0</code> 表示该位置来自用户或其他不需要计入损失的上下文。</p>
+        <div class="mt-4 bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-700">
+            一个特别实用的理解方式：<strong>模型看见用户问题，但只为自己的回答负责</strong>。这就是 SFT 在工程上和普通 next-token 训练最重要的分水岭。
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>数据是如何变成训练样本的？</h2>
+        <p>这一章的代码把一条对话样本拆成两个关键对象：一个是完整 token 序列 <code>ids</code>，另一个是与之对齐的角色掩码 <code>mask</code>。其中 <code>mask</code> 用来标记当前位置属于用户还是助手。随后再通过自回归训练常见的“左移一位”方式构造输入与目标。</p>
+        <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <p><code>inputs = ids[:-1]</code></p>
+            <p><code>targets = ids[1:]</code></p>
+            <p><code>targets[mask[1:] == 0] = -1</code></p>
+        </div>
+        <p class="mt-4">这里的 <code>-1</code> 对应交叉熵中的 <code>ignore_index</code>。因此用户 token 虽然存在于序列里，却不会产生梯度；真正驱动参数更新的，只有助手回复对应的目标 token。</p>
+    </div>
+
+    <div class="card">
+        <h2>为什么不直接从预训练跳到 SFT？</h2>
+        <p>Chapter08 很强调 mid-training 的“过渡层”作用。因为预训练语料往往是网页、书籍、代码等自然文本，分布和“用户—助手”对话差异很大。如果直接切到 SFT，模型需要同时适应对话格式和回答目标，训练会更陡峭，也更容易出现风格突变。</p>
+        <p class="mt-4">mid-training 的缓冲价值在于：它依旧对全 token 做语言建模，但数据已经更像问答和聊天。这样模型先学会“对话长什么样”，接着 SFT 再进一步让模型知道“只有助手部分才要认真学”。这是一种把分布迁移和目标迁移拆开的工程策略。</p>
+    </div>
+
+    <div class="card">
+        <h2>多任务混合：防止模型只会聊天口吻</h2>
+        <p>Chapter08 并没有把 SFT 理解成纯聊天微调，而是通过 <code>TaskMixture</code> 混合多种任务数据，包括对话、推理、数学和拼写类任务。这样做的原因很务实：如果只喂聊天数据，模型可能会更像助手，但同时丢掉原本的知识、推理和算术能力。</p>
+        <ul class="list-disc pl-6 mt-4 space-y-2">
+            <li><strong>对话数据</strong>：塑造角色一致性、格式感和交互风格</li>
+            <li><strong>ARC / MMLU 类知识任务</strong>：避免基础知识能力快速回退</li>
+            <li><strong>GSM8K 类数学任务</strong>：保持分步推理和算术能力</li>
+            <li><strong>Spelling / identity 类任务</strong>：增强拼写、角色身份和基础稳态行为</li>
+        </ul>
+        <p class="mt-4 text-sm text-gray-600">这背后的关键词是“灾难遗忘”：SFT 不只是让模型更会聊天，也是在聊天能力与通用能力之间找平衡。</p>
+    </div>
+
+    <div class="card">
+        <h2>训练流程的工程细节</h2>
+        <p>除了损失掩码，Chapter08 还把不少容易被忽略的工程细节放到了训练脚本里。比如 padding token 会被一并屏蔽，避免填充位污染梯度；优化器会针对 embedding、matrix、unembedding 等参数组设置不同学习率；再配合线性衰减和梯度累积，把有限算力尽可能稳定地用起来。</p>
+        <div class="mt-4 grid gap-4 md:grid-cols-4 text-sm">
+            <div class="rounded-xl border border-slate-200 p-3">
+                <div class="font-semibold text-slate-800">Masking</div>
+                <p class="mt-2 text-slate-600">屏蔽用户 token 与 padding，只保留 assistant 监督信号。</p>
+            </div>
+            <div class="rounded-xl border border-slate-200 p-3">
+                <div class="font-semibold text-slate-800">Param Groups</div>
+                <p class="mt-2 text-slate-600">不同参数组使用不同学习率，降低训练不稳定性。</p>
+            </div>
+            <div class="rounded-xl border border-slate-200 p-3">
+                <div class="font-semibold text-slate-800">Scheduler</div>
+                <p class="mt-2 text-slate-600">线性衰减帮助模型在后期更细致地收敛。</p>
+            </div>
+            <div class="rounded-xl border border-slate-200 p-3">
+                <div class="font-semibold text-slate-800">Grad Accumulation</div>
+                <p class="mt-2 text-slate-600">用更小显存模拟更大的有效 batch。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>从代码角度理解训练链路</h2>
+        <div class="grid gap-4 md:grid-cols-5 text-sm">
+            <div class="rounded-xl border border-slate-200 p-3 text-center">构造对话样本</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">生成 <code>ids</code> / <code>mask</code></div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">左移构造 <code>inputs</code> / <code>targets</code></div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">用 <code>ignore_index</code> 屏蔽非回答位</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">只优化助手回复</div>
+        </div>
+        <p class="mt-4 text-sm text-gray-600">这条链路看起来简单，却几乎概括了 SFT 的全部本质：上下文完整、监督稀疏、目标明确。</p>
+    </div>
+
+    <div class="card">
+        <h2>Chapter08 的实验结果说明了什么？</h2>
+        <p>这一章最有启发的一点，是它没有把 SFT 的效果简单描述成“指标全面提升”。相反，实验展示出一种更真实的现象：聊天能力、拼写能力和某些助手行为明显增强，但部分知识与推理类指标可能小幅回落。这恰好说明 SFT 是一种带有行为偏置的训练阶段，而不是万能增强器。</p>
+        <ul class="list-disc pl-6 mt-4 space-y-2">
+            <li><strong>聊天 / 拼写提升明显</strong>：模型更像一个可交流的助手，而不只是文本续写器</li>
+            <li><strong>数学 / 代码略有改善</strong>：说明多任务混合仍然保留了部分推理信号</li>
+            <li><strong>知识指标可能回落</strong>：行为对齐会挤占一部分通用建模能力</li>
+            <li><strong>验证损失下降</strong>：证明目标函数本身收敛，但不等于所有 benchmark 全线增长</li>
+        </ul>
+        <p class="mt-4">因此读这章时最重要的收获之一是：评估 SFT 不能只看单一分数，而要看“模型是否更符合你的使用场景”。如果目标是对话助手，行为变得更稳，往往比某个知识 benchmark 多 1 分更重要。</p>
+    </div>
+
+    <div class="card">
+        <h2>对 SFT 最值得带走的 4 个结论</h2>
+        <ol class="list-decimal pl-6 space-y-3">
+            <li><strong>SFT 仍然是语言模型训练</strong>：输入和输出依然遵循 next-token prediction，只是损失位置做了选择性屏蔽。</li>
+            <li><strong>目标掩码比模板更关键</strong>：真正决定 SFT 行为的不是“长得像对话”，而是“哪些 token 被算损失”。</li>
+            <li><strong>多任务混合是必要补偿</strong>：只做聊天微调很容易把模型往单一风格推得过头。</li>
+            <li><strong>评估必须结合场景解释</strong>：聊天能力上升伴随部分基准回落，是这类训练的常见现实，而不是异常。</li>
+        </ol>
+    </div>
+
+    <div class="card">
+        <h2>如果自己实现一个最小版 SFT，需要抓住什么？</h2>
+        <p>如果把 Chapter08 压缩成最小实现 checklist，关键不是先上复杂框架，而是先确认四件事：一是对话序列里能不能正确区分 user / assistant；二是目标 token 是否完成了正确左移；三是非回答位置是否都被可靠屏蔽；四是评估时是否分别观察聊天能力和通用能力。只要这四件事做对，SFT 的主干就已经成立。</p>
+        <div class="mt-4 overflow-x-auto">
+            <table class="min-w-full text-left text-sm">
+                <thead class="text-slate-600">
+                    <tr>
+                        <th class="py-2 pr-4">检查项</th>
+                        <th class="py-2 pr-4">为什么重要</th>
+                        <th class="py-2">常见错误</th>
+                    </tr>
+                </thead>
+                <tbody class="text-slate-700">
+                    <tr class="border-t border-slate-200">
+                        <td class="py-2 pr-4">角色 mask</td>
+                        <td class="py-2 pr-4">决定谁参与监督</td>
+                        <td class="py-2">把用户 token 也算进损失</td>
                     </tr>
                     <tr class="border-t border-slate-200">
-                        <td class="py-2 pr-4">LoRA Dropout</td>
-                        <td class="py-2 pr-4">正则化</td>
-                        <td class="py-2">0 至 0.1</td>
+                        <td class="py-2 pr-4">targets 左移</td>
+                        <td class="py-2 pr-4">保证因果语言建模成立</td>
+                        <td class="py-2">输入输出未对齐，损失无意义</td>
                     </tr>
                     <tr class="border-t border-slate-200">
-                        <td class="py-2 pr-4">Weight Decay</td>
-                        <td class="py-2 pr-4">防止过拟合</td>
-                        <td class="py-2">0.01 至 0.1</td>
+                        <td class="py-2 pr-4">padding 屏蔽</td>
+                        <td class="py-2 pr-4">避免无效 token 干扰梯度</td>
+                        <td class="py-2">模型学到 padding 模式</td>
                     </tr>
                     <tr class="border-t border-slate-200">
-                        <td class="py-2 pr-4">Warmup Steps</td>
-                        <td class="py-2 pr-4">学习率预热</td>
-                        <td class="py-2">总步数的 5% 至 10%</td>
-                    </tr>
-                    <tr class="border-t border-slate-200">
-                        <td class="py-2 pr-4">Target Modules</td>
-                        <td class="py-2 pr-4">注入 LoRA 的层</td>
-                        <td class="py-2">q/k/v/o + gate/up/down</td>
+                        <td class="py-2 pr-4">多维评估</td>
+                        <td class="py-2 pr-4">观察行为与能力的 trade-off</td>
+                        <td class="py-2">只看聊天样例或只看单个 benchmark</td>
                     </tr>
                 </tbody>
             </table>
@@ -147,34 +200,16 @@ export const meta = {
     </div>
 
     <div class="card">
-        <h2>常见问题与诊断</h2>
-        <ul class="list-disc pl-6 space-y-2">
-            <li><strong>格式不一致</strong>：训练时未应用 chat template，导致推理时 token 分布不一致</li>
-            <li><strong>数据混用</strong>：Alpaca/ShareGPT/ChatML 未统一映射，训练样本结构混乱</li>
-            <li><strong>packing 误用</strong>：packing 改变了样本边界，需要明确序列截断策略</li>
-        </ul>
-    </div>
-
-    <div class="card">
-        <h2>最小可行流程（Checklist）</h2>
-        <ol class="list-decimal pl-6 space-y-3">
-            <li>确认提示工程是否足够，不足再做 SFT</li>
-            <li>选定数据格式并统一映射（Alpaca/ShareGPT/ChatML）</li>
-            <li>用正确 chat template 预处理训练数据，训练时关闭 <code>add_generation_prompt</code></li>
-            <li>选择 LoRA 或 QLoRA 并评估显存预算</li>
-            <li>配置 SFTTrainer 的字段、packing 与序列长度</li>
-        </ol>
+        <h2>和常见 SFT 教程相比，这一章的价值在哪？</h2>
+        <p>很多 SFT 教程会集中在框架 API、数据模板或 LoRA 参数上，而 Chapter08 更像一篇“从训练目标倒推工程实现”的实战记录。它不是只告诉你“用 SFTTrainer 就行”，而是把 mid-training、target masking、多任务混合、实验波动和评估解释放到一起，帮助你真正理解模型为什么会变成现在这样。</p>
+        <p class="mt-4">这也解释了为什么这份笔记更适合作为“理解 SFT 本质”的入口：当你以后在 Hugging Face、TRL、Unsloth 或自研训练框架里做 SFT 时，真正不变的不是某个工具函数，而是这些更底层的原则。</p>
     </div>
 
     <div class="card">
         <h2>参考资料</h2>
         <ul class="list-disc pl-6 space-y-2">
-            <li><a class="text-emerald-700" href="https://huggingface.co/learn/nlp-course/chapter11/3">Hugging Face Course: Supervised Fine-Tuning</a></li>
-            <li><a class="text-emerald-700" href="https://huggingface.co/docs/transformers/main/chat_template_basics">HF Transformers: Chat Template Basics</a></li>
-            <li><a class="text-emerald-700" href="https://huggingface.co/docs/trl/sft_trainer">TRL: SFTTrainer Docs</a></li>
-            <li><a class="text-emerald-700" href="https://docs.unsloth.ai/basics/datasets-guide">Unsloth: Datasets Guide</a></li>
-            <li><a class="text-emerald-700" href="https://docs.unsloth.ai/get-started/fine-tuning-llms-guide">Unsloth: Fine-tuning LLMs Guide</a></li>
-            <li><a class="text-emerald-700" href="https://docs.unsloth.ai/get-started/fine-tuning-guide/lora-hyperparameters-guide">Unsloth: LoRA Hyperparameters Guide</a></li>
+            <li><a class="text-emerald-700" href="https://github.com/datawhalechina/code-your-own-llm/blob/main/docs/Chapter08/SFT.md">code-your-own-llm Chapter08: Supervised Fine-Tuning</a></li>
+            <li><a class="text-emerald-700" href="https://github.com/datawhalechina/code-your-own-llm">datawhalechina/code-your-own-llm</a></li>
         </ul>
     </div>
 </BaseLayout>
