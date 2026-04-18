@@ -1,0 +1,541 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+
+export const meta = {
+    number: '22',
+    title: 'Unsloth 强化学习指南',
+    description: '用中文梳理 Unsloth RL Guide：从 RL、PPO、GRPO、RLVR 到奖励函数设计与工程实践',
+    tags: ['RL', 'GRPO', 'Unsloth'],
+    readTime: '28 min'
+};
+---
+
+<BaseLayout
+    title="Unsloth 强化学习指南：从 RL、PPO、GRPO 到奖励函数设计 | LLM Note"
+    description="Unsloth Reinforcement Learning Guide 中文整理，覆盖 RL、RLHF、PPO、GRPO、RLVR、奖励函数、vLLM 与工程实践。"
+>
+    <main>
+        <header>
+            <h1 class="gradient-text">Unsloth 强化学习指南：从 RL、PPO、GRPO 到奖励函数设计</h1>
+            <p>基于 Unsloth 官方 RL Guide 的中文整理版，保留关键配图，并补充工程视角、落地步骤与常见坑位。</p>
+            <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">
+                添加时间 {createdAt} · 来源 Unsloth Documentation
+            </p>
+        </header>
+
+        <div class="toc">
+            <h2>目录</h2>
+            <ul>
+                <li><a href="#overview">1. 这篇指南解决什么问题</a></li>
+                <li><a href="#rl-basics">2. RL 基础：Environment / Action / Reward</a></li>
+                <li><a href="#evolution">3. 从 RLHF、PPO 到 GRPO、RLVR</a></li>
+                <li><a href="#patience">4. “Patience is all you need” 直觉</a></li>
+                <li><a href="#unsloth">5. Unsloth 提供了什么</a></li>
+                <li><a href="#training">6. GRPO 训练流程与数据单位</a></li>
+                <li><a href="#reward">7. Reward Function 与 Verifier 设计</a></li>
+                <li><a href="#system">8. vLLM、显存与部署建议</a></li>
+                <li><a href="#workflow">9. 实操清单与常见失败原因</a></li>
+                <li><a href="#figures">10. 原始图片总览</a></li>
+            </ul>
+        </div>
+
+        <div class="chapter" id="overview">
+            <div class="chapter-header">
+                <h2>1. 这篇指南解决什么问题</h2>
+            </div>
+            <p>
+                这份 Unsloth 文档的核心目标，不是只解释“强化学习是什么”，而是回答一个更工程化的问题：<strong>如果我已经有一个能基本听懂指令的开源大模型，怎样用尽量少的显存，把它继续训练成更会推理、更会自我修正的模型？</strong>
+            </p>
+            <p>
+                围绕这个目标，原文重点讲了 4 个层次：第一，RL 在语言模型里的基本映射；第二，RLHF / PPO / GRPO / RLVR 之间的关系；第三，奖励函数与 verifier 应该怎样设计；第四，怎样在 Unsloth 的工程栈里把这件事跑起来。
+            </p>
+            <div class="card">
+                <h3>这篇笔记适合谁</h3>
+                <ul>
+                    <li>已经了解 SFT，但还没真正上手 RL / GRPO 的同学。</li>
+                    <li>想做数学、代码、规则型业务任务强化学习的人。</li>
+                    <li>关注低显存场景，希望在单卡或消费级 GPU 上试验 reasoning 训练的人。</li>
+                </ul>
+            </div>
+            <div class="note-box">
+                <h3>我补充的重点</h3>
+                <p>原文更偏“总览 + 实用提示”。本页额外补了 3 类内容：<strong>算法对比表</strong>、<strong>奖励设计模板</strong>、<strong>从数据到上线的实践清单</strong>，方便直接转成项目实施步骤。</p>
+            </div>
+        </div>
+
+        <div class="chapter" id="rl-basics">
+            <div class="chapter-header">
+                <h2>2. RL 基础：Environment / Action / Reward</h2>
+            </div>
+            <p>
+                在大模型场景里，RL 可以被压缩成一句话：<strong>让模型更常产出“好结果”，更少产出“坏结果”。</strong> 这里的“好坏”不是人主观感觉，而是通过 reward 或 verifier 把输出结果变成一个可优化的信号。
+            </p>
+            <div class="card">
+                <h3>LLM 版本的 RL 四元组</h3>
+                <ul>
+                    <li><strong>Environment：</strong>问题、任务场景或上下文。</li>
+                    <li><strong>Action：</strong>模型生成的回答、代码、步骤或调用序列。</li>
+                    <li><strong>Reward：</strong>对这次输出好坏的评分或惩罚。</li>
+                    <li><strong>Policy：</strong>当前正在被训练和更新的模型。</li>
+                </ul>
+            </div>
+
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/rl-game.png" alt="Pacman 场景解释环境、动作和奖励" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-3 text-sm text-gray-600">图 1：用游戏世界解释 environment、action 和 reward 的关系。</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/math-rl.png" alt="数学题场景解释 reward function" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-3 text-sm text-gray-600">图 2：对“2 + 2”这类问题，可以把奖励拆成层级化规则，而不是只有对/错二元判断。</figcaption>
+                </figure>
+            </div>
+
+            <div class="card">
+                <h3>为什么“2 + 2 = 4”这个例子重要</h3>
+                <p>
+                    原文用这个例子说明：reward 不一定只有最终是否等于 4。你完全可以设计一个更细粒度的奖励——输出的是数字，比输出字母更好；输出 3 比输出乱字符串更接近目标；输出 4 则最好。这个思路非常关键，因为绝大多数真实业务都不是“只有最终标准答案”这么简单。
+                </p>
+                <p>
+                    换句话说，<span class="highlight">强化学习真正难的地方不在“让模型继续训练”，而在“你是否能把业务目标拆成可评分的小规则”</span>。这也是后面 RLVR 与 rubric 设计的基础。
+                </p>
+            </div>
+        </div>
+
+        <div class="chapter" id="evolution">
+            <div class="chapter-header">
+                <h2>3. 从 RLHF、PPO 到 GRPO、RLVR</h2>
+            </div>
+            <p>
+                如果只记一件事：<strong>PPO 是经典稳定优化框架，GRPO 是更适合 reasoning 训练的轻量化变体，而 RLVR 是“奖励可验证”这件事本身。</strong> 它们不是完全替代关系，而是不同层的概念。
+            </p>
+
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/rlhf.png" alt="RLHF 示意图" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-3 text-sm text-gray-600">图 3：RLHF 把“人类偏好”转成可训练的反馈信号。</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/ppo.png" alt="PPO 示意图" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-3 text-sm text-gray-600">图 4：PPO 通过 clip 与 KL 控制策略不要一次更新过猛。</figcaption>
+                </figure>
+            </div>
+
+            <figure class="card overflow-hidden">
+                <img src="/notes/unsloth-rl-guide/ppo-formula.png" alt="PPO 公式图" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">图 5：PPO 的 clipped objective 通过裁剪比率限制策略偏移。</figcaption>
+            </figure>
+
+            <div class="math-block" set:html={String.raw`$$L^{CLIP}(\theta)=\mathbb{E}_t\left[\min\left(r_t(\theta)\hat A_t,\operatorname{clip}(r_t(\theta),1-\epsilon,1+\epsilon)\hat A_t\right)\right]$$`}></div>
+
+            <div class="note-box">
+                <h3>PPO 在 LLM 对齐里的直觉</h3>
+                <p>
+                    你可以把 PPO 理解成“允许模型朝奖励更高的方向移动，但不允许一下子变成另一个模型”。这也是为什么它长期被用在 RLHF：既要优化偏好分，又不能把原来的语言能力和稳定性全部破坏掉。
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/grpo-rlvr.png" alt="GRPO 与 RLVR 的关系示意图" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-3 text-sm text-gray-600">图 6：GRPO 更适合配合可验证奖励使用，因此成为 reasoning 模型训练中的主流路线。</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/group-relative.png" alt="Group Relative 概念图" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-3 text-sm text-gray-600">图 7：Group Relative 的核心是对同一问题采样多条回答，再做相对比较。</figcaption>
+                </figure>
+            </div>
+
+            <figure class="card overflow-hidden">
+                <img src="/notes/unsloth-rl-guide/statistics.png" alt="GRPO advantage 统计图" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">图 8：GRPO 使用同组样本的均值与标准差计算 advantage，替代单独的 value model。</figcaption>
+            </figure>
+
+            <div class="math-block" set:html={String.raw`$$A_i=\frac{r_i-\mu(r)}{\sigma(r)+\varepsilon}$$`}></div>
+
+            <div class="card">
+                <h3>PPO、GRPO、RLVR 的区别</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-left text-sm text-gray-600">
+                        <thead>
+                            <tr class="border-b border-white/70 text-slate-700">
+                                <th class="px-3 py-2">概念</th>
+                                <th class="px-3 py-2">主要作用</th>
+                                <th class="px-3 py-2">是否需要额外模型</th>
+                                <th class="px-3 py-2">最适合场景</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border-b border-white/50">
+                                <td class="px-3 py-2 font-semibold text-slate-700">RLHF</td>
+                                <td class="px-3 py-2">用人类偏好优化输出</td>
+                                <td class="px-3 py-2">常见需要 reward model</td>
+                                <td class="px-3 py-2">通用对齐、对话质量</td>
+                            </tr>
+                            <tr class="border-b border-white/50">
+                                <td class="px-3 py-2 font-semibold text-slate-700">PPO</td>
+                                <td class="px-3 py-2">稳定地更新策略</td>
+                                <td class="px-3 py-2">通常有 value model，常配 reward model</td>
+                                <td class="px-3 py-2">经典 RLHF 流程</td>
+                            </tr>
+                            <tr class="border-b border-white/50">
+                                <td class="px-3 py-2 font-semibold text-slate-700">GRPO</td>
+                                <td class="px-3 py-2">用组内相对比较代替 value model</td>
+                                <td class="px-3 py-2">可以不需要 value model / reward model</td>
+                                <td class="px-3 py-2">reasoning、数学、代码</td>
+                            </tr>
+                            <tr>
+                                <td class="px-3 py-2 font-semibold text-slate-700">RLVR</td>
+                                <td class="px-3 py-2">让奖励可自动验证</td>
+                                <td class="px-3 py-2">不一定需要额外模型</td>
+                                <td class="px-3 py-2">有标准答案或规则检查的任务</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="quote-block">
+                <p><strong>一句话总结：</strong>GRPO 是优化方法，RLVR 是奖励形态。两者组合在一起，才构成今天很多 reasoning 模型训练的主流方案。</p>
+            </div>
+        </div>
+
+        <div class="chapter" id="patience">
+            <div class="chapter-header">
+                <h2>4. “Patience is all you need” 直觉</h2>
+            </div>
+            <p>
+                原文里一个非常有启发性的说法是：强化学习本质上像一个“等待正确答案偶然出现”的过程。只要正确答案的概率<strong>不是 0</strong>，你在足够多次 rollout 之后，迟早会采到它；一旦采到，reward 就能把这个方向放大。
+            </p>
+            <figure class="card overflow-hidden">
+                <img src="/notes/unsloth-rl-guide/luck-is-all-you-need.png" alt="Patience is all you need 图示" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">图 9：RL 不靠“凭空创造正确答案”，而靠“在已有分布里发现并放大正确方向”。</figcaption>
+            </figure>
+            <div class="note-box">
+                <h3>这条直觉的工程含义</h3>
+                <p>
+                    如果模型从来不可能生成正确模式，强化学习就没有抓手。所以 RL 通常从已经 instruction-tuned 的模型开始，而不是从纯 base model 裸跑。先让模型具备“基本会答”的能力，再用 GRPO / RLVR 把它往“更会推理、更会格式化、更会遵守规则”的方向推。
+                </p>
+            </div>
+            <div class="card">
+                <h3>我建议你用这条规则判断能不能上 RL</h3>
+                <ul>
+                    <li><strong>能：</strong>模型偶尔已经能答对，只是不稳定。</li>
+                    <li><strong>不能：</strong>模型完全不会这类任务，或者奖励根本无法区分优劣。</li>
+                    <li><strong>先做 SFT：</strong>如果基础能力不足，先补 instruction / format / domain knowledge。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter" id="unsloth">
+            <div class="chapter-header">
+                <h2>5. Unsloth 提供了什么</h2>
+            </div>
+            <p>
+                Unsloth 对 RL 的价值，不只是“也支持 GRPO”，而是它把 RL 训练的显存门槛压到了更现实的范围：原文给出的说法是，15GB VRAM 可以训练到 17B 左右模型的 reasoning 版本，5GB VRAM 也能试 1.5B 及以下模型。
+            </p>
+            <div class="card">
+                <h3>官方强调的能力边界</h3>
+                <ul>
+                    <li>支持文本 RL，也支持视觉 / 多模态 RL。</li>
+                    <li>支持 LoRA、QLoRA，后续又扩展到 FP8 RL。</li>
+                    <li>支持长上下文 RL，且提供 vLLM 联动。</li>
+                    <li>重点不是继续蒸馏 R1，而是把普通模型改造成 reasoning model。</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3>配套资源</h3>
+                <p>
+                    文档列出了大量 Colab notebook，覆盖 Qwen3、Phi-4、Llama 3.1、Gemma 3/4、Qwen3-VL、gpt-oss 等模型。这意味着它不只是一个概念页，而是把“不同模型怎么起步”这件事做成了可抄作业的入口。
+                </p>
+            </div>
+            <figure class="card overflow-hidden">
+                <img src="/notes/unsloth-rl-guide/prompt-only-example.png" alt="GRPO 前后输出对比" class="w-full rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">图 10：即便只有 100 step，GRPO 也可能让模型开始出现 thinking token 和更合理的答题轨迹。</figcaption>
+            </figure>
+        </div>
+
+        <div class="chapter" id="training">
+            <div class="chapter-header">
+                <h2>6. GRPO 训练流程与数据单位</h2>
+            </div>
+            <p>
+                原文对“数据格式”没有给出特别复杂的 schema，反而把重点放在<strong>训练单位</strong>上：一条 question-answer pair 可以视作一步训练样本；300 行数据就是 300 step，训练 3 个 epoch 就大致是 900 step。
+            </p>
+            <div class="card">
+                <h3>GRPO 的最小训练闭环</h3>
+                <ol>
+                    <li>给模型一个问题或指令。</li>
+                    <li>对同一问题生成多条回答，例如 8 条。</li>
+                    <li>用 reward functions / verifier 分别打分。</li>
+                    <li>按组内相对表现计算 advantage。</li>
+                    <li>更新模型权重。</li>
+                </ol>
+            </div>
+            <div class="note-box">
+                <h3>原文给出的经验值</h3>
+                <p>
+                    至少先观察 300 step；想看到更稳定的 reward 上升，很多任务需要 1000 step 甚至更长。数据行数建议至少 500 条，当然更少也能试，但方差会很大。
+                </p>
+            </div>
+            <figure class="card overflow-hidden">
+                <img src="/notes/unsloth-rl-guide/reward-curve.png" alt="Reward 随 step 增长曲线" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">图 11：reward 往往不会一开始就上升，通常要先经过一段“看起来没学会”的阶段。</figcaption>
+            </figure>
+            <figure class="card overflow-hidden">
+                <img src="/notes/unsloth-rl-guide/grpo-logs.png" alt="GRPO 训练日志界面" class="w-full rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">图 12：Unsloth 直接内置了 reward 与 loss 追踪，方便观察每个 reward function 的贡献。</figcaption>
+            </figure>
+            <div class="card">
+                <h3>我建议的起步配置思路</h3>
+                <ul>
+                    <li><strong>先小样本通路打通：</strong>10~50 条数据检查 reward 是否工作。</li>
+                    <li><strong>再扩到稳定规模：</strong>500+ 条、300+ step，看 reward 曲线是否真正抬头。</li>
+                    <li><strong>先保守 rollout 数：</strong>每题 4~8 个生成，确认显存与耗时，再增加到 8~16。</li>
+                    <li><strong>优先保证 verifier 正确：</strong>比一开始狂调超参更重要。</li>
+                </ul>
+            </div>
+            <div class="note-box">
+                <h3>不支持 vLLM 的模型怎么办</h3>
+                <p>原文给出的办法很直接：加载模型时设置 <code>fast_inference=False</code>，依然可以继续做 RL，只是吞吐和效率不如 vLLM 路线。</p>
+            </div>
+        </div>
+
+        <div class="chapter" id="reward">
+            <div class="chapter-header">
+                <h2>7. Reward Function 与 Verifier 设计</h2>
+            </div>
+            <p>
+                这是整篇文档最重要的部分。原文明确区分了两个概念：<strong>Verifier 负责判断对不对，Reward Function 负责把判断转成数值。</strong> 在实践里两者经常一起写，但拆开理解会更清楚。
+            </p>
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div class="card">
+                    <h3>Verifier</h3>
+                    <ul>
+                        <li>只负责检查正确性，不一定返回分数。</li>
+                        <li>可以是规则、脚本、单元测试、执行器。</li>
+                        <li>适合判断：数学答案、代码执行、格式约束。</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Reward Function</h3>
+                    <ul>
+                        <li>把结果映射成数值奖励或惩罚。</li>
+                        <li>除了正确性，还能考虑长度、风格、格式、关键词。</li>
+                        <li>可以组合多个小奖励，而不是只给一个总分。</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>原文中的两个奖励设计例子</h3>
+                <ul>
+                    <li><strong>算术题：</strong>先判断是否输出了数字，再判断这个数字是否等于标准答案。</li>
+                    <li><strong>邮件自动化：</strong>关键词、长度、称呼、签名、是否匹配理想回复都可以是独立奖励项。</li>
+                </ul>
+            </div>
+
+            <div class="note-box">
+                <h3>补充：rubric 比单一奖励更重要</h3>
+                <p>
+                    很多团队一上来就想设计一个“总奖励”，结果往往会过于粗糙。更实用的做法是把任务拆成 3~8 个可验证维度：格式是否正确、关键字段是否齐全、推理过程是否包含中间变量、最终答案是否可执行验证、长度是否过长、是否命中禁用词等。最终分数是这些小项的加权和。
+                </p>
+            </div>
+
+            <div class="card">
+                <h3>一个可直接套用的 reward 设计模板</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-left text-sm text-gray-600">
+                        <thead>
+                            <tr class="border-b border-white/70 text-slate-700">
+                                <th class="px-3 py-2">维度</th>
+                                <th class="px-3 py-2">检查方式</th>
+                                <th class="px-3 py-2">建议分值</th>
+                                <th class="px-3 py-2">说明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="border-b border-white/50">
+                                <td class="px-3 py-2 font-semibold text-slate-700">格式正确</td>
+                                <td class="px-3 py-2">正则 / JSON 解析 / XML tag 计数</td>
+                                <td class="px-3 py-2">+0.5 ~ +1</td>
+                                <td class="px-3 py-2">先让模型学会输出结构</td>
+                            </tr>
+                            <tr class="border-b border-white/50">
+                                <td class="px-3 py-2 font-semibold text-slate-700">最终答案正确</td>
+                                <td class="px-3 py-2">精确匹配 / 执行验证</td>
+                                <td class="px-3 py-2">+2 ~ +5</td>
+                                <td class="px-3 py-2">通常是主奖励</td>
+                            </tr>
+                            <tr class="border-b border-white/50">
+                                <td class="px-3 py-2 font-semibold text-slate-700">过程接近目标</td>
+                                <td class="px-3 py-2">距离函数 / proximity score</td>
+                                <td class="px-3 py-2">-1 ~ +2</td>
+                                <td class="px-3 py-2">降低稀疏奖励问题</td>
+                            </tr>
+                            <tr>
+                                <td class="px-3 py-2 font-semibold text-slate-700">冗长或违规</td>
+                                <td class="px-3 py-2">长度阈值 / 黑名单规则</td>
+                                <td class="px-3 py-2">-0.5 ~ -3</td>
+                                <td class="px-3 py-2">抑制投机取巧和刷格式</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>原文提到的现成奖励函数</h3>
+                <ul>
+                    <li><code>correctness_reward_func</code>：检查答案是否精确正确。</li>
+                    <li><code>int_reward_func</code>：约束输出为整数。</li>
+                    <li><code>soft_format_reward_func</code>：软性检查结构。</li>
+                    <li><code>strict_format_reward_func</code>：严格检查结构与换行。</li>
+                    <li><code>xmlcount_reward_func</code>：检查标签数量是否正确。</li>
+                </ul>
+            </div>
+
+            <div class="quote-block">
+                <p><strong>实战结论：</strong>如果 reward 设计得差，模型不会“聪明地弥补”，它只会非常努力地优化错误目标。</p>
+            </div>
+        </div>
+
+        <div class="chapter" id="system">
+            <div class="chapter-header">
+                <h2>8. vLLM、显存与部署建议</h2>
+            </div>
+            <p>
+                原文在部署层面的建议很明确：如果模型支持 vLLM，优先走 <code>fast_inference=True</code>；如果不支持，就回退到 <code>fast_inference=False</code>。这并不是语法细节，而是整个吞吐、显存占用和训练体验的关键分水岭。
+            </p>
+            <div class="card">
+                <h3>为什么 vLLM 值得优先考虑</h3>
+                <ul>
+                    <li>吞吐更高，推理更快。</li>
+                    <li>可以一边微调一边做推理。</li>
+                    <li>Unsloth 特别解决了与 vLLM 共用时“双份显存占用”的问题。</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3>显存经验法则</h3>
+                <ul>
+                    <li><strong>QLoRA 4-bit：</strong>模型参数量大致接近你需要准备的 VRAM 量级。</li>
+                    <li><strong>LoRA 16-bit：</strong>至少大约是 4-bit 的 4 倍开销。</li>
+                    <li><strong>上下文越长：</strong>KV Cache 与 logits 开销越高。</li>
+                    <li><strong>每题生成越多：</strong>GRPO 的组内比较成本越高。</li>
+                </ul>
+            </div>
+            <div class="note-box">
+                <h3>20K context 的官方对比</h3>
+                <p>
+                    对 Llama 3.1 8B、每个 prompt 生成 8 条回答的例子，原文给出：Unsloth 约 54.3GB，常规实现约 510.8GB。这里最重要的信息不是具体数字，而是它告诉你 <strong>长上下文 + 多生成数</strong> 才是 GRPO 真正的显存杀手。
+                </p>
+            </div>
+            <div class="card">
+                <h3>部署与训练前的选择顺序</h3>
+                <ol>
+                    <li>先确认模型是否被 vLLM 支持。</li>
+                    <li>确定上下文长度与每题生成数。</li>
+                    <li>按显存预算决定 QLoRA / LoRA / FP8 路线。</li>
+                    <li>预留 verifier 执行时间，不只看模型 forward 速度。</li>
+                </ol>
+            </div>
+        </div>
+
+        <div class="chapter" id="workflow">
+            <div class="chapter-header">
+                <h2>9. 实操清单与常见失败原因</h2>
+            </div>
+            <div class="card">
+                <h3>推荐的最小可行工作流</h3>
+                <ol>
+                    <li><strong>选模型：</strong>优先 instruction-tuned，最好不小于 1.5B。</li>
+                    <li><strong>做 20 条小数据：</strong>先验证 prompt 模板、chat template、verifier 是否通。</li>
+                    <li><strong>写 3~5 个小奖励：</strong>不要一上来只写一个总分。</li>
+                    <li><strong>先跑 100~300 step：</strong>观察 reward 是否开始有区分度。</li>
+                    <li><strong>再扩容到 500+ 条数据：</strong>逐步增加 rollout 数与训练时长。</li>
+                </ol>
+            </div>
+            <div class="card">
+                <h3>文档中高频提到的失败原因</h3>
+                <ul>
+                    <li><strong>训练步数不够：</strong>300 step 前看不出效果很常见。</li>
+                    <li><strong>reward / verifier 无效：</strong>模型在优化假目标。</li>
+                    <li><strong>模型太小：</strong>难以稳定出现 reasoning token。</li>
+                    <li><strong>base model 没 chat template：</strong>连基本对话格式都不稳定。</li>
+                    <li><strong>误以为 RL 会无中生有：</strong>正确答案概率为 0 时不会成功。</li>
+                </ul>
+            </div>
+            <div class="note-box">
+                <h3>我的补充建议</h3>
+                <p>
+                    在工程项目里，最容易被低估的是 <strong>verifier 的执行可靠性</strong>。如果 verifier 本身偶尔超时、偶尔误判、偶尔依赖外部服务抖动，那么 reward 噪声会直接把训练方向带偏。所以正式扩量之前，建议先离线跑一遍 verifier 的稳定性测试。
+                </p>
+            </div>
+            <div class="card">
+                <h3>延伸阅读</h3>
+                <ul>
+                    <li><a href="https://unsloth.ai/docs/get-started/reinforcement-learning-rl-guide" target="_blank" rel="noopener noreferrer">Unsloth Reinforcement Learning (RL) Guide</a></li>
+                    <li><a href="https://unsloth.ai/docs/get-started/reinforcement-learning-rl-guide/tutorial-train-your-own-reasoning-model-with-grpo" target="_blank" rel="noopener noreferrer">Tutorial: Train your own reasoning model with GRPO</a></li>
+                    <li><a href="https://rlhfbook.com/c/11-policy-gradients.html" target="_blank" rel="noopener noreferrer">RLHF Book</a></li>
+                    <li><a href="https://www.youtube.com/watch?v=bAWV_yrqx4w" target="_blank" rel="noopener noreferrer">Yannic Kilcher 的 GRPO 视频</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter" id="figures">
+            <div class="chapter-header">
+                <h2>10. 原始图片总览</h2>
+            </div>
+            <p>下面保留了本次整理中用到的原始文档关键图片，方便快速回看概念脉络。</p>
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/rl-game.png" alt="RL Game" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">环境、动作、奖励</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/math-rl.png" alt="Math RL" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">算术题奖励函数</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/rlhf.png" alt="RLHF" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">RLHF</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/ppo.png" alt="PPO" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">PPO</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/grpo-rlvr.png" alt="GRPO and RLVR" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">GRPO 与 RLVR</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/group-relative.png" alt="Group Relative" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">Group Relative</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/statistics.png" alt="Statistics" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">优势标准化</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/luck-is-all-you-need.png" alt="Luck is all you need" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">Patience / Luck 直觉</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/prompt-only-example.png" alt="Prompt only example" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">GRPO 前后对比</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/unsloth-rl-guide/reward-curve.png" alt="Reward curve" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">Reward 曲线</figcaption>
+                </figure>
+                <figure class="card overflow-hidden md:col-span-2">
+                    <img src="/notes/unsloth-rl-guide/grpo-logs.png" alt="GRPO logs" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">GRPO 训练日志</figcaption>
+                </figure>
+            </div>
+        </div>
+    </main>
+</BaseLayout>
