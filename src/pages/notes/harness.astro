@@ -1,0 +1,206 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+
+export const meta = {
+    number: '23',
+    title: 'Harness',
+    description: '理解 Agent / LLM 系统里的 harness：从任务封装、环境隔离到回归评测',
+    tags: ["Harness", "Agent", "Evaluation", "Workflow"],
+    readTime: '15 min'
+};
+---
+
+<BaseLayout title="Harness：让 Agent 评测可重复、可回归、可对比">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Harness / Agent / Evaluation / Workflow</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Harness：让 Agent 评测可重复、可回归、可对比</h1>
+        <p class="text-xl text-gray-500">不是“跑通一次 demo”，而是把任务、环境、轨迹与判分机制封装成可稳定执行的系统</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt} • 15 min</p>
+    </header>
+
+    <div class="card">
+        <h2>什么是 Harness？</h2>
+        <p>在软件工程里，harness 最早常指一层“测试驱动装置”：它会准备输入、启动被测对象、收集输出并判定结果。在 Agent 与 LLM 场景里，这个词被进一步扩展：它不只是测试脚手架，而是一套把任务、环境、执行器、观测器与评估器串起来的运行框架。你可以把 harness 理解为“可重复实验外壳”——同一类任务在同样约束下被一次又一次执行，从而支持横向比较、回归验证与失败定位。</p>
+        <p class="mt-4">因此，harness 和“写一个 prompt 然后点运行”有本质区别。前者强调输入输出规范、环境隔离、日志留存、评测标准和批量执行；后者更像单次演示，能说明模型似乎会做什么，却很难回答“它稳定吗”“为什么失败”“换模型或改提示之后到底有没有进步”。</p>
+        <div class="mt-6 rounded-2xl border border-white/70 bg-white/80 p-4 text-sm text-gray-600">
+            <p><strong>一句话记忆：</strong>Harness = <span class="highlight">把一次能力展示，变成可以持续复现和比较的实验系统</span>。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>为什么 Agent 特别需要 Harness？</h2>
+        <p>传统模型评测通常只需要数据集、推理接口和答案比对；但 agentic system 会主动调用工具、读写文件、浏览网页、分解子任务、产生中间状态，失败点可能出现在任何一环。你看到的“最终答案错误”，背后可能是计划偏差、工具调用失败、环境污染、上下文丢失、成本超标，或者只是某一步检索拿错了文件。</p>
+        <p class="mt-4">这意味着如果没有 harness，你就只能看到一个模糊结论：这次成功了/失败了。而有了 harness，就能把任务拆成标准化运行：每次都在已知环境中启动代理，记录完整轨迹，产出结构化 artifacts，再由规则或 judge 对结果进行评分。这样你才能真正判断一个 agent 系统是在“会演示”，还是在“可工程化”。</p>
+        <ul class="list-disc pl-6 mt-4 space-y-2">
+            <li><strong>可重复</strong>：同一任务可以多次复跑，观察稳定性而非单次幸运值。</li>
+            <li><strong>可归因</strong>：失败不是黑盒结果，而是可定位到步骤、工具、文件或判分条件。</li>
+            <li><strong>可比较</strong>：不同模型、prompt、tooling、memory 策略可以在同一套基线上对比。</li>
+            <li><strong>可回归</strong>：新版本上线前能验证是否修复旧问题，或是否引入新的退化。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>Harness、Benchmark、Workflow、Framework 的区别</h2>
+        <p>这几个词在 AI 圈里经常混用，但实际关注点不同。benchmark 更偏“题库与指标”，workflow 更偏“执行步骤编排”，framework 更偏“开发工具箱”，而 harness 是把这些元素落地成可运行、可观测、可判分的一套执行壳层。</p>
+        <div class="mt-6 overflow-x-auto">
+            <table class="min-w-full text-left text-sm">
+                <thead class="text-slate-600">
+                    <tr>
+                        <th class="py-2 pr-4">概念</th>
+                        <th class="py-2 pr-4">主要回答的问题</th>
+                        <th class="py-2">更关注什么</th>
+                    </tr>
+                </thead>
+                <tbody class="text-slate-700">
+                    <tr class="border-t border-slate-200">
+                        <td class="py-2 pr-4">Benchmark</td>
+                        <td class="py-2 pr-4">测哪些任务？</td>
+                        <td class="py-2">数据集、指标、任务覆盖面</td>
+                    </tr>
+                    <tr class="border-t border-slate-200">
+                        <td class="py-2 pr-4">Workflow</td>
+                        <td class="py-2 pr-4">任务怎么被分步骤执行？</td>
+                        <td class="py-2">节点编排、控制流、分支逻辑</td>
+                    </tr>
+                    <tr class="border-t border-slate-200">
+                        <td class="py-2 pr-4">Framework</td>
+                        <td class="py-2 pr-4">开发时有哪些抽象和 API？</td>
+                        <td class="py-2">工具接口、状态管理、可扩展性</td>
+                    </tr>
+                    <tr class="border-t border-slate-200">
+                        <td class="py-2 pr-4">Harness</td>
+                        <td class="py-2 pr-4">系统如何被稳定运行和评测？</td>
+                        <td class="py-2">环境隔离、运行控制、轨迹采集、回归验证</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="mt-4 text-sm text-gray-600">一句更实用的区分：benchmark 决定“考什么”，workflow 决定“怎么做”，而 harness 决定“怎么稳定地反复跑、如何记录、如何判分”。</p>
+    </div>
+
+    <div class="card">
+        <h2>一个典型 Harness 由哪些部分组成？</h2>
+        <p>无论是代码代理、浏览器代理还是多模态代理，一个最小可用的 harness 通常都由六部分组成：任务规范、隔离环境、执行器、观测器、评估器和结果仓库。它们分别解决“跑什么”“在哪跑”“谁来跑”“看到了什么”“怎么判”“结果存哪儿”的问题。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 920 300" role="img" aria-label="Harness architecture" class="w-full">
+                <rect x="24" y="24" width="872" height="252" rx="20" fill="#f8fafc" stroke="#e2e8f0" />
+                <rect x="50" y="70" width="130" height="52" rx="12" fill="#e0f2fe" stroke="#7dd3fc" />
+                <rect x="205" y="70" width="130" height="52" rx="12" fill="#e0f2fe" stroke="#7dd3fc" />
+                <rect x="360" y="70" width="130" height="52" rx="12" fill="#e0f2fe" stroke="#7dd3fc" />
+                <rect x="515" y="70" width="130" height="52" rx="12" fill="#dcfce7" stroke="#86efac" />
+                <rect x="670" y="70" width="130" height="52" rx="12" fill="#fef3c7" stroke="#fcd34d" />
+                <text x="115" y="102" text-anchor="middle" font-size="12" fill="#0f172a">Task Spec</text>
+                <text x="270" y="102" text-anchor="middle" font-size="12" fill="#0f172a">Sandbox</text>
+                <text x="425" y="102" text-anchor="middle" font-size="12" fill="#0f172a">Agent Runner</text>
+                <text x="580" y="102" text-anchor="middle" font-size="12" fill="#14532d">Observer</text>
+                <text x="735" y="102" text-anchor="middle" font-size="12" fill="#92400e">Evaluator</text>
+
+                <rect x="205" y="180" width="150" height="54" rx="12" fill="#fee2e2" stroke="#fca5a5" />
+                <rect x="390" y="180" width="150" height="54" rx="12" fill="#fee2e2" stroke="#fca5a5" />
+                <rect x="575" y="180" width="150" height="54" rx="12" fill="#ede9fe" stroke="#c4b5fd" />
+                <text x="280" y="212" text-anchor="middle" font-size="12" fill="#7f1d1d">Artifacts</text>
+                <text x="465" y="212" text-anchor="middle" font-size="12" fill="#7f1d1d">Trace / Logs</text>
+                <text x="650" y="212" text-anchor="middle" font-size="12" fill="#5b21b6">Report / Regression</text>
+
+                <line x1="180" y1="96" x2="205" y2="96" stroke="#94a3b8" stroke-width="2" />
+                <line x1="335" y1="96" x2="360" y2="96" stroke="#94a3b8" stroke-width="2" />
+                <line x1="490" y1="96" x2="515" y2="96" stroke="#94a3b8" stroke-width="2" />
+                <line x1="645" y1="96" x2="670" y2="96" stroke="#94a3b8" stroke-width="2" />
+                <line x1="425" y1="122" x2="280" y2="180" stroke="#cbd5e1" stroke-width="1.8" />
+                <line x1="580" y1="122" x2="465" y2="180" stroke="#cbd5e1" stroke-width="1.8" />
+                <line x1="735" y1="122" x2="650" y2="180" stroke="#cbd5e1" stroke-width="1.8" />
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">Harness 的核心不是某个单一模型，而是把任务、环境、执行与评测组合成闭环。</figcaption>
+        </figure>
+        <ul class="list-disc pl-6 mt-6 space-y-2">
+            <li><strong>Task Spec</strong>：定义输入、约束、成功标准与可选依赖。</li>
+            <li><strong>Sandbox</strong>：给每次运行提供干净、隔离、可重置的执行环境。</li>
+            <li><strong>Agent Runner</strong>：真正调用模型、工具与 memory，完成任务执行。</li>
+            <li><strong>Observer</strong>：记录 token、工具调用、文件修改、截图、日志和中间状态。</li>
+            <li><strong>Evaluator</strong>：用规则、测试或 judge 对任务结果和过程证据打分。</li>
+            <li><strong>Report Layer</strong>：聚合多次实验，支持回归比较、趋势分析和失败聚类。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>Harness 的运行流程</h2>
+        <p>从系统视角看，harness 本质是一条可重复执行的流水线。它先准备任务和环境，再驱动 agent 执行，然后把输出与轨迹交给评估器，最终产生可对比的报告。重要的是，整个过程必须能批量化和重放，而不是依赖人工临时观察。</p>
+        <div class="grid gap-4 md:grid-cols-6 text-sm mt-6">
+            <div class="rounded-xl border border-slate-200 p-3 text-center">任务装载</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">环境启动</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">Agent 执行</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">轨迹采集</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">结果判定</div>
+            <div class="rounded-xl border border-slate-200 p-3 text-center">回归报告</div>
+        </div>
+        <p class="mt-4">如果用 CLI coding agent 举例，一个任务可能是“修复某个单元测试失败”。harness 会准备一个干净仓库快照、限定可用命令、记录所有 shell 输出和文件 diff，最后通过测试是否通过、修改范围是否合理、成本是否超预算来给出结果。于是你不再只知道“这次修好了没”，而是能知道“它用多少钱、花多少轮、在哪一步走偏、回滚后是否能重现”。</p>
+    </div>
+
+    <div class="card">
+        <h2>Harness 里最常见的指标是什么？</h2>
+        <p>一套好的 harness 不会只给一个单一分数。对于 agent 系统，至少要同时衡量任务完成度、成本、速度和稳定性；否则你可能会把一个“靠堆 token 偶尔做对”的系统误判成真正更强的系统。</p>
+        <div class="mt-4 bg-slate-100 rounded-xl p-4 text-center" set:html={String.raw`$$\text{Score} = w_1 \cdot \text{PassRate} + w_2 \cdot \text{RequirementRate} - w_3 \cdot \text{CostNorm} - w_4 \cdot \text{LatencyNorm}$$`}></div>
+        <p class="mt-4 text-sm text-gray-600">上式不是唯一标准，但很适合作为直觉：好系统不只要做对，还要做得稳、做得省、做得快。</p>
+        <ul class="list-disc pl-6 mt-4 space-y-2">
+            <li><strong>Pass Rate</strong>：任务是否最终通过。</li>
+            <li><strong>Requirement Rate</strong>：细粒度需求满足比例，适合多子任务或长链路任务。</li>
+            <li><strong>Cost</strong>：token、API 花费、工具调用数或 GPU 时间。</li>
+            <li><strong>Latency</strong>：端到端耗时、每步平均耗时、关键路径耗时。</li>
+            <li><strong>Stability</strong>：同一任务多次运行的方差，衡量系统是否抗随机性。</li>
+        </ul>
+        <div class="mt-6 rounded-2xl border border-white/70 bg-white/80 p-4 text-sm text-gray-600">
+            <p><strong>很实用的一条经验：</strong>如果一个系统 pass rate 只涨了 2%，却把成本翻倍、稳定性变差，那它未必是更好的 agent。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>为什么说 Harness 是“评测系统”，不是“测试脚本”？</h2>
+        <p>很多团队会把几个 shell 命令、几个 golden cases、甚至一个 notebook 叫作 harness，但严格说这还不够。测试脚本只是在某次条件下触发行为；而 harness 更像一个长期维护的评测基础设施，它需要持续沉淀任务集合、支持批量运行、保存 artifacts、比较版本之间的差异，还要处理重试、超时、随机种子、环境回收等问题。</p>
+        <p class="mt-4">也正因如此，harness 往往处在研发闭环的中心位置：模型升级、工具新增、prompt 改写、memory 机制调整之后，第一件事不是“找一个 demo 试试看”，而是回到 harness 上跑一轮。只有它能告诉你：这次变化是局部提升，还是整体退化；是修复了旧任务，还是破坏了另一些任务。</p>
+    </div>
+
+    <div class="card">
+        <h2>设计一个好 Harness 的 5 条原则</h2>
+        <ol class="list-decimal pl-6 space-y-3">
+            <li><strong>输入可重放</strong>：任务描述、依赖、数据快照、随机种子要可复现，否则结果不可比较。</li>
+            <li><strong>环境可重置</strong>：每次运行都尽量从干净状态开始，避免前一次实验污染后续结果。</li>
+            <li><strong>轨迹可审计</strong>：不仅保存最终答案，还要保存步骤级日志、文件 diff 与工具调用记录。</li>
+            <li><strong>评估可解释</strong>：判分规则要能告诉你为何通过、为何失败，而不是只有一个总分。</li>
+            <li><strong>报告可回归</strong>：支持跨版本比较，能快速定位“这次改动到底改善了什么”。</li>
+        </ol>
+    </div>
+
+    <div class="card">
+        <h2>常见误区</h2>
+        <ul class="list-disc pl-6 space-y-2">
+            <li><strong>把 demo 当 harness</strong>：单条成功样例不能代表系统可用，更不能代表系统稳定。</li>
+            <li><strong>只看最终结果</strong>：忽略过程日志会让你无法定位失败模式。</li>
+            <li><strong>没有环境隔离</strong>：任务之间相互污染，导致结果看似提升，实则不可复现。</li>
+            <li><strong>没有成本指标</strong>：只追求成功率，容易把系统优化成“更贵的正确”。</li>
+            <li><strong>只做一次运行</strong>：agent 有随机性，不做多次重复就很难判断鲁棒性。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>一页式 Checklist</h2>
+        <ol class="list-decimal pl-6 space-y-3">
+            <li>明确任务集合与成功标准，区分 task-level 与 requirement-level 指标。</li>
+            <li>为每次运行提供隔离环境，确保文件系统、依赖与网络权限可控。</li>
+            <li>统一记录 prompt、tool calls、diff、artifacts、截图与日志。</li>
+            <li>建立规则评估、测试评估或 judge 评估中的至少一种，并输出失败原因。</li>
+            <li>支持批量运行与回归对比，把“实验”沉淀为长期可复用的能力基线。</li>
+        </ol>
+    </div>
+
+    <div class="card">
+        <h2>参考资料</h2>
+        <ul class="list-disc pl-6 space-y-2">
+            <li><a class="text-emerald-700" href="https://www.swebench.com/">SWE-bench</a></li>
+            <li><a class="text-emerald-700" href="https://arxiv.org/html/2410.10934v2">Agent-as-a-Judge</a></li>
+            <li><a class="text-emerald-700" href="https://github.com/openai/evals">OpenAI Evals</a></li>
+        </ul>
+    </div>
+</BaseLayout>
