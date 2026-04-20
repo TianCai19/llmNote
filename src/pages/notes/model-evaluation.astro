@@ -8,136 +8,143 @@ const createdAt = todayYmd();
 
 export const meta = {
     number: '15',
-    title: '模型评估指标',
-    description: '从准确率到 F1 Score：混淆矩阵、精确率/召回率权衡与 ROC-AUC',
+    title: '模型评估指标 (Evaluation Metrics)',
+    description: '从准确率到 F1 Score：混淆矩阵、精确率/召回率权衡、ROC与PR曲线',
     tags: ["ML", "Evaluation", "Metrics"],
-    readTime: '15 min'
+    readTime: '20 min'
 };
 ---
 
-<BaseLayout title="模型评估指标：从准确率到 F1 Score">
+<BaseLayout title="模型评估指标 (Evaluation Metrics)">
     <header class="text-center mb-12">
         <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">ML / Evaluation / Metrics</p>
-        <h1 class="text-4xl font-bold mb-4 gradient-text">模型评估指标：从准确率到 F1 Score</h1>
-        <p class="text-xl text-gray-500">训练好的模型可靠吗？用正确的指标量化模型性能</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">模型评估指标与曲线 (Evaluation Metrics)</h1>
+        <p class="text-xl text-gray-500">训练好的模型可靠吗？用中英对照的评估指标与曲线量化模型性能</p>
         <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">{createdAt}</p>
     </header>
 
     <div class="card">
-        <h2>为什么需要模型评估</h2>
+        <h2>为什么需要模型评估 (Why Evaluate Models?)</h2>
         <p>模型训练完成后，在交付之前有一个必不可少的步骤：<strong>评估模型性能</strong>，确保其可靠性。模型评估的价值包括：</p>
         <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
             <li><strong>确认预测准确性：</strong>确定模型在测试任务中的表现水平</li>
-            <li><strong>识别潜在风险：</strong>确保模型在各种情况下都能稳定运行</li>
+            <li><strong>识别潜在风险：</strong>确保模型在各种情况下都能稳定运行，特别是类别极度不平衡时</li>
             <li><strong>减少资源浪费：</strong>在早期发现缺陷，避免上线后的高额成本</li>
             <li><strong>增加用户信任：</strong>详细的评估报告让模型更容易在实际场景中推广</li>
             <li><strong>指导持续优化：</strong>通过评估结果调整超参数，不断提高性能</li>
         </ul>
         <div class="bg-emerald-50 p-4 rounded-lg border border-emerald-100">
-            <strong>核心思路：</strong>我们站在巨人的肩膀上 —— 大多数情况下可以直接选择已有广泛实践的评价指标，应用于自己的数据集和模型上。
+            <strong>核心思路：</strong>我们站在巨人的肩膀上 —— 大多数情况下可以直接选择已有广泛实践的评价指标（如 MSE、F1、AUC），应用于自己的数据集和模型上。
         </div>
     </div>
 
     <MetricsOverviewDiagram />
 
     <div class="card">
-        <h2>回归模型评估指标</h2>
-        <p>回归指标衡量模型的<strong>预测值与实际值之间的差距</strong>，值越小说明模型拟合越好。</p>
+        <h2>回归模型评估指标 (Regression Metrics)</h2>
+        <p>回归指标衡量模型的<strong>预测值 (Predictions) 与实际值 (Ground Truth) 之间的差距</strong>，值越小说明模型拟合越好。</p>
 
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
             <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
-                <h3 class="font-semibold text-slate-700 mb-2">1. 均方误差（MSE）</h3>
+                <h3 class="font-semibold text-slate-700 mb-2">1. 均方误差 (Mean Squared Error, MSE)</h3>
                 <div class="math-block" set:html={String.raw`$$\text{MSE} = \frac{1}{n}\sum_{i=1}^{n}(y_i - \hat{y}_i)^{2}$$`}></div>
                 <p class="text-sm text-gray-600 mt-2">衡量预测值与实际值的<strong>平均平方误差</strong>。对大误差更敏感（平方放大）。</p>
             </div>
             <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
-                <h3 class="font-semibold text-slate-700 mb-2">2. 均方根误差（RMSE）</h3>
+                <h3 class="font-semibold text-slate-700 mb-2">2. 均方根误差 (Root Mean Squared Error, RMSE)</h3>
                 <div class="math-block" set:html={String.raw`$$\text{RMSE} = \sqrt{\frac{1}{n}\sum_{i=1}^{n}(y_i - \hat{y}_i)^{2}}$$`}></div>
                 <p class="text-sm text-gray-600 mt-2">MSE 的平方根，保持原始量纲，<strong>便于直观解释</strong>。</p>
             </div>
             <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
-                <h3 class="font-semibold text-slate-700 mb-2">3. 平均绝对误差（MAE）</h3>
+                <h3 class="font-semibold text-slate-700 mb-2">3. 平均绝对误差 (Mean Absolute Error, MAE)</h3>
                 <div class="math-block" set:html={String.raw`$$\text{MAE} = \frac{1}{n}\sum_{i=1}^{n}|y_i - \hat{y}_i|$$`}></div>
-                <p class="text-sm text-gray-600 mt-2">预测值与实际值的<strong>平均绝对偏差</strong>，对异常值不如 MSE 敏感。</p>
+                <p class="text-sm text-gray-600 mt-2">预测值与实际值的<strong>平均绝对偏差</strong>，对异常值不如 MSE 敏感，鲁棒性更好。</p>
             </div>
             <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
-                <h3 class="font-semibold text-slate-700 mb-2">4. 判定系数（R²）</h3>
+                <h3 class="font-semibold text-slate-700 mb-2">4. 判定系数 (Coefficient of Determination, R²)</h3>
                 <div class="math-block" set:html={String.raw`$$R^{2} = 1 - \frac{\sum_{i}(y_i - \hat{y}_i)^{2}}{\sum_{i}(y_i - \bar{y})^{2}}$$`}></div>
                 <p class="text-sm text-gray-600 mt-2">表示模型解释变量方差的比例，<strong>范围 0~1</strong>，越接近 1 解释能力越强。</p>
             </div>
         </div>
 
         <div class="note-box text-sm mt-4">
-            <p><strong>选择建议：</strong>MSE/RMSE 对大误差敏感，适合不容忍极端偏差的场景；MAE 更鲁棒；R² 给出整体拟合质量的直觉。</p>
+            <p><strong>选择建议：</strong>MSE/RMSE 对大误差敏感，适合不容忍极端偏差的场景；MAE 更鲁棒；R² 给出整体拟合质量的直觉相对值。</p>
         </div>
     </div>
 
     <div class="card">
-        <h2>分类模型评估指标</h2>
-        <p>分类指标衡量模型的<strong>分类效果</strong>。不同于回归关注偏差大小，分类更关注"对了还是错了"以及"错在哪里"。</p>
+        <h2>分类模型评估指标 (Classification Metrics)</h2>
+        <p>分类指标衡量模型的<strong>分类效果</strong>。不同于回归关注连续的偏差大小，分类更关注"对了还是错了"以及"错在哪里"。</p>
     </div>
 
     <div class="card">
-        <h2>混淆矩阵：分类结果的全景图</h2>
-        <p>混淆矩阵以表格形式展示分类模型的预测结果与真实标签之间的对应关系，是所有分类指标的计算基础。</p>
+        <h2>混淆矩阵 (Confusion Matrix)：分类结果的全景图</h2>
+        <p>混淆矩阵以表格形式展示分类模型的预测结果与真实标签之间的对应关系，是绝大多数分类单点指标的计算基础。</p>
 
         <div class="bg-amber-50 p-4 rounded-lg border border-amber-100 mt-4 mb-4">
-            <strong>警犬分类的例子：</strong>10 个身影经过 —— 6 个是盗贼（正类），4 个是动物（负类）。警犬（分类器）把它们分成了 5 个盗贼、5 个动物。
+            <strong>警犬分类的例子：</strong>10 个身影经过 —— 6 个是盗贼（正类，Positive），4 个是动物（负类，Negative）。警犬（分类器）把它们分成了 5 个盗贼、5 个动物。
         </div>
 
         <ConfusionMatrixDiagram />
 
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2 mt-6">
             <div class="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
-                <h3 class="font-semibold text-emerald-800 mb-2">预测正确</h3>
+                <h3 class="font-semibold text-emerald-800 mb-2">预测正确 (Correct Predictions)</h3>
                 <ul class="list-disc pl-5 space-y-1 text-sm text-emerald-700">
-                    <li><strong>TP（真阳性）：</strong>判为盗贼，确实是盗贼 = 4</li>
-                    <li><strong>TN（真阴性）：</strong>判为动物，确实是动物 = 3</li>
+                    <li><strong>TP（True Positive，真阳性）：</strong>判为盗贼，确实是盗贼 = 4</li>
+                    <li><strong>TN（True Negative，真阴性）：</strong>判为动物，确实是动物 = 3</li>
                 </ul>
             </div>
             <div class="rounded-2xl border border-rose-100 bg-rose-50/50 p-4">
-                <h3 class="font-semibold text-rose-800 mb-2">预测错误</h3>
+                <h3 class="font-semibold text-rose-800 mb-2">预测错误 (Incorrect Predictions)</h3>
                 <ul class="list-disc pl-5 space-y-1 text-sm text-rose-700">
-                    <li><strong>FP（假阳性）：</strong>判为盗贼，实际是动物 = 1</li>
-                    <li><strong>FN（假阴性）：</strong>判为动物，实际是盗贼 = 2</li>
+                    <li><strong>FP（False Positive，假阳性/误报）：</strong>判为盗贼，实际是动物 = 1</li>
+                    <li><strong>FN（False Negative，假阴性/漏报）：</strong>判为动物，实际是盗贼 = 2</li>
                 </ul>
             </div>
         </div>
     </div>
 
     <div class="card">
-        <h2>准确率（Accuracy）</h2>
-        <p>衡量模型预测正确的样本占总样本的比例，适用于<strong>类别分布相对均衡</strong>的情况。</p>
+        <h2>准确率 (Accuracy)</h2>
+        <p>衡量模型预测正确的样本占总样本的比例，是最直观的指标，适用于<strong>类别分布相对均衡</strong>的情况。</p>
         <div class="math-block" set:html={String.raw`$$\text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN}$$`}></div>
         <p>警犬例子：<span set:html={"$\\text{Accuracy} = \\frac{4+3}{4+3+1+2} = 0.7$"}></span>，即 70% 的判断是正确的。</p>
         <div class="bg-blue-50 p-4 rounded-lg border border-blue-100 mt-4">
-            <strong>局限性：</strong>当类别极度不平衡时（如 99% 负类），一个把所有样本都预测为负类的模型也能获得 99% 准确率，但完全没有实际价值。
+            <strong>局限性：</strong>当类别极度不平衡时（如 99% 负类，1% 正类），一个把所有样本都预测为负类的模型也能获得 99% 准确率，但在实际业务中毫无价值。
         </div>
     </div>
 
     <div class="card">
-        <h2>精确率（Precision）</h2>
-        <p>在模型<strong>预测为正类</strong>的样本中，实际为正类的比例。</p>
+        <h2>精确率 (Precision / Positive Predictive Value)</h2>
+        <p>在模型<strong>所有预测为正类</strong>的样本中，实际为正类的比例。</p>
         <div class="math-block" set:html={String.raw`$$\text{Precision} = \frac{TP}{TP + FP}$$`}></div>
         <p>警犬例子：<span set:html={"$\\text{Precision} = \\frac{4}{4+1} = 0.8$"}></span>，警犬叫了 5 次，其中 4 次确实是盗贼。</p>
         <div class="bg-amber-50 p-4 rounded-lg border border-amber-100 mt-4">
-            <strong>直觉：</strong>精确率关注的是"除非确定，否则不要叫"。为了提高精确率，要尽量减少<span class="highlight">假阳性</span>（误报），但代价是可能漏掉一些真正的盗贼。
+            <strong>直觉：</strong>精确率关注的是"除非确定，否则不要叫"。为了提高精确率，要尽量减少<span class="highlight">假阳性 (FP)</span> 误报，但代价是可能漏掉一些真正的盗贼。
         </div>
     </div>
 
     <div class="card">
-        <h2>召回率（Recall）</h2>
-        <p>在<strong>实际为正类</strong>的样本中，被正确预测为正类的比例。</p>
+        <h2>召回率 (Recall / Sensitivity / True Positive Rate)</h2>
+        <p>在所有<strong>实际为正类</strong>的样本中，被正确预测为正类的比例。</p>
         <div class="math-block" set:html={String.raw`$$\text{Recall} = \frac{TP}{TP + FN}$$`}></div>
         <p>警犬例子：<span set:html={"$\\text{Recall} = \\frac{4}{4+2} \\approx 0.67$"}></span>，6 个盗贼中只发现了 4 个。</p>
         <div class="bg-amber-50 p-4 rounded-lg border border-amber-100 mt-4">
-            <strong>直觉：</strong>召回率关注的是"如果不确定就对它叫，以防万一"。为了提高召回率，要尽量减少<span class="highlight">假阴性</span>（漏报），但代价是误报率太高。
+            <strong>直觉：</strong>召回率关注的是"宁可错杀，不可放过"。为了提高召回率，要尽量减少<span class="highlight">假阴性 (FN)</span> 漏报，但代价是误报率太高。
         </div>
     </div>
 
     <div class="card">
-        <h2>精确率 vs 召回率的权衡</h2>
-        <p>精确率和召回率往往是<strong>此消彼长</strong>的关系。通过调整分类阈值可以在二者之间权衡：</p>
+        <h2>特异度 (Specificity / True Negative Rate)</h2>
+        <p>在所有<strong>实际为负类</strong>的样本中，被正确预测为负类的比例。可以看作是“负类的召回率”。</p>
+        <div class="math-block" set:html={String.raw`$$\text{Specificity} = \frac{TN}{TN + FP}$$`}></div>
+        <p class="mt-2">医学场景中经常用它与 Sensitivity（即 Recall）一起衡量诊断试验的好坏。特异度高意味着极少将健康人误诊为病人。</p>
+    </div>
+
+    <div class="card">
+        <h2>精确率 vs 召回率的权衡 (Precision-Recall Tradeoff)</h2>
+        <p>精确率和召回率往往是<strong>此消彼长</strong>的关系。通过调整模型输出概率的分类阈值（Threshold），可以在二者之间进行权衡：</p>
 
         <figure class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
             <svg viewBox="0 0 660 200" role="img" aria-label="Precision recall tradeoff" class="w-full">
@@ -156,17 +163,17 @@ export const meta = {
 
                 <!-- Medical scenario -->
                 <rect x="30" y="44" width="280" height="65" rx="12" fill="#fef2f2" stroke="#fecaca" />
-                <text x="170" y="66" text-anchor="middle" font-size="12" font-weight="600" fill="#991b1b">医疗诊断</text>
-                <text x="170" y="84" text-anchor="middle" font-size="11" fill="#b91c1c">假阴性后果严重（漏诊）</text>
+                <text x="170" y="66" text-anchor="middle" font-size="12" font-weight="600" fill="#991b1b">医疗诊断 (Medical Diagnosis)</text>
+                <text x="170" y="84" text-anchor="middle" font-size="11" fill="#b91c1c">假阴性后果严重（漏诊危及生命）</text>
                 <rect x="50" y="93" width="80" height="8" rx="4" fill="url(#prBar2)" />
-                <text x="140" y="101" font-size="10" fill="#ea580c">召回率优先</text>
+                <text x="140" y="101" font-size="10" fill="#ea580c">召回率 (Recall) 优先</text>
 
                 <!-- Spam scenario -->
                 <rect x="350" y="44" width="280" height="65" rx="12" fill="#eff6ff" stroke="#bfdbfe" />
-                <text x="490" y="66" text-anchor="middle" font-size="12" font-weight="600" fill="#1e40af">垃圾邮件过滤</text>
-                <text x="490" y="84" text-anchor="middle" font-size="11" fill="#2563eb">假阳性很困扰（误杀正常邮件）</text>
+                <text x="490" y="66" text-anchor="middle" font-size="12" font-weight="600" fill="#1e40af">垃圾邮件过滤 (Spam Filter)</text>
+                <text x="490" y="84" text-anchor="middle" font-size="11" fill="#2563eb">假阳性很困扰（误杀重要的工作邮件）</text>
                 <rect x="370" y="93" width="80" height="8" rx="4" fill="url(#prBar1)" />
-                <text x="460" y="101" font-size="10" fill="#3b82f6">精确率优先</text>
+                <text x="460" y="101" font-size="10" fill="#3b82f6">精确率 (Precision) 优先</text>
 
                 <!-- Bottom note -->
                 <rect x="120" y="130" width="420" height="55" rx="12" fill="#f8fafc" stroke="#e2e8f0" />
@@ -178,29 +185,29 @@ export const meta = {
 
     <div class="card">
         <h2>F1 Score：精确率与召回率的调和</h2>
-        <p>F1 是精确率与召回率的<strong>调和平均数</strong>，综合考虑两者的表现，适用于类别不平衡的场景。</p>
+        <p>F1 Score 是精确率与召回率的<strong>调和平均数 (Harmonic Mean)</strong>，综合考虑两者的表现，特别适用于类别不平衡的场景。</p>
         <div class="math-block" set:html={String.raw`$$F_1 = 2 \cdot \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}$$`}></div>
         <p>取值范围 <span set:html={"$[0, 1]$"}></span>：0 表示完全没有预测能力，1 表示完美分类。</p>
         <p class="mt-2">警犬例子：<span set:html={"$F_1 = 2 \\cdot \\frac{0.8 \\times 0.67}{0.8 + 0.67} \\approx 0.73$"}></span></p>
         <div class="bg-emerald-50 p-4 rounded-lg border border-emerald-100 mt-4">
-            <strong>为什么用调和平均？</strong>调和平均对较小值更敏感。如果精确率或召回率任一极低，F1 也不会高 —— 这正好对抗了通过操纵阈值只优化单一指标的"博弈策略"。
+            <strong>为什么用调和平均？</strong>调和平均对较小的值更敏感。如果精确率或召回率任一项极低，F1 也不会高 —— 这正好对抗了通过极端操纵阈值只优化单一指标的"作弊行为"。
         </div>
     </div>
 
     <div class="card">
-        <h2>ROC 曲线与 AUC</h2>
-        <p>ROC（Receiver Operating Characteristic）曲线展示分类器在不同阈值下的 <strong>TPR 与 FPR 的变化关系</strong>。</p>
+        <h2>ROC 曲线与 AUC (Receiver Operating Characteristic)</h2>
+        <p>通常模型预测给出的是概率值，要决定归为正类还是负类，需要设定一个阈值（比如 >0.5 算正类）。ROC 曲线展示了在<strong>所有可能阈值</strong>下，分类器 <strong>TPR 与 FPR</strong> 的变化轨迹。</p>
 
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4">
             <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
-                <h3 class="font-semibold text-slate-700 mb-2">真阳性率（TPR / 召回率）</h3>
+                <h3 class="font-semibold text-slate-700 mb-2">真阳性率 (TPR / Recall)</h3>
                 <div class="math-block" set:html={String.raw`$$\text{TPR} = \frac{TP}{TP + FN}$$`}></div>
-                <p class="text-sm text-gray-600 mt-2">正确预测为正例的比例（纵轴）</p>
+                <p class="text-sm text-gray-600 mt-2">正确预测为正例的比例（ROC纵轴）</p>
             </div>
             <div class="rounded-2xl border border-white/70 bg-white/80 p-4">
-                <h3 class="font-semibold text-slate-700 mb-2">假阳性率（FPR）</h3>
-                <div class="math-block" set:html={String.raw`$$\text{FPR} = \frac{FP}{FP + TN}$$`}></div>
-                <p class="text-sm text-gray-600 mt-2">错误预测为正例的比例（横轴）</p>
+                <h3 class="font-semibold text-slate-700 mb-2">假阳性率 (FPR)</h3>
+                <div class="math-block" set:html={String.raw`$$\text{FPR} = \frac{FP}{FP + TN} = 1 - \text{Specificity}$$`}></div>
+                <p class="text-sm text-gray-600 mt-2">错误预测为正例的比例（ROC横轴）</p>
             </div>
         </div>
 
@@ -240,19 +247,76 @@ export const meta = {
                 <path d="M70,280 Q120,240 160,140 Q200,70 260,55 Q340,45 450,40" fill="none" stroke="#0f766e" stroke-width="3" stroke-linecap="round" />
 
                 <!-- AUC label -->
-                <text x="280" y="220" text-anchor="middle" font-size="14" font-weight="bold" fill="#0f766e">AUC</text>
-                <text x="280" y="238" text-anchor="middle" font-size="11" fill="#0d9488">曲线下面积</text>
+                <text x="280" y="220" text-anchor="middle" font-size="14" font-weight="bold" fill="#0f766e">AUC (Area Under Curve)</text>
+                <text x="280" y="238" text-anchor="middle" font-size="11" fill="#0d9488">ROC曲线下面积</text>
 
                 <!-- Perfect point -->
                 <circle cx="70" cy="40" r="5" fill="#f97316" stroke="white" stroke-width="2" />
                 <text x="85" y="36" font-size="10" fill="#f97316">完美分类器 (0,1)</text>
             </svg>
-            <figcaption class="text-sm text-gray-500 mt-3">AUC 越大（越接近 1），模型越能将正样本排在负样本前面，分类性能越好。</figcaption>
+            <figcaption class="text-sm text-gray-500 mt-3">AUC 越大（越接近 1），模型越能将随机的正样本排在随机的负样本前面，分类性能越好。对正负样本比例不敏感。</figcaption>
         </figure>
     </div>
 
     <div class="card">
-        <h2>实战：用测试集评估模型</h2>
+        <h2>PR 曲线与 AP (Precision-Recall Curve)</h2>
+        <p>在<strong>正负样本极度不平衡</strong>的情况下（例如金融欺诈检测，正样本占 0.1%），ROC 曲线可能会展现出过于乐观的结果。此时我们需要引入 <strong>PR 曲线</strong>：以 Recall 为横轴，Precision 为纵轴画出的曲线。</p>
+
+        <figure class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 500 340" role="img" aria-label="PR curve illustration" class="w-full max-w-md mx-auto">
+                <defs>
+                    <linearGradient id="prFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.2" />
+                        <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.05" />
+                    </linearGradient>
+                </defs>
+
+                <!-- Axes -->
+                <line x1="70" y1="280" x2="450" y2="280" stroke="#94a3b8" stroke-width="1.5" />
+                <line x1="70" y1="280" x2="70" y2="40" stroke="#94a3b8" stroke-width="1.5" />
+
+                <!-- Axis labels -->
+                <text x="260" y="320" text-anchor="middle" font-size="12" fill="#475569">Recall（召回率）</text>
+                <text x="25" y="160" text-anchor="middle" font-size="12" fill="#475569" transform="rotate(-90, 25, 160)">Precision（精确率）</text>
+
+                <!-- Axis ticks -->
+                <text x="70" y="298" text-anchor="middle" font-size="10" fill="#94a3b8">0</text>
+                <text x="450" y="298" text-anchor="middle" font-size="10" fill="#94a3b8">1.0</text>
+                <text x="60" y="284" text-anchor="end" font-size="10" fill="#94a3b8">0</text>
+                <text x="60" y="48" text-anchor="end" font-size="10" fill="#94a3b8">1.0</text>
+
+                <!-- PR curve and Area -->
+                <path d="M70,50 Q180,50 250,120 Q320,180 400,240 Q430,260 450,280 L70,280 Z" fill="url(#prFill)" />
+                <path d="M70,50 Q180,50 250,120 Q320,180 400,240 Q430,260 450,280" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round" />
+
+                <!-- AP label -->
+                <text x="200" y="200" text-anchor="middle" font-size="14" font-weight="bold" fill="#1d4ed8">AP (Average Precision)</text>
+                <text x="200" y="218" text-anchor="middle" font-size="11" fill="#3b82f6">PR曲线下面积</text>
+
+                <!-- Baseline -->
+                <line x1="70" y1="260" x2="450" y2="260" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="6 4" />
+                <text x="360" y="255" font-size="10" fill="#94a3b8">基线（正类比例）</text>
+
+                <!-- Perfect point -->
+                <circle cx="450" cy="40" r="5" fill="#f97316" stroke="white" stroke-width="2" />
+                <text x="360" y="36" font-size="10" fill="#f97316">完美分类器 (1,1)</text>
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">PR 曲线下面积称为平均精度（AP / mAP）。如果正样本占比只有 1%，基线就是 y=0.01 的水平线。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>延伸：排序与推荐系统指标 (Ranking Metrics)</h2>
+        <p>在推荐系统和信息检索中，关注的不是绝对分类，而是“相关结果是否排在最前面”。常用的高级指标包括：</p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>MRR (Mean Reciprocal Rank)：</strong>第一个相关结果出现位置的倒数平均值。越早出现第一个相关内容，得分越高。</li>
+            <li><strong>NDCG (Normalized Discounted Cumulative Gain)：</strong>归一化折损累计增益。不仅考虑结果是否相关，还考虑了相关程度的多级打分，越靠前的结果权重（折扣）越大。</li>
+            <li><strong>Precision@K / Recall@K：</strong>仅看模型给出的前 K 个推荐结果中的精确率和召回率。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>实战：用测试集评估模型 (Model Evaluation in Practice)</h2>
         <p>以 MNIST 手写数字识别为例，展示完整的评估流程。核心思路就像<strong>学生做完试卷，老师打分</strong>。</p>
 
         <div class="grid grid-cols-1 gap-3 mt-4">
@@ -283,59 +347,46 @@ export const meta = {
     </div>
 
     <div class="card">
-        <h2>延伸：t-SNE 可视化</h2>
-        <p>t-SNE（t-distributed Stochastic Neighbor Embedding）是一种<strong>降维可视化</strong>算法，将高维数据投影到二维或三维空间，直观展示数据的聚类结构。</p>
-        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
-            <li><strong>用途：</strong>探索数据空间分布，识别数据中的模式、聚类和结构</li>
-            <li><strong>可调参数：</strong>迭代次数、困惑度（perplexity）、初始 PCA 维度、学习率</li>
-            <li><strong>使用建议：</strong>通常需要多次尝试和调整，根据数据集和可视化目标找到最佳参数组合</li>
-        </ul>
-        <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
-            <strong>在 MNIST 上：</strong>通过 t-SNE 可视化，可以看到相同数字的样本倾向于聚成一簇，不同数字之间有明显的边界 —— 直观地验证了模型学到了有意义的特征表示。
-        </div>
-    </div>
-
-    <div class="card">
-        <h2>小结：如何选择评估指标</h2>
-        <p>模型评估不是选择一个指标就够了，需要<strong>综合考虑多个指标</strong>，全面了解模型性能。</p>
+        <h2>小结：如何选择评估指标 (How to Choose Metrics)</h2>
+        <p>模型评估不是选择一个指标就够了，需要<strong>综合考虑多个指标</strong>，并结合实际业务场景做出权衡。</p>
         <div class="overflow-x-auto mt-4">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead>
                     <tr class="bg-gray-50">
-                        <th class="px-4 py-3 text-left font-semibold text-gray-700">场景</th>
-                        <th class="px-4 py-3 text-left font-semibold text-gray-700">关注问题</th>
-                        <th class="px-4 py-3 text-left font-semibold text-gray-700">推荐指标</th>
+                        <th class="px-4 py-3 text-left font-semibold text-gray-700">场景 (Scenario)</th>
+                        <th class="px-4 py-3 text-left font-semibold text-gray-700">关注问题 (Focus)</th>
+                        <th class="px-4 py-3 text-left font-semibold text-gray-700">推荐指标 (Metrics)</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                     <tr>
-                        <td class="px-4 py-3 text-gray-600">类别均衡的分类</td>
-                        <td class="px-4 py-3 text-gray-600">整体表现</td>
+                        <td class="px-4 py-3 text-gray-600">类别均衡的分类 (Balanced Classification)</td>
+                        <td class="px-4 py-3 text-gray-600">整体表现好不好</td>
                         <td class="px-4 py-3 text-gray-600">Accuracy</td>
                     </tr>
                     <tr>
-                        <td class="px-4 py-3 text-gray-600">医疗诊断</td>
-                        <td class="px-4 py-3 text-gray-600">不能漏诊（假阴性严重）</td>
+                        <td class="px-4 py-3 text-gray-600">医疗诊断 / 逃犯追捕 (Disease Diagnosis)</td>
+                        <td class="px-4 py-3 text-gray-600">不能漏诊，宁可错杀（假阴性代价高）</td>
                         <td class="px-4 py-3 text-gray-600">Recall</td>
                     </tr>
                     <tr>
-                        <td class="px-4 py-3 text-gray-600">垃圾邮件过滤</td>
-                        <td class="px-4 py-3 text-gray-600">不能误杀（假阳性严重）</td>
+                        <td class="px-4 py-3 text-gray-600">垃圾邮件过滤 (Spam Filter)</td>
+                        <td class="px-4 py-3 text-gray-600">不能误杀正常邮件（假阳性代价高）</td>
                         <td class="px-4 py-3 text-gray-600">Precision</td>
                     </tr>
                     <tr>
-                        <td class="px-4 py-3 text-gray-600">类别不平衡</td>
-                        <td class="px-4 py-3 text-gray-600">综合精确率和召回率</td>
-                        <td class="px-4 py-3 text-gray-600">F1 Score</td>
+                        <td class="px-4 py-3 text-gray-600">中度类别不平衡 (Imbalanced Classes)</td>
+                        <td class="px-4 py-3 text-gray-600">既要查得准又要查得全</td>
+                        <td class="px-4 py-3 text-gray-600">F1 Score / ROC-AUC</td>
                     </tr>
                     <tr>
-                        <td class="px-4 py-3 text-gray-600">排序 / 阈值选择</td>
-                        <td class="px-4 py-3 text-gray-600">分类能力整体评估</td>
-                        <td class="px-4 py-3 text-gray-600">ROC-AUC</td>
+                        <td class="px-4 py-3 text-gray-600">极度不平衡 (e.g. 欺诈检测, 1:1000)</td>
+                        <td class="px-4 py-3 text-gray-600">剔除绝大多数负类后的正类检出能力</td>
+                        <td class="px-4 py-3 text-gray-600">PR 曲线 / AP</td>
                     </tr>
                     <tr>
-                        <td class="px-4 py-3 text-gray-600">回归预测</td>
-                        <td class="px-4 py-3 text-gray-600">预测偏差大小</td>
+                        <td class="px-4 py-3 text-gray-600">回归预测 (Regression)</td>
+                        <td class="px-4 py-3 text-gray-600">预测绝对数值与真实值的误差大小</td>
                         <td class="px-4 py-3 text-gray-600">MSE / RMSE / MAE</td>
                     </tr>
                 </tbody>
