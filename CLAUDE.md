@@ -87,6 +87,12 @@ This prevents build errors like `Syntax error "\"` in `.astro` files.
 3. SVG components wrapped in `.svg-container`
 4. Tables with `.min-w-full divide-y`
 
+## Note Delivery Workflow
+
+- For tasks that ask to create a worktree, add or revise a note, validate the build, and prepare a PR, follow `.trae/skills/note-worktree-pr/SKILL.md` as the repository-local operating procedure.
+- Treat that file as the canonical checklist for note-delivery tasks across agents.
+- Default to long-form, blog-style note writing with multi-source research, explicit chapter planning, and substantial section-level detail.
+
 **Homepage** uses:
 - Large numbered cards (01, 02...)
 - Vertical card layout

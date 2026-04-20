@@ -31,6 +31,11 @@ There are no automated tests configured in this repository. If you add tests, up
 - Read and follow `NOTE_STYLE_REQUIREMENTS.md` before drafting.
 - Apply those requirements and iterate as user requests evolve (append refinements rather than deleting earlier requirements).
 
+## Agent Workflow Reuse
+- For requests about creating a new worktree, writing/updating a note, validating the build, and preparing a PR, follow the repository-local workflow in `.trae/skills/note-worktree-pr/SKILL.md`.
+- Treat `.trae/skills/note-worktree-pr/SKILL.md` as the canonical reusable procedure for note-delivery tasks in this repository.
+- Keep outputs long-form and research-oriented: perform multi-source research first, plan a detailed chapter structure, and avoid submitting short summary-style notes.
+
 ## Commit & Pull Request Guidelines
 No Git history is available in this workspace (no `.git`), so there is no established commit convention to reference. If you initialize Git, use short, imperative commit subjects (e.g., `Add hero layout`) and include scope where helpful.
 
