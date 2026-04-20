@@ -1,0 +1,459 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import PPOTrainingLoopDiagram from '../../components/PPOTrainingLoopDiagram.astro';
+import PPOClipObjectiveDiagram from '../../components/PPOClipObjectiveDiagram.astro';
+import GRPODiagram from '../../components/GRPODiagram.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+
+export const meta = {
+    number: '24',
+    title: 'On-Policy RL：LLM 训练的关键转折点',
+    description: '深入理解大语言模型中的 On-Policy 强化学习：从策略梯度、PPO、GRPO 到最新的 Dr. GRPO 与 DAPO 算法演进',
+    tags: ['RL', 'PPO', 'GRPO', 'DeepSeek-R1'],
+    readTime: '35 min'
+};
+---
+
+<BaseLayout
+    title="On-Policy RL：LLM 训练的关键转折点 | LLM Note"
+    description="深入理解大语言模型中的 On-Policy 强化学习，覆盖策略梯度、PPO、GRPO、Dr. GRPO、DAPO 等核心算法。"
+>
+    <main>
+        <header>
+            <h1 class="gradient-text">On-Policy RL：LLM 训练的关键转折点</h1>
+            <p>从基本原理出发，逐层深入算法细节、工程实现与前沿趋势，建立从概念到实践的完整知识框架。</p>
+            <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">
+                添加时间 {createdAt} · 技术深度：Research Friendly
+            </p>
+        </header>
+
+        <div class="toc">
+            <h2>目录</h2>
+            <ul>
+                <li><a href="#intro">1. 为什么 On-Policy 是 LLM 训练的关键转折点</a></li>
+                <li><a href="#concepts">2. 核心概念与策略梯度基础</a></li>
+                <li><a href="#ppo">3. PPO：经典但沉重的老将</a></li>
+                <li><a href="#grpo">4. GRPO：DeepSeek 的轻量级革新</a></li>
+                <li><a href="#variants">5. GRPO 的变体：Dr. GRPO 与 DAPO</a></li>
+                <li><a href="#reinforce">6. REINFORCE++ 与 RLOO：回归简洁</a></li>
+                <li><a href="#pipeline">7. 工程架构与 Rollout 瓶颈</a></li>
+                <li><a href="#scenarios">8. 典型应用：从 R1 到 Agent RL</a></li>
+                <li><a href="#pros-cons">9. On-Policy 方法的优势与局限</a></li>
+                <li><a href="#practice">10. 实践指南与调参技巧</a></li>
+            </ul>
+        </div>
+
+        <div class="chapter" id="intro">
+            <div class="chapter-header">
+                <h2>1. 为什么 On-Policy 是 LLM 训练的关键转折点</h2>
+            </div>
+            <p>
+                大语言模型（LLM）的 On-Policy 强化学习，是指让模型从<strong>自身当前策略生成的数据</strong>中学习并不断改进的训练范式。它是 DeepSeek-R1、OpenAI o1 等推理模型背后的核心技术引擎。
+            </p>
+            <div class="card">
+                <h3>On-Policy vs Off-Policy：一个核心区分</h3>
+                <p>
+                    用一个直观的类比：想象你在学习下棋。
+                </p>
+                <ul class="mt-4 space-y-4">
+                    <li>
+                        <strong>On-policy</strong> 相当于你每次都自己下一局完整的棋，根据这局棋的输赢来调整策略——你学习的永远是“自己的错误”和“自己的成功”。典型算法：PPO、GRPO、REINFORCE。
+                    </li>
+                    <li>
+                        <strong>Off-policy</strong> 则相当于你观看别人下的棋谱来学习——你学的是“别人的经验”，但别人的决策模式可能和你完全不同。典型算法：标准 DPO。
+                    </li>
+                </ul>
+                <div class="note-box mt-6">
+                    <p><strong>为什么现在是 On-Policy 的时代？</strong> 第一，DeepSeek-R1-Zero 证明了纯 RL 就能激发复杂推理能力；第二，实证研究表明 on-policy 在可验证任务上显著优于 offline 方案；第三，开源基础设施（veRL, OpenRLHF）降低了门槛。</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="chapter" id="concepts">
+            <div class="chapter-header">
+                <h2>2. 核心概念与策略梯度基础</h2>
+            </div>
+            <p>
+                On-policy RL 的所有算法，本质上都是<strong>策略梯度（Policy Gradient）</strong>方法的变体。核心思想可以用一句话概括：让好的回复更可能被生成，让差的回复更不可能被生成。
+            </p>
+            <div class="card">
+                <h3>数学基础：REINFORCE 算法</h3>
+                <p>在 LLM 场景下，“策略”<span set:html={"$\\pi_\\theta$"}></span> 就是语言模型本身。最基本的策略梯度更新公式为：</p>
+                <div class="math-block" set:html={String.raw`$$\nabla J(\theta) = \mathbb{E}\left[\nabla \log \pi_\theta(y|x) \cdot \left(R(x,y) - b\right)\right] \tag{1}$$`}></div>
+                <p class="mt-4 text-sm text-gray-600">其中 $R(x,y)$ 是回复 $y$ 的奖励，$b$ 是一个基线（baseline），用于降低梯度的方差。</p>
+            </div>
+            <div class="card">
+                <h3>奖励信号的两大来源</h3>
+                <ul class="list-disc pl-6 space-y-2">
+                    <li><strong>奖励模型（Reward Model）：</strong>一个独立训练的模型，适用于主观任务（写作、对话）。</li>
+                    <li><strong>可验证奖励（Verifiable Reward）：</strong>通过确定性规则判断（数学题、代码测试）。DeepSeek-R1 的重要发现是：对于推理类任务，可验证奖励就已经足够。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter" id="ppo">
+            <div class="chapter-header">
+                <h2>3. PPO：经典但沉重的老将</h2>
+            </div>
+            <p>
+                PPO（Proximal Policy Optimization）是 LLM RLHF 的事实标准。它通过 Actor-Critic 架构和信赖域约束（Clipped Surrogate Objective）在方差控制和更新稳定性之间找到了良好平衡。
+            </p>
+
+            <div class="card">
+                <h3>PPO 训练循环</h3>
+                <PPOTrainingLoopDiagram />
+                <p class="mt-4 text-sm text-center text-gray-500">PPO 通过 Actor-Critic 架构，利用 Value Model 估计优势，并进行受限更新。</p>
+            </div>
+
+            <div class="card">
+                <h3>信赖域约束：Clipped Objective</h3>
+                <PPOClipObjectiveDiagram />
+                <p class="mt-4 text-sm text-center text-gray-500">通过裁剪比率，防止策略在单词更新中偏离太远。</p>
+            </div>
+
+            <div class="card">
+                <h3>四模型并行加载</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-left text-sm">
+                        <thead class="text-slate-600">
+                            <tr>
+                                <th class="py-2 pr-4">组件</th>
+                                <th class="py-2 pr-4">作用</th>
+                                <th class="py-2">是否需要训练</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-slate-700">
+                            <tr class="border-t border-slate-200">
+                                <td class="py-2 pr-4 font-semibold">Policy Model (Actor)</td>
+                                <td class="py-2 pr-4">当前待优化的 LLM</td>
+                                <td class="py-2">是</td>
+                            </tr>
+                            <tr class="border-t border-slate-200">
+                                <td class="py-2 pr-4 font-semibold">Reference Model</td>
+                                <td class="py-2 pr-4">SFT 后的模型快照，用于 KL 惩罚</td>
+                                <td class="py-2">否（冻结）</td>
+                            </tr>
+                            <tr class="border-t border-slate-200">
+                                <td class="py-2 pr-4 font-semibold">Reward Model</td>
+                                <td class="py-2 pr-4">给回复打分</td>
+                                <td class="py-2">否（冻结）</td>
+                            </tr>
+                            <tr class="border-t border-slate-200">
+                                <td class="py-2 pr-4 font-semibold">Value Model (Critic)</td>
+                                <td class="py-2 pr-4">预测期望回报，估计优势函数</td>
+                                <td class="py-2">是</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="mt-4 text-sm text-red-600">
+                    <strong>劣势：</strong>显存消耗巨大。一个 7B 模型的 PPO 可能需要 <span set:html={"$4 \\times 7B = 28B$"}></span> 参数量的显存；Value Model 调参复杂。
+                </p>
+            </div>
+        </div>
+
+        <div class="chapter" id="grpo">
+            <div class="chapter-header">
+                <h2>4. GRPO：DeepSeek 的轻量级革新</h2>
+            </div>
+            <p>
+                GRPO（Group Relative Policy Optimization）的核心创新是<strong>用组内相对排序替代 Value Model</strong>。这显著降低了显存需求并简化了训练。
+            </p>
+
+            <div class="card">
+                <h3>GRPO 训练循环</h3>
+                <GRPODiagram />
+                <p class="mt-4 text-sm text-center text-gray-500">GRPO 通过组内采样和相对评分，彻底省去了 Critic 网络的显存开销。</p>
+            </div>
+
+            <div class="card">
+                <h3>GRPO 训练步骤</h3>
+                <ol class="list-decimal pl-6 space-y-2">
+                    <li>对每个 prompt，从当前策略采样 $K$ 个回复（如 $K=8$）。</li>
+                    <li>用奖励函数对每个回复打分。</li>
+                    <li>在组内计算归一化优势：<span set:html={"$A_k = (r_k - \\text{mean}(r)) / \\text{std}(r)$"}></span>。</li>
+                    <li>用 PPO 风格的 clipped objective 更新策略。</li>
+                </ol>
+                <div class="highlight-box mt-6">
+                    <strong>优势：</strong>显存需求减半；实现简洁，调参更少。
+                </div>
+            </div>
+        </div>
+
+        <div class="chapter" id="variants">
+            <div class="chapter-header">
+                <h2>5. GRPO 的变体：Dr. GRPO 与 DAPO</h2>
+            </div>
+            <p>
+                GRPO 虽然简洁，但存在长度偏置和难度偏置。后续研究提出了改进方案。
+            </p>
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div class="card">
+                    <h3>Dr. GRPO ("GRPO Done Right")</h3>
+                    <p>通过两个极简修改解决了偏置问题：</p>
+                    <ul class="list-disc pl-6 mt-2">
+                        <li>移除长度归一化。</li>
+                        <li>移除标准差归一化（只减均值）。</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>DAPO (ByteDance)</h3>
+                    <p>从系统工程角度进行规模化改进：</p>
+                    <ul class="list-disc pl-6 mt-2">
+                        <li><strong>Clip 解耦：</strong>对正负样本使用不同裁剪范围。</li>
+                        <li><strong>动态采样：</strong>根据难度自适应调整采样数量。</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="chapter" id="reinforce">
+            <div class="chapter-header">
+                <h2>6. REINFORCE++ 与 RLOO：回归简洁</h2>
+            </div>
+            <p>
+                研究者发现 LLM 的 RLHF 场景与传统 RL 有本质不同（每个 episode 只有一步），因此 PPO 的很多复杂设计可能是过度工程。
+            </p>
+            <div class="card">
+                <h3>RLOO (Leave-One-Out)</h3>
+                <p>对每个 prompt 采样 $K$ 个回复，第 $k$ 个回复的基线是其余 $K-1$ 个回复的平均奖励。这种基线能显著降低方差。</p>
+            </div>
+            <div class="card">
+                <h3>REINFORCE++</h3>
+                <p>引入三项关键改进以达到 PPO 级别的稳定性：</p>
+                <ul class="list-disc pl-6 mt-2">
+                    <li>Token 级 KL 惩罚。</li>
+                    <li>PPO 风格的信赖域裁剪。</li>
+                    <li>全局优势归一化（整个 batch）。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter" id="pipeline">
+            <div class="chapter-header">
+                <h2>7. 工程架构与 Rollout 瓶颈</h2>
+            </div>
+            <p>
+                On-policy 训练最大的工程挑战不是梯度计算，而是<strong>生成（rollout）</strong>。这通常占据总训练时间的 60-80%。
+            </p>
+            <div class="card">
+                <h3>主流加速策略</h3>
+                <ul class="list-disc pl-6 space-y-2">
+                    <li><strong>高性能推理引擎：</strong>vLLM 的 PagedAttention 可以提升 3-5 倍吞吐。</li>
+                    <li><strong>GPU 协同定位：</strong>veRL 允许训练和推理共享 GPU 显存。</li>
+                    <li><strong>异步流水线：</strong>OpenRLHF 将 rollout 和训练重叠执行。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter" id="scenarios">
+            <div class="chapter-header">
+                <h2>8. 典型应用：从 R1 到 Agent RL</h2>
+            </div>
+            <div class="card">
+                <h3>推理增强 (Reasoning Enhancement)</h3>
+                <p>DeepSeek-R1 展示了从纯 RL（R1-Zero）出发涌现自反思、纠错等推理行为的可能。这证明了推理能力可以通过 RL 从潜在知识中“激发”出来。</p>
+            </div>
+            <div class="card">
+                <h3>Agent 与多轮交互</h3>
+                <p>新兴方向：将 on-policy RL 扩展到多轮交互。LLM 需要学习“何时调用工具”、“如何规划多步操作”。相关项目：veRL 生态中的 verl-agent。</p>
+            </div>
+        </div>
+
+        <div class="chapter" id="pros-cons">
+            <div class="chapter-header">
+                <h2>9. On-Policy 方法的优势与局限</h2>
+            </div>
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div class="card bg-green-50/50">
+                    <h3 class="text-green-800">核心优势</h3>
+                    <ul class="list-disc pl-6 space-y-2 text-green-900">
+                        <li><strong>规避分布偏移：</strong>模型永远在学习“自己当前最需要改进的地方”。</li>
+                        <li><strong>探索能力强：</strong>采样天然具备探索性，是推理行为涌现的关键。</li>
+                        <li><strong>无需配对数据：</strong>只需要一个打分函数。</li>
+                    </ul>
+                </div>
+                <div class="card bg-red-50/50">
+                    <h3 class="text-red-800">关键局限</h3>
+                    <ul class="list-disc pl-6 space-y-2 text-red-900">
+                        <li><strong>计算成本高：</strong>通常是 offline DPO 的 5-10 倍。</li>
+                        <li><strong>样本利用率低：</strong>采样数据通常只用一次就丢弃。</li>
+                        <li><strong>超参数敏感：</strong>KL 系数、采样数等交互作用复杂。</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="chapter" id="practice">
+            <div class="chapter-header">
+                <h2>10. 实践指南与调参技巧</h2>
+            </div>
+            <div class="card">
+                <h3>从零开始的推荐路径</h3>
+                <ol class="list-decimal pl-6 space-y-2">
+                    <li><strong>动手复现：</strong>选择 TRL 框架，在 Qwen2.5-1.5B 上跑 GSM8K 的 GRPO 实验。</li>
+                    <li><strong>进阶实验：</strong>切换到 veRL 或 OpenRLHF，尝试 7B 模型和 MATH/AIME 任务。</li>
+                    <li><strong>算法对比：</strong>实验 GRPO vs Dr. GRPO vs REINFORCE++。</li>
+                </ol>
+            </div>
+            <div class="card">
+                <h3>关键训练技巧</h3>
+                <ul class="list-disc pl-6 space-y-2">
+                    <li><strong>采样数 K：</strong>通常 8-16 是好的起点。</li>
+                    <li><strong>KL 系数 <span set:html={"$\\beta$"}></span>：</strong>从 0.01 开始。过小容易 reward hack。</li>
+                    <li><strong>监控：</strong>跟踪奖励均值/方差、KL 散度以及回复长度的变化。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter">
+            <div class="chapter-header">
+                <h2>参考资料与延伸阅读</h2>
+            </div>
+            <div class="card">
+                <ul class="list-disc pl-6 space-y-2">
+                    <li><strong>DeepSeek-R1:</strong> Incentivizing Reasoning Capability in LLMs via Reinforcement Learning</li>
+                    <li><strong>GRPO:</strong> Group Relative Policy Optimization (DeepSeekMath)</li>
+                    <li><strong>DAPO:</strong> An Open-Source LLM Reinforcement Learning System at Scale (NeurIPS 2025)</li>
+                    <li><strong>veRL:</strong> github.com/verl-project/verl</li>
+                    <li><strong>OpenRLHF:</strong> github.com/OpenRLHF/OpenRLHF</li>
+                </ul>
+            </div>
+        </div>
+    </main>
+</BaseLayout>
+
+<style>
+    main {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 4rem 2rem;
+    }
+
+    header {
+        text-align: center;
+        margin-bottom: 4rem;
+    }
+
+    header h1 {
+        font-size: 3rem;
+        font-weight: 800;
+        margin-bottom: 1rem;
+    }
+
+    header p {
+        font-size: 1.25rem;
+        color: var(--muted);
+    }
+
+    .toc {
+        background: white;
+        border: 1px border-slate-100;
+        border-radius: 1.5rem;
+        padding: 2rem;
+        margin-bottom: 4rem;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    }
+
+    .toc h2 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        color: var(--accent-strong);
+    }
+
+    .toc ul {
+        display: grid;
+        grid-template-cols: 1fr 1fr;
+        gap: 0.5rem 2rem;
+        list-style: none;
+        padding: 0;
+    }
+
+    .toc a {
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.95rem;
+        transition: color 0.2s;
+    }
+
+    .toc a:hover {
+        color: var(--accent);
+    }
+
+    .chapter {
+        margin-bottom: 5rem;
+    }
+
+    .chapter-header {
+        border-left: 4px solid var(--accent);
+        padding-left: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .chapter-header h2 {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--ink);
+    }
+
+    .card {
+        background: white;
+        border-radius: 1.5rem;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        border: 1px solid var(--slate-100);
+        box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+    }
+
+    .card h3 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        color: var(--ink);
+    }
+
+    .highlight-box {
+        background: var(--sky-100);
+        color: var(--sky-700);
+        padding: 1.5rem;
+        border-radius: 1rem;
+    }
+
+    .math-block {
+        background: var(--slate-50);
+        padding: 2rem;
+        border-radius: 1rem;
+        margin: 1.5rem 0;
+        text-align: center;
+        overflow-x: auto;
+    }
+
+    .note-box {
+        background: var(--slate-50);
+        border-left: 4px solid var(--slate-300);
+        padding: 1.5rem;
+        border-radius: 0 1rem 1rem 0;
+    }
+
+    ul, ol {
+        margin-top: 1rem;
+    }
+
+    li {
+        color: var(--muted);
+        line-height: 1.8;
+    }
+
+    @media (max-width: 640px) {
+        .toc ul {
+            grid-template-cols: 1fr;
+        }
+        
+        header h1 {
+            font-size: 2.25rem;
+        }
+    }
+</style>
