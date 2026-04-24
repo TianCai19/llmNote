@@ -34,8 +34,10 @@ export const meta = {
                 <li><a href="#memory-management">3. KV Cache 的内存管理挑战</a></li>
                 <li><a href="#architecture-compression">4. 架构层 KV 压缩优化</a></li>
                 <li><a href="#bottleneck">5. KV Cache 与 LLM 推理瓶颈</a></li>
-                <li><a href="#advanced">6. 其他前沿技术</a></li>
-                <li><a href="#summary">7. 总结</a></li>
+                <li><a href="#vllm-pagedattention">6. 深入 PagedAttention 与 vLLM 架构</a></li>
+                <li><a href="#advanced">7. 其他前沿技术</a></li>
+                <li><a href="#summary">8. 总结</a></li>
+                <li><a href="#preview-deployment">9. 获取 Vercel Preview 链接</a></li>
             </ul>
         </div>
 
@@ -234,9 +236,38 @@ export const meta = {
             </div>
         </div>
 
+        <div class="chapter" id="vllm-pagedattention">
+            <div class="chapter-header">
+                <h2>6. 深入 PagedAttention 与 vLLM 架构</h2>
+            </div>
+            
+            <p>
+                vLLM 框架的核心创新点在于 <strong>PagedAttention</strong>，其设计灵感直接来源于操作系统中的虚拟内存与分页机制（Virtual Memory & Paging）。
+            </p>
+
+            <h3>6.1 机制拆解：Block Table 与 Copy-on-Write</h3>
+            <p>
+                PagedAttention 通过构建<strong>逻辑 Block (Logical Block)</strong> 到<strong>物理 Block (Physical Block)</strong> 的映射表（Block Table），使得属于同一个请求的连续 token 数据可以分散存储在显存中完全不相邻的物理位置上。
+            </p>
+            <ul>
+                <li><strong>极致的碎片化控制</strong>：由于物理显存按需分配（On-demand Allocation），并且可以动态增长，最终只有最后一个未填满的 Block 会产生微小的内存浪费。vLLM 论文指出，这种机制将内存浪费率控制在了 <strong>4% 以下</strong>。</li>
+                <li><strong>Copy-on-Write (写时复制) 与内存共享</strong>：当执行并行采样（Parallel Sampling，比如 Beam Search）或多个请求共享相同的 System Prompt 时，多个序列可以指向同一个物理 Block。系统通过引用计数（Reference Trackers）来保证数据安全——只有当某个序列尝试修改该 Block 时，才会触发真实的数据复制。</li>
+            </ul>
+
+            <div class="card">
+                <h3>性能提升数据对比</h3>
+                <p>根据 vLLM 官方在 LLaMA 模型（NVIDIA A10G/A100）上的测试数据：</p>
+                <ul>
+                    <li>相比传统的 HuggingFace Transformers，吞吐量最高提升了 <strong>24 倍</strong>。</li>
+                    <li>相比 Text Generation Inference (TGI)，吞吐量最高提升了 <strong>3.5 倍</strong>。</li>
+                    <li>在复杂采样场景下，内存需求下降最高达 55%，转化为 2.2 倍的吞吐量提升。</li>
+                </ul>
+            </div>
+        </div>
+
         <div class="chapter" id="advanced">
             <div class="chapter-header">
-                <h2>6. 其他前沿技术</h2>
+                <h2>7. 其他前沿技术</h2>
             </div>
             
             <div class="grid grid-cols-1 gap-6 md:grid-cols-2 mt-4">
@@ -265,7 +296,7 @@ export const meta = {
 
         <div class="chapter" id="summary">
             <div class="chapter-header">
-                <h2>7. 总结</h2>
+                <h2>8. 总结</h2>
             </div>
             <p>
                 KV Cache 是突破 LLM 自回归生成性能瓶颈的基础机制，但其庞大的内存占用和带宽需求带来了巨大的系统工程挑战。
@@ -279,6 +310,55 @@ export const meta = {
             <p>
                 理解这些机制并灵活组合运用，是进行大规模 LLM 部署和系统优化的必修课。
             </p>
+        </div>
+
+        <div class="chapter" id="preview-deployment">
+            <div class="chapter-header">
+                <h2>9. 获取 Vercel Preview 链接</h2>
+            </div>
+            <p>本文档相关 PR 修改在提交后，将由 Vercel 自动构建预览环境。</p>
+            
+            <div class="overflow-x-auto mt-4">
+                <table class="min-w-full text-left text-sm text-gray-600">
+                    <thead>
+                        <tr class="border-b border-white/70 text-slate-700">
+                            <th class="px-3 py-2">内容</th>
+                            <th class="px-3 py-2">说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-white/50">
+                            <td class="px-3 py-2 font-semibold">推荐方法</td>
+                            <td class="px-3 py-2"><code>gh pr view &lt;pr-number&gt; --repo &lt;owner/repo&gt; --json url,title,comments</code></td>
+                        </tr>
+                        <tr class="border-b border-white/50">
+                            <td class="px-3 py-2 font-semibold">示例</td>
+                            <td class="px-3 py-2"><code>gh pr view 24 --repo TianCai19/llmNote --json url,title,comments</code></td>
+                        </tr>
+                        <tr class="border-b border-white/50">
+                            <td class="px-3 py-2 font-semibold">关键字段</td>
+                            <td class="px-3 py-2"><code>previewUrl</code>、<code>inspectorUrl</code></td>
+                        </tr>
+                        <tr class="border-b border-white/50">
+                            <td class="px-3 py-2 font-semibold">备用方法 1</td>
+                            <td class="px-3 py-2"><code>gh pr checks &lt;pr-number&gt; --repo &lt;owner/repo&gt;</code></td>
+                        </tr>
+                        <tr>
+                            <td class="px-3 py-2 font-semibold">备用方法 2</td>
+                            <td class="px-3 py-2">直接访问 GitHub PR 页面</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="note-box mt-4">
+                <h3>⚠️ 注意事项</h3>
+                <ul class="list-disc pl-5 mt-2">
+                    <li>Vercel 部署通常需要 1-3 分钟，PR 创建后不会立即可用。</li>
+                    <li>非生产分支（如 <code>add-xxx-note</code>）将获得 preview deployment。</li>
+                    <li>生产分支（如 <code>main</code>）将获得 production deployment。</li>
+                </ul>
+            </div>
         </div>
     </main>
 </BaseLayout>
