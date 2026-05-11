@@ -1,0 +1,617 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+
+export const meta = {
+    number: '24',
+    title: 'On-Policy Distillation 深入解析',
+    description: '从高概率 token 对齐、失败机理到 PRISM 黑盒预对齐，系统理解 OPD 的机制、配方与多模态扩展',
+    tags: ['RL', 'Distillation', 'Multimodal'],
+    readTime: '36 min'
+};
+---
+
+<BaseLayout
+    title="On-Policy Distillation 深入解析：何时有效、为什么有效，以及 PRISM 如何把它扩展到多模态 RL"
+    description="系统梳理 On-Policy Distillation（OPD）：与离线蒸馏、SFT、RLVR 的区别；成功与失败条件；高概率 token 对齐机制；工程配方；以及 PRISM 如何把 OPD 扩展成多模态黑盒预对齐阶段。"
+>
+    <main>
+        <header class="text-center mb-12">
+            <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">RL / Distillation / Multimodal</p>
+            <h1 class="text-4xl font-bold mb-4 gradient-text">On-Policy Distillation 深入解析：何时有效、为什么有效，以及 PRISM 如何把它扩展到多模态 RL</h1>
+            <p class="text-xl text-gray-500">
+                如果把 SFT 看成“在静态教师答案上模仿”，把 RLVR 看成“只看最终结果对不对”，那么 OPD 解决的是中间缺失的一层：<strong>让学生在自己真实会走到的状态上，学会老师更好的下一步分布</strong>。
+            </p>
+            <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">
+                添加时间 {createdAt} · 主要来源 arXiv:2604.13016 / arXiv:2604.28123
+            </p>
+        </header>
+
+        <div class="toc">
+            <h2>目录</h2>
+            <ul>
+                <li><a href="#intro">1. OPD 到底解决什么问题</a></li>
+                <li><a href="#formalism">2. OPD 的形式化：它和 KD、SFT、RL 有什么不同</a></li>
+                <li><a href="#success-failure">3. OPD 何时成功，何时失败</a></li>
+                <li><a href="#mechanism">4. OPD 为什么有效：高概率 token 对齐机制</a></li>
+                <li><a href="#recipe">5. 如何把失败的 OPD 拉回来：实用配方</a></li>
+                <li><a href="#limits">6. OPD 的边界：长轨迹、奖励几何与 Top-k 选择</a></li>
+                <li><a href="#prism">7. PRISM：黑盒 OPD 如何变成多模态 RL 的预对齐阶段</a></li>
+                <li><a href="#comparison">8. 从文本 OPD 到多模态 PRISM：一条更完整的后训练链路</a></li>
+                <li><a href="#references">9. 参考资料</a></li>
+                <li><a href="#figures">10. Original Figures</a></li>
+            </ul>
+        </div>
+
+        <div class="chapter" id="intro">
+            <div class="chapter-header">
+                <h2>1. OPD 到底解决什么问题</h2>
+            </div>
+
+            <p>
+                传统知识蒸馏在大模型里最常见的写法，是把 teacher 生成的答案当成静态监督数据，再对 student 做一次 SFT。这个流程很自然，但它有一个经常被忽略的问题：<strong>训练时 student 看到的是 teacher 走出来的轨迹，推理时 student 却要在自己生成的轨迹上继续往下走</strong>。一旦 student 自己走偏，后续前缀状态就会和训练时不同，teacher-forced 蒸馏给出的监督不再精准，这就是典型的 exposure bias。
+            </p>
+            <p>
+                On-Policy Distillation（OPD）试图修补的正是这一层错位。它不再只让 student 学 teacher 的“标准答案”，而是先让 student 自己 rollout，再在这些 <strong>student-visited states</strong> 上比较 student 与 teacher 的下一 token 分布。换句话说，OPD 的监督发生在“学生真实会到达的状态”上，而不是只发生在“老师理想会走的状态”上。
+            </p>
+
+            <figure class="card overflow-hidden">
+                <img src="/notes/on-policy-distillation/opd-teaser.png" alt="OPD 论文总览图：成功条件、机制与实践配方" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">
+                    图 1：<em>Rethinking On-Policy Distillation of Large Language Models</em> 的核心主张浓缩图：OPD 的成败取决于 thinking pattern 是否兼容、teacher 是否真的带来新能力；成功时主要发生的是高概率 token 区域的渐进对齐。
+                </figcaption>
+            </figure>
+
+            <div class="quote-block">
+                <p>
+                    <strong>论文原文的关键句：</strong>“On-policy distillation (OPD) has become a core technique in the post-training of large language models, yet its training dynamics remain poorly understood.”
+                    这句话来自 <a href="https://arxiv.org/abs/2604.13016" target="_blank" rel="noopener noreferrer">2604.13016</a> 的摘要。它点出了这篇研究真正想回答的问题：OPD 已经在用，但大家并不真正知道它为什么有时很好用、有时却完全失效。
+                </p>
+            </div>
+
+            <div class="card">
+                <h3>把 OPD 放在后训练全链路里看，会更容易理解</h3>
+                <div class="overflow-x-auto mt-4">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="px-4 py-3 text-left font-semibold text-gray-700">方法</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-700">训练状态来自哪里</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-700">优化目标</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-700">最容易出的问题</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <tr>
+                                <td class="px-4 py-3 text-gray-600"><strong>离线 KD / SFT</strong></td>
+                                <td class="px-4 py-3 text-gray-600">teacher 的静态回答</td>
+                                <td class="px-4 py-3 text-gray-600">模仿 teacher 轨迹</td>
+                                <td class="px-4 py-3 text-gray-600">训练/推理分布不一致</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 text-gray-600"><strong>OPD</strong></td>
+                                <td class="px-4 py-3 text-gray-600">student 自己 rollout 出来的前缀</td>
+                                <td class="px-4 py-3 text-gray-600">在 student 状态上对齐 teacher 分布</td>
+                                <td class="px-4 py-3 text-gray-600">teacher 信号是否局部可利用</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 text-gray-600"><strong>RLVR</strong></td>
+                                <td class="px-4 py-3 text-gray-600">student rollout</td>
+                                <td class="px-4 py-3 text-gray-600">优化 outcome reward / verifier</td>
+                                <td class="px-4 py-3 text-gray-600">奖励稀疏、信用分配难</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="note-box">
+                <h3>本文的主线</h3>
+                <p>
+                    我会把这篇笔记写成一条连续的技术故事：先讲 <strong>2604.13016</strong> 如何解释 OPD 的成功条件、token-level 机制与实践 recipe；再讲 <strong>2604.28123</strong> 为什么把 OPD 改写成一个位于 SFT 和 RLVR 之间的黑盒预对齐阶段，也就是 PRISM。前者更像“机制论文”，后者更像“把机制推进到多模态工程系统”的方法论文。
+                </p>
+            </div>
+        </div>
+
+        <div class="chapter" id="formalism">
+            <div class="chapter-header">
+                <h2>2. OPD 的形式化：它和 KD、SFT、RL 有什么不同</h2>
+            </div>
+
+            <p>
+                2604.13016 先把 OPD 形式化得很清楚。设输入 prompt 为 <span set:html={String.raw`$x$`}></span>，student 为 <span set:html={String.raw`$\pi_\theta$`}></span>，teacher 为 <span set:html={String.raw`$\pi_T$`}></span>。不同于离线蒸馏直接在 teacher 轨迹上做监督，OPD 会先让 student 从当前策略采样出回答 <span set:html={String.raw`$\hat y \sim \pi_\theta(\cdot|x)$`}></span>，然后在每个 student 前缀 <span set:html={String.raw`$\hat y_{&lt;t}$`}></span> 上比较两个模型的下一 token 分布。
+            </p>
+
+            <div class="math-block">
+                <p set:html={String.raw`$$\mathcal{L}_{\mathrm{OPD}}(\theta)=\mathbb{E}_{x\sim\mathcal{D}_x}\left[D_{\mathrm{KL}}\bigl(\pi_\theta(\cdot\mid x)\;\|\;\pi_T(\cdot\mid x)\bigr)\right]$$`}></p>
+            </div>
+
+            <p>
+                利用自回归分解后，sequence-level reverse KL 可以被拆成每一步 token-level 的 KL 之和：
+            </p>
+
+            <div class="math-block">
+                <p set:html={String.raw`$$\mathcal{L}_{\mathrm{OPD}}(\theta)=\mathbb{E}_{x\sim\mathcal{D}_x,\;\hat y\sim\pi_\theta(\cdot\mid x)}\left[\sum_{t=1}^{T}D_{\mathrm{KL}}(p_t\|q_t)\right]$$`}></p>
+            </div>
+
+            <p>
+                其中 <span set:html={String.raw`$p_t(v)=\pi_\theta(v\mid x,\hat y_{&lt;t})$`}></span>，<span set:html={String.raw`$q_t(v)=\pi_T(v\mid x,\hat y_{&lt;t})$`}></span>。这个写法看起来只是把 KL 搬了一下位置，但它实际上改变了学习的语义：<strong>student 学的不是“teacher 理想会怎么走”，而是“teacher 在 student 当前已经走到这里时，会认为下一步哪些 token 更合理”</strong>。
+            </p>
+
+            <div class="card">
+                <h3>三种常见 OPD 粒度</h3>
+                <p>
+                    论文把 OPD 的实现粒度拆成三种，这很重要，因为很多时候我们会误以为“更多 token 监督一定更好”。实际上，后文实验说明这件事没那么简单。
+                </p>
+                <ul>
+                    <li><strong>Sampled-token OPD：</strong>只看 student 这一步实际采样出的 token，成本最低，也是很多系统里最常见的实现。</li>
+                    <li><strong>Full-vocabulary OPD：</strong>每一步都算完整词表上的 KL，监督最密，但显存和 teacher query 成本都最高。</li>
+                    <li><strong>Top-k OPD：</strong>只在 student 高概率 top-k 区域里做 KL，是 full-vocab 与 sampled-token 之间的折中。</li>
+                </ul>
+            </div>
+
+            <div class="math-block">
+                <p set:html={String.raw`$$\ell_t^{\mathrm{sample}}=\log p_t(\hat y_t)-\log q_t(\hat y_t)$$`}></p>
+            </div>
+
+            <p>
+                这个 sampled-token loss 看起来很“稀”，但论文明确指出：它是 token-level reverse KL 的无偏单样本估计。因此 sampled-token 并不只是一个随便凑合的工程近似，它在理论上是站得住的。
+            </p>
+
+            <div class="card">
+                <h3>与 RL 的关系：为什么 OPD 常被看成“比 SFT 更 on-policy、比 RL 更 dense”</h3>
+                <p>
+                    从直觉上说，SFT 的问题是状态错位，RL 的问题是奖励稀疏，OPD 恰好在中间：状态来自当前策略，监督却依然保留 token-level 密度。这也是它在数学推理、代码推理、reasoning model 后训练里越来越常见的原因。
+                </p>
+                <p>
+                    但也正因为它依赖 teacher 在 student 状态上的局部判断，OPD 的前提比表面上更苛刻：teacher 必须不仅“更强”，还要<strong>对 student 当前会到达的状态给出可利用、方向一致的信号</strong>。后面我们会看到，这恰恰是许多失败案例的根源。
+                </p>
+            </div>
+        </div>
+
+        <div class="chapter" id="success-failure">
+            <div class="chapter-header">
+                <h2>3. OPD 何时成功，何时失败</h2>
+            </div>
+
+            <p>
+                2604.13016 最有价值的地方，不是又提出了一个新目标函数，而是明确给出了 OPD 成败的两个条件：第一，teacher 与 student 要有<strong>兼容的 thinking patterns</strong>；第二，teacher 不仅要 benchmark 更强，还要提供 <strong>student 训练中还没真正掌握的新能力</strong>。这两个条件一起看，才能理解为什么“更强的老师”有时完全蒸不动。
+            </p>
+
+            <figure class="card overflow-hidden">
+                <img src="/notes/on-policy-distillation/3-1-metrics.png" alt="OPD 成功与失败的核心条件对比图" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">
+                    图 2：论文在 phenomenology 部分给出的关键证据。OPD 是否有效，不只取决于 teacher 分数高不高，更取决于 thinking pattern 是否兼容、teacher 是否真的带来 student 未见过的新能力。
+                </figcaption>
+            </figure>
+
+            <div class="card">
+                <h3>条件一：thinking pattern consistency</h3>
+                <p>
+                    这里的 thinking pattern 不是抽象的“风格像不像”，而是更具体的生成分布结构：对于同一类问题，teacher 和 student 是否倾向于经过相近的中间状态、偏好相近的高概率 token、使用相近的答案组织方式。若两者的思维轨迹差得太远，那么即使 teacher 最终成绩更高，student 也可能在自己访问到的 prefix 上看不懂 teacher 给出的局部信号。
+                </p>
+                <p>
+                    一个很好理解的比喻是：如果 teacher 擅长“先大步猜结构，再修细节”，而 student 更像“逐行保守推导”，那么两者在同一 prefix 上给出的下一步分布很可能完全不重叠。此时 KL 虽然能算出来，但梯度并不一定真正可利用。
+                </p>
+            </div>
+
+            <div class="card mt-6">
+                <h3>条件二：teacher 必须真的提供新能力，而不只是更高分</h3>
+                <p>
+                    论文里一个非常反直觉的发现是：同家族、更大规模、最终 benchmark 更高的 teacher，未必比另一个看起来“没那么强”的 teacher 更适合做 OPD。原因在于：如果更大的 teacher 只是把 student 已经学过的模式放大了一遍，那么从 student 视角看，它并没有提供新的、可转移的增量结构。
+                </p>
+                <p>
+                    换句话说，<span class="highlight">“teacher 更强”是终局指标；“teacher 对当前 student 是否有新增可学信号”才是 OPD 的真正条件</span>。这也是为什么论文会特别强调 reverse distillation：它想证明 OPD 学到的不是抽象意义上的“高分”，而是某种可迁移的 thinking pattern。
+                </p>
+            </div>
+
+            <div class="quote-block">
+                <p>
+                    如果只记一句话，我会把这部分总结成：<strong>OPD 学到的不是“老师的榜单排名”，而是“老师在学生真实状态上的高概率行为模式”</strong>。这句话既解释了为什么有些强 teacher 没用，也解释了为什么某些同家族 teacher 会“分数更强但信号更空”。
+                </p>
+            </div>
+        </div>
+
+        <div class="chapter" id="mechanism">
+            <div class="chapter-header">
+                <h2>4. OPD 为什么有效：高概率 token 对齐机制</h2>
+            </div>
+
+            <p>
+                论文最精彩的一层，是它没有停留在“某个 teacher 好、某个 teacher 不好”的经验观察，而是进一步把训练过程拆开，去看成功 run 与失败 run 的 token-level 动力学究竟有什么区别。结论很明确：<strong>成功的 OPD，本质上是 student 在自己访问到的状态上，逐步进入 teacher 的高概率 token 区域，并在该区域内部重新分配概率质量</strong>。
+            </p>
+
+            <div class="math-block">
+                <p set:html={String.raw`$$\mathcal{M}_{\mathrm{overlap}}=\mathbb{E}_t\left[\frac{|S_t^{(p)}\cap S_t^{(q)}|}{k}\right]$$`}></p>
+            </div>
+
+            <p>
+                这里的 overlap ratio 衡量的是：在每个位置上，student 与 teacher 的 top-k 高概率 token 集合有多大重叠。它不是一个“装饰性指标”，而是在测 student 是否已经进入 teacher 支持区域（support region）。如果 overlap 很低，就说明 student 的概率质量主要压在 teacher 根本不看好的 token 上，此时 teacher 再强也难以有效蒸馏。
+            </p>
+
+            <div class="math-block">
+                <p set:html={String.raw`$$\mathcal{M}_{\mathrm{adv}}=\mathbb{E}_t\left[\frac{1}{|S_t^{(p)}\cap S_t^{(q)}|}\sum_{v\in S_t^{(p)}\cap S_t^{(q)}}A_t(v)\right]$$`}></p>
+            </div>
+
+            <p>
+                overlap-token advantage 则衡量：即使在已经重叠的 token 上，student 的概率分配是不是还过于自信、过于偏离 teacher。论文把这两个指标和 entropy gap 一起监控，发现成功 run 往往呈现出非常稳定的三联征：<strong>overlap 上升、advantage 向 0 靠近、entropy gap 变小</strong>。
+            </p>
+
+            <figure class="card overflow-hidden">
+                <img src="/notes/on-policy-distillation/5-1-combined.png" alt="成功与失败 OPD 的训练动力学对比图" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">
+                    图 3：成功与失败 OPD 的动力学对照。成功 run 中，overlap 持续上升、entropy gap 收窄；失败 run 从一开始就基本停滞。
+                </figcaption>
+            </figure>
+
+            <div class="card">
+                <h3>为什么“高概率区域重叠”这么关键</h3>
+                <p>
+                    论文报告了一个非常有说服力的现象：在成功 OPD 过程中，student 与 teacher 的 overlap token 集合通常承载了 <strong>97%–99%</strong> 的概率质量。这意味着成功 run 并不是偶然在 token 集合层面“有点像”，而是两者真正把主要概率都放到了同一批候选 token 上。
+                </p>
+                <p>
+                    这件事的重要性在于：一旦 student 的主概率质量进入 teacher 支持区域，reverse KL 的 mode-seeking 特性就会让更新更容易形成正反馈——teacher 偏好的 token 被进一步抬高，student 自己原来的错误 token 慢慢被挤出 top-k，overlap 因而继续变大，训练进入自增强循环。
+                </p>
+            </div>
+
+            <figure class="card overflow-hidden">
+                <img src="/notes/on-policy-distillation/5-2-combined.png" alt="仅优化 overlap token 也足够驱动 OPD" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">
+                    图 4：只在 overlap token 上优化，几乎就能复现标准 Top-k OPD；而只优化 non-overlap token，效果明显更差。这说明 OPD 的主要增益确实来自共享高概率区域。
+                </figcaption>
+            </figure>
+
+            <div class="note-box">
+                <h3>一个很值得记住的机制结论</h3>
+                <p>
+                    OPD 的核心不是“把 teacher 的整个位形全部复制给 student”，而是“让 student 在自己最可能输出的局部区域里，逐步朝 teacher 偏好的高概率 token 重新分配质量”。因此，真正驱动训练的不是全词表，而是共享的高概率 support。
+                </p>
+            </div>
+
+            <div class="card">
+                <h3>为什么这个解释比“teacher 更强所以蒸得动”更有力</h3>
+                <p>
+                    因为它能同时解释三类现象：第一，为什么某些更强 teacher 没有用；第二，为什么 compatible thinking pattern 的 teacher 反而更有效；第三，为什么 overlap token 区域会随着训练越来越大。很多现象如果只用“teacher 强度”来解释，都说不通；但一旦用“student 是否进入 teacher 高概率支持区域”来解释，逻辑会顺得多。
+                </p>
+            </div>
+        </div>
+
+        <div class="chapter" id="recipe">
+            <div class="chapter-header">
+                <h2>5. 如何把失败的 OPD 拉回来：实用配方</h2>
+            </div>
+
+            <p>
+                只讲机制还不够，2604.13016 进一步给出了两条很实用的 recipe，用来修复“teacher 信号本身不差，但 student 一开始吃不进去”的场景。这两条配方本质上都在做一件事：<strong>先把 student 拉近 teacher 的状态分布，再让 OPD 发挥作用</strong>。
+            </p>
+
+            <figure class="card overflow-hidden">
+                <img src="/notes/on-policy-distillation/4-2-combined.png" alt="off-policy cold start 带来的 OPD 改善" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">
+                    图 5：off-policy cold start 的效果。先用 teacher rollout 对 student 做一次冷启动 SFT，会显著提高初始 overlap，并提升后续 OPD 的最终天花板。
+                </figcaption>
+            </figure>
+
+            <div class="card">
+                <h3>配方一：off-policy cold start</h3>
+                <p>
+                    直觉上很好理解：如果一开始 student 和 teacher 的 thinking pattern 差得太远，那么直接做 OPD 时，teacher 的局部信号根本没法被 exploit。于是论文先让 teacher 在一批 prompt 上生成回答，再拿这些 rollout 对 student 做一小段离线蒸馏/SFT，把 student 初始策略往 teacher 方向推近一点，然后再继续做标准 OPD。
+                </p>
+                <p>
+                    结果显示，这样做不仅能改善早期训练稳定性，甚至会提高最终性能上限。也就是说，这不是单纯“帮你更快 warm up”，而是在改变后续 OPD 能否建立起正反馈循环。换成工程语言就是：<strong>有些 teacher 不是不能蒸，而是不能从当前 student 的位置直接开始蒸</strong>。
+                </p>
+            </div>
+
+            <div class="card mt-6">
+                <h3>配方二：teacher-aligned prompts</h3>
+                <p>
+                    第二条配方来自数据侧。既然 teacher 的分布是在某种后训练 prompt 分布上形成的，那么若 OPD 时喂给它完全不同的 prompt 模板或内容，就可能导致 teacher 在这些状态上给出的分布并不稳定，或者 student 根本走不到 teacher 熟悉的状态区域。
+                </p>
+                <p>
+                    论文发现，使用更贴近 teacher post-training 模板与内容的 prompts，往往会带来更好的 downstream 表现和更锐利的高概率 token 对齐。但这里又有一个微妙的副作用：teacher-aligned prompts 容易把 student entropy 压得太低，导致策略变得过于僵硬。因此作者建议不要只喂 teacher 自己熟悉的数据，而应该<strong>混合一些 teacher-aligned prompt 与更广域的 prompt</strong>，兼顾对齐与探索性。
+                </p>
+            </div>
+
+            <div class="quote-block">
+                <p>
+                    这部分最实用的启发是：<strong>如果 OPD 效果不好，先不要急着换 loss，先检查 student 初始策略与 teacher 数据分布到底离多远</strong>。很多失败并不是目标函数错了，而是初始分布与数据分布不对齐，teacher 给出的监督因此没有落到 student 真正可利用的局部区域上。
+                </p>
+            </div>
+        </div>
+
+        <div class="chapter" id="limits">
+            <div class="chapter-header">
+                <h2>6. OPD 的边界：长轨迹、奖励几何与 Top-k 选择</h2>
+            </div>
+
+            <p>
+                OPD 常被宣传为“比 outcome reward 更密的监督”，这没错，但 2604.13016 非常清醒地指出：<strong>密不等于免费</strong>。teacher 在每个 token 上都能给分，并不意味着这些分在所有位置都可靠，更不意味着它们在优化几何上都可利用。
+            </p>
+
+            <figure class="card overflow-hidden">
+                <img src="/notes/on-policy-distillation/6-1-response-summary.png" alt="OPD 在不同响应长度下的性能与 teacher continuation 效果" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">
+                    图 6：response length 存在 sweet spot。太短监督不够，太长则 student prefix 漂移太深，teacher continuation 的优势会持续减弱。
+                </figcaption>
+            </figure>
+
+            <div class="card">
+                <h3>边界一：trajectory 越深，teacher token reward 越可能失真</h3>
+                <p>
+                    论文发现，OPD 在响应长度上存在明显 sweet spot。太短的轨迹无法提供足够多的监督 token；但轨迹太长后，student prefix 会逐渐走到 teacher 很不熟悉的区域。此时 teacher 虽然还能给出下一 token 分布，但这个分布已经越来越像“在陌生状态下的勉强猜测”，局部监督质量会明显下降。
+                </p>
+                <p>
+                    这也是为什么论文会特别强调：OPD 未必能自然扩展到超长 CoT、长程 agent interaction 或多轮复杂决策。它的密集监督优势主要发生在 teacher 仍然能理解当前状态的范围内，而不是无限延伸。
+                </p>
+            </div>
+
+            <div class="card mt-6">
+                <h3>边界二：全局 reward 有信息，不代表局部梯度可利用</h3>
+                <p>
+                    论文在讨论部分给出了一个很有启发性的观察：即使在失败的 OPD 配置里，teacher 对“正确 rollout”和“错误 rollout”仍然会给出有区分度的平均 reward，这说明 reward 在全局统计层面并不是瞎的。但问题在于，这些 per-token advantage 在局部位置上可能方向不一致、结构过于各向异性，最后汇总成参数梯度时彼此抵消，导致 effective gradient 很小。
+                </p>
+                <p>
+                    这等于告诉我们：<span class="highlight">OPD 的失败并不总是“teacher 判断错了”，很多时候是“teacher 给出的局部改进方向太碎、太散，student 无法把它整合成一致的更新方向”</span>。这也是我觉得这篇论文最深的一点：它把“reward informative”与“reward exploitable”严格区分开了。
+                </p>
+            </div>
+
+            <div class="card mt-6">
+                <h3>边界三：support size 并不是越大越好，Top-1 反而最危险</h3>
+                <p>
+                    直觉上可能会认为，Top-k 取越大，监督就越充分。但论文实验显示，sampled-token OPD 与 Top-4/16/64 的效果已经很接近，唯一明显糟糕的是 Top-1。原因不是“1 个 token 太少”，而是 Top-1 总是盯着 argmax，会把奖励过度集中到单一模式上；一旦 argmax 轻微波动，监督目标就会跳来跳去，导致训练极不稳定。
+                </p>
+                <p>
+                    相比之下，sampled-token 虽然每步只看一个 token，但它是按 student 当前分布随机采样的，长期看能对高概率区域做无偏覆盖。因此 sampled-token 不是一个“偷懒版 OPD”，而是一个 surprisingly strong baseline。
+                </p>
+            </div>
+        </div>
+
+        <div class="chapter" id="prism">
+            <div class="chapter-header">
+                <h2>7. PRISM：黑盒 OPD 如何变成多模态 RL 的预对齐阶段</h2>
+            </div>
+
+            <p>
+                现在可以切到第二篇论文了。<a href="https://arxiv.org/abs/2604.28123" target="_blank" rel="noopener noreferrer">2604.28123</a> 做的不是“再发明一个文本 OPD 变体”，而是把 OPD 的核心思想推进到更难也更现实的场景：<strong>多模态、黑盒 teacher、SFT 后分布漂移、以及后续还要接 RLVR</strong>。
+            </p>
+            <p>
+                这篇论文的起点是一个非常现实的观察：在大多数组件化后训练流程里，我们常把 SFT 当作必要冷启动，再把 RLVR 当作最终强化阶段。但在大型多模态模型上，SFT 并不总是纯收益，它可能把模型原本不错的分布拉坏，尤其会同时伤害视觉 grounding 与推理结构。论文因此提出：在 SFT 与 RLVR 之间，应该插入一个显式的 distribution alignment 阶段。
+            </p>
+
+            <div class="quote-block">
+                <p>
+                    <strong>PRISM 摘要里的关键句：</strong>“SFT introduces distributional drift that neither preserves the model's original capabilities nor faithfully matches the supervision distribution.” 这句话把问题说得非常直白：SFT 既没完全贴近监督分布，又可能破坏原始能力，所以不能直接无脑接 RL。
+                </p>
+            </div>
+
+            <figure class="card overflow-hidden">
+                <img src="/notes/on-policy-distillation/prism-overview.png" alt="PRISM 三阶段总览图" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">
+                    图 7：PRISM 总览。SFT 先获得初始能力，但也带来分布漂移；alignment 阶段用黑盒 OPD 风格的对抗式对齐修复漂移；最终再进入 RLVR。
+                </figcaption>
+            </figure>
+
+            <div class="card">
+                <h3>PRISM 的真正创新点：重新定义 OPD 在后训练系统里的位置</h3>
+                <p>
+                    以往很多 OPD 工作把 distillation 当作终点：蒸完的 checkpoint 就直接拿去部署或直接当最终模型。PRISM 则把 OPD 重新定位成<strong>中间阶段</strong>——它不是最终目标，而是一个为了后续 RLVR 提供更好初始化的预对齐步骤。
+                </p>
+                <p>
+                    这个定位变化非常关键。因为一旦把 alignment 视为中间阶段，我们就不必强求“alignment 本身立刻提升 benchmark”，而是要看它是否缩小了 policy 与 supervision distribution 的结构差距，是否让后续 RL 更容易继续优化。
+                </p>
+            </div>
+
+            <figure class="card overflow-hidden">
+                <img src="/notes/on-policy-distillation/alignment-pipeline.png" alt="PRISM alignment stage architecture" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">
+                    图 8：alignment stage 的具体结构。PRISM 不要求 teacher logits，而是让 policy 与参考监督池在 response-level 上通过 MoE discriminator 做对抗式对齐。
+                </figcaption>
+            </figure>
+
+            <div class="card">
+                <h3>为什么要用 black-box OPD</h3>
+                <p>
+                    在真实场景里，teacher 往往是 Gemini、GPT 这类闭源系统，拿不到 logits，也无法做标准 token-level reverse KL。PRISM 的做法是：保留“on-policy 对齐”的核心思想，但把监督从 token-level KL 改写成 <strong>response-level adversarial alignment</strong>。它只需要有高质量参考回答样本，不需要直接访问 teacher 的词表分布。
+                </p>
+                <p>
+                    更具体地说，PRISM 会让当前 policy 自己生成一组 rollout，再用一个 Mixture-of-Experts discriminator 去比较 policy response 与 reference response 哪个更像 supervision distribution。这个 discriminator 不是单一判别器，而是分成 perception expert 与 reasoning expert 两部分，分别对视觉 grounding 与推理链条打分。
+                </p>
+            </div>
+
+            <div class="math-block">
+                <p set:html={String.raw`$$r(x,y)=\alpha\cdot D_v(x,c)+(1-\alpha)\cdot D_r(x,t)$$`}></p>
+            </div>
+
+            <p>
+                这里 <span set:html={String.raw`$D_v$`}></span> 负责判断视觉描述是否 grounded，<span set:html={String.raw`$D_r$`}></span> 负责判断推理链是否合理。这个设计的要点在于：<strong>多模态 drift 不是单一维度的</strong>。视觉错误与推理错误是两种不同故障模式，强行用一个单标量 reward 全部揉在一起，会让修正信号过粗。
+            </p>
+
+            <div class="math-block">
+                <p set:html={String.raw`$$\mathcal{L}_{D_k}=-\mathbb{E}_{(x,y^+,y^-)\sim\mathcal{T}}\left[\log\sigma\bigl(D_k(x,y_k^+)-D_k(x,y_k^-)\bigr)\right]$$`}></p>
+            </div>
+
+            <div class="math-block">
+                <p set:html={String.raw`$$A_i=\frac{r(x,y_i^-)-\operatorname{mean}(\{r(x,y_j^-)\}_{j=1}^N)}{\operatorname{std}(\{r(x,y_j^-)\}_{j=1}^N)}$$`}></p>
+            </div>
+
+            <p>
+                前一个式子是 discriminator 的 Bradley-Terry loss：参考回答 <span set:html={String.raw`$y^+$`}></span> 应该比 policy rollout <span set:html={String.raw`$y^-$`}></span> 更像目标分布；后一个式子则是 group-wise normalized advantage，说明 policy 的更新已经不是传统 KD，而更接近 GRPO 风格的 on-policy policy gradient。
+            </p>
+
+            <figure class="card overflow-hidden">
+                <img src="/notes/on-policy-distillation/teacher-minus-student-diff.png" alt="PRISM 中 perception 与 reasoning expert 的训练动态" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">
+                    图 9：perception expert 与 reasoning expert 的收敛轨迹并不一样。视觉对齐往往更快，推理对齐更慢、更波动，这正是 MoE discriminator 有必要存在的原因之一。
+                </figcaption>
+            </figure>
+
+            <figure class="card overflow-hidden">
+                <img src="/notes/on-policy-distillation/distribution-visualization.png" alt="PRISM 对分布结构代理指标的修复效果" class="mx-auto rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">
+                    图 10：PRISM 关心的不是 alignment 阶段立刻涨准确率，而是把 response structure 拉回更接近 supervision 的位置，让后续 RLVR 接力时更容易继续变好。
+                </figcaption>
+            </figure>
+
+            <div class="card">
+                <h3>PRISM 的实验结论为什么很有说服力</h3>
+                <p>
+                    它最有价值的一点，是明确区分了“alignment 立即涨分”与“alignment 改善后续 RL 初始化”这两件事。论文表格显示，PRISM alignment checkpoint 本身和 SFT checkpoint 的准确率差别并不夸张，但一旦接入 GRPO / DAPO / GSPO，最终性能会稳定优于标准 SFT→RLVR pipeline。也就是说，<strong>alignment 修的是分布结构，RLVR 才负责最终 outcome 优化</strong>。
+                </p>
+                <p>
+                    这和前一篇文本 OPD 论文的主线其实是一致的：真正重要的不是 teacher 在抽象意义上有多强，而是当前 policy 是否被拉回了一个更“可学习”的状态空间。PRISM 只不过把这个思路从 token-level 文本分布，推广到了 response-level 的多模态结构分布。
+                </p>
+            </div>
+        </div>
+
+        <div class="chapter" id="comparison">
+            <div class="chapter-header">
+                <h2>8. 从文本 OPD 到多模态 PRISM：一条更完整的后训练链路</h2>
+            </div>
+
+            <p>
+                把两篇论文放在一起看，会发现它们其实在回答同一个更大的问题：<strong>怎样在 current policy 真实会访问的状态上，提供既密集又可利用的改进信号</strong>。2604.13016 更偏“解释学”，告诉我们什么样的 teacher 组合和什么样的 token dynamics 才能让 OPD 成功；2604.28123 更偏“系统设计”，告诉我们当 teacher 是黑盒、任务变成多模态、系统还要接 RLVR 时，OPD 应该怎样重新组织。
+            </p>
+
+            <div class="card">
+                <h3>两篇论文的共同点</h3>
+                <ul>
+                    <li>都强调 <strong>on-policy 状态</strong> 比离线 teacher 轨迹更重要。</li>
+                    <li>都把“分布是否可对齐”看得比“teacher 是否更强”更重要。</li>
+                    <li>都说明了后训练不是简单堆叠阶段，而是每一阶段都会改变下一个阶段可优化的空间。</li>
+                </ul>
+            </div>
+
+            <div class="card mt-6">
+                <h3>两篇论文的关键差异</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="px-4 py-3 text-left font-semibold text-gray-700">维度</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-700">2604.13016</th>
+                                <th class="px-4 py-3 text-left font-semibold text-gray-700">2604.28123 / PRISM</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <tr>
+                                <td class="px-4 py-3 text-gray-600"><strong>主要任务</strong></td>
+                                <td class="px-4 py-3 text-gray-600">文本 LLM 的 OPD 机制研究</td>
+                                <td class="px-4 py-3 text-gray-600">多模态模型的预对齐与 RL 前桥接</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 text-gray-600"><strong>监督形态</strong></td>
+                                <td class="px-4 py-3 text-gray-600">token-level reverse KL / sampled-token / top-k</td>
+                                <td class="px-4 py-3 text-gray-600">response-level adversarial reward</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 text-gray-600"><strong>teacher 访问方式</strong></td>
+                                <td class="px-4 py-3 text-gray-600">需要 teacher logits</td>
+                                <td class="px-4 py-3 text-gray-600">黑盒，只需高质量参考样本</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 text-gray-600"><strong>核心问题</strong></td>
+                                <td class="px-4 py-3 text-gray-600">何时成功、为何成功、如何修复失败</td>
+                                <td class="px-4 py-3 text-gray-600">如何把 alignment 做成 RL 前的显式阶段</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="note-box">
+                <h3>我对这两篇工作的整体理解</h3>
+                <p>
+                    如果把 SFT 看作“教模型像样地开始”，把 RLVR 看作“教模型为最终结果负责”，那么 OPD/PRISM 负责的是中间那层很关键但过去常被省略的东西：<strong>把模型带回一个更像目标分布、也更适合后续在线优化的状态</strong>。没有这一步，SFT 可能把分布拉歪，RLVR 则不得不在一个已经扭曲的起点上继续努力，最终很难把全部损失追回来。
+                </p>
+            </div>
+
+            <div class="card">
+                <h3>工程侧的 5 条实践建议</h3>
+                <ol>
+                    <li><strong>选 teacher 时别只看榜单。</strong> 优先评估 thinking pattern compatibility，以及 teacher 是否提供 student 真没见过的新能力。</li>
+                    <li><strong>先测 overlap，再谈大规模蒸馏。</strong> 如果早期 overlap 与 entropy gap 完全不动，继续堆算力往往只是放大失败。</li>
+                    <li><strong>必要时做 cold start。</strong> teacher 不是“没用”，可能只是“离当前 student 太远”。</li>
+                    <li><strong>对 prompt 分布保持敏感。</strong> teacher-aligned prompts 有帮助，但不要过度单一，否则容易 entropy collapse。</li>
+                    <li><strong>把 alignment 当成独立阶段来设计。</strong> 尤其在多模态与黑盒 teacher 条件下，先修分布，再做 outcome-RL，往往比一步到位更稳。</li>
+                </ol>
+            </div>
+        </div>
+
+        <div class="chapter" id="references">
+            <div class="chapter-header">
+                <h2>9. 参考资料</h2>
+            </div>
+
+            <div class="card">
+                <h3>一手资料</h3>
+                <ul>
+                    <li><a href="https://arxiv.org/abs/2604.13016" target="_blank" rel="noopener noreferrer">Rethinking On-Policy Distillation of Large Language Models: Phenomenology, Mechanism, and Recipe</a></li>
+                    <li><a href="https://github.com/thunlp/OPD" target="_blank" rel="noopener noreferrer">THUNLP / OPD GitHub Repository</a></li>
+                    <li><a href="https://arxiv.org/abs/2604.28123" target="_blank" rel="noopener noreferrer">Beyond SFT-to-RL: Pre-alignment via Black-Box On-Policy Distillation for Multimodal RL</a></li>
+                    <li><a href="https://github.com/XIAO4579/PRISM" target="_blank" rel="noopener noreferrer">PRISM GitHub Repository</a></li>
+                </ul>
+            </div>
+
+            <div class="card mt-6">
+                <h3>这些来源分别补了什么</h3>
+                <ul>
+                    <li><strong>2604.13016 论文原文与源码：</strong>提供 OPD 的精确定义、overlap/advantage/entropy gap 三个动态指标、以及 cold start / teacher-aligned prompt 两条 recipe。</li>
+                    <li><strong>2604.28123 论文原文与源码：</strong>提供 PRISM 的三阶段系统设计、MoE discriminator、Bradley-Terry 对抗式目标，以及多模态 alignment 的实验与消融。</li>
+                    <li><strong>论文源码中的 figures：</strong>帮助确认正文解释是否真的落到了作者想强调的现象，而不是只复述结论。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter" id="figures">
+            <div class="chapter-header">
+                <h2>10. Original Figures</h2>
+            </div>
+            <p>下面保留了本次写作中最关键的原图，方便快速对照论文结构回看。</p>
+
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <figure class="card overflow-hidden">
+                    <img src="/notes/on-policy-distillation/opd-teaser.png" alt="OPD teaser" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">图 1：OPD 全文总览</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/on-policy-distillation/3-1-metrics.png" alt="Phenomenology metrics" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">图 2：成功条件与现象对比</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/on-policy-distillation/5-1-combined.png" alt="Successful vs failing OPD" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">图 3：成功 / 失败 run 的训练动力学</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/on-policy-distillation/5-2-combined.png" alt="Overlap token sufficiency" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">图 4：仅优化 overlap token 已足够</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/on-policy-distillation/4-2-combined.png" alt="Off-policy cold start" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">图 5：off-policy cold start</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/on-policy-distillation/6-1-response-summary.png" alt="Response length summary" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">图 6：response length sweet spot</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/on-policy-distillation/prism-overview.png" alt="PRISM overview" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">图 7：PRISM 总览</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/on-policy-distillation/alignment-pipeline.png" alt="PRISM alignment pipeline" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">图 8：alignment pipeline</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/on-policy-distillation/teacher-minus-student-diff.png" alt="Perception and reasoning expert dynamics" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">图 9：双专家训练动态</figcaption>
+                </figure>
+                <figure class="card overflow-hidden">
+                    <img src="/notes/on-policy-distillation/distribution-visualization.png" alt="Distribution alignment visualization" class="w-full rounded-xl border border-white/70" />
+                    <figcaption class="mt-2 text-sm text-gray-600">图 10：结构代理指标上的分布修复</figcaption>
+                </figure>
+            </div>
+        </div>
+    </main>
+</BaseLayout>
