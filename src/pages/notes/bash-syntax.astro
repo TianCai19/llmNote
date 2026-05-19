@@ -1,0 +1,721 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    number: '25',
+    title: 'Bash 语法与脚本实践',
+    description: '从变量、条件、循环到重定向、管道与脚本健壮性：一篇带输入输出示例和可视化结果的 Bash 深度笔记',
+    tags: ['Bash', 'Shell', 'Scripting'],
+    readTime: '26 min',
+    createdAt: '2026-05-19'
+};
+---
+
+<BaseLayout title="Bash 语法与脚本实践：从命令行到可维护脚本" description="把 Bash 速查表扩展成一篇完整技术笔记：解释 Bash 的执行模型、参数系统、条件与循环、重定向与管道、健壮脚本写法，并加入输入输出示例与可视化结果。">
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Bash 语法与脚本实践：从命令行到可维护脚本</h1>
+        <p class="text-xl text-gray-500">把速查表里的 while、if、数组、重定向和 here-doc 串成一个完整心智模型：<strong>Bash 不只是“命令合集”，而是一套解析输入、展开参数、连接进程和管理输入输出的执行系统</strong>。</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <div class="toc">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#why-bash">1. 为什么 Bash 不只是速查语法</a></li>
+            <li><a href="#execution-model">2. Bash 的执行模型：输入如何变成输出</a></li>
+            <li><a href="#parameters">3. 变量、位置参数与脚本输入</a></li>
+            <li><a href="#conditionals">4. 条件判断的本质：退出码而不是 true/false 关键字</a></li>
+            <li><a href="#control-flow">5. 循环、数组与函数：如何组织非平凡脚本</a></li>
+            <li><a href="#io">6. 重定向、管道与 here-doc：Shell 最有辨识度的能力</a></li>
+            <li><a href="#robust-script">7. 一个完整示例：从输入到可视化结果的日志扫描脚本</a></li>
+            <li><a href="#pitfalls">8. 高频误区与实践清单</a></li>
+            <li><a href="#references">9. 参考资料</a></li>
+        </ul>
+    </div>
+
+    <div class="chapter" id="why-bash">
+        <div class="chapter-header">
+            <h2>1. 为什么 Bash 不只是速查语法</h2>
+        </div>
+        <p>用户给的原始笔记已经覆盖了循环、条件、变量、数组、函数、重定向和 here-doc 等常见写法，这些内容很适合作为“速查手册”。但在真正写脚本时，最容易出问题的地方往往不是“不会写 <code>for</code>”，而是<strong>不知道 Bash 在什么时候做参数展开、什么时候做单词分割、重定向为什么会受顺序影响、为什么一个命令成功与否是通过退出码而不是布尔值传递</strong>。</p>
+        <p>所以这篇笔记的目标不是把原表再抄一遍，而是把它展开成一条更清晰的主线：<strong>输入进入 shell 之后，经历了解析、展开、条件判定、进程连接与文件描述符重定向，最终变成可见输出</strong>。一旦这条主线建立起来，你再看 <code>$@</code>、<code>[[ ... ]]</code>、<code>2&gt;&amp;1</code>、<code>set -euo pipefail</code>，它们就不再只是零散技巧。</p>
+
+        <div class="card mt-6">
+            <h3>这篇笔记重点补足什么</h3>
+            <div class="overflow-x-auto mt-4">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead>
+                        <tr class="bg-gray-50">
+                            <th class="px-4 py-3 text-left font-semibold text-gray-700">速查表能解决的问题</th>
+                            <th class="px-4 py-3 text-left font-semibold text-gray-700">深度笔记需要补足的问题</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        <tr>
+                            <td class="px-4 py-3 text-gray-600">知道 <code>if</code> / <code>for</code> / <code>while</code> 长什么样</td>
+                            <td class="px-4 py-3 text-gray-600">理解判断依赖的是命令退出状态，以及 <code>[[ ]]</code>、<code>test</code>、<code>(( ))</code> 的语义边界</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-3 text-gray-600">知道如何给变量赋值</td>
+                            <td class="px-4 py-3 text-gray-600">理解参数展开、命令替换、引用、单词分割之间的先后关系</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-3 text-gray-600">知道 <code>&gt;</code>、<code>&gt;&gt;</code>、<code>|</code> 怎么写</td>
+                            <td class="px-4 py-3 text-gray-600">理解文件描述符、stderr 合流、here-doc 与 here-string 的真实输入路径</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-3 text-gray-600">知道 <code>$1</code>、<code>$@</code>、<code>$?</code> 的名字</td>
+                            <td class="px-4 py-3 text-gray-600">理解脚本输入/输出边界、参数转发与函数作用域</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="chapter" id="execution-model">
+        <div class="chapter-header">
+            <h2>2. Bash 的执行模型：输入如何变成输出</h2>
+        </div>
+        <p>GNU Bash 官方手册把许多主题拆在不同章节：Shell Parameters、Conditional Constructs、Redirections 等。把这些内容合起来看，可以得到一个很有用的执行模型：<strong>命令不是“直接跑”，而是先被 Bash 解析成单词和结构，再进行各种展开，最后连同重定向与环境一起交给内建命令或外部进程执行</strong>。</p>
+
+        <div class="card">
+            <h3>命令从输入到输出的流程图</h3>
+            <div class="pipeline-diagram mt-6" aria-label="Bash execution pipeline diagram">
+                <div class="step-node">
+                    <span class="step-index">1</span>
+                    <strong>用户输入</strong>
+                    <p><code>grep "$keyword" "$file" &gt; out.log 2&gt;&amp;1</code></p>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step-node">
+                    <span class="step-index">2</span>
+                    <strong>解析语法</strong>
+                    <p>识别命令、参数、管道、分支、重定向</p>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step-node">
+                    <span class="step-index">3</span>
+                    <strong>展开与替换</strong>
+                    <p>变量展开、命令替换、算术展开、去引号</p>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step-node">
+                    <span class="step-index">4</span>
+                    <strong>建立 I/O</strong>
+                    <p>按从左到右应用重定向，连接文件描述符</p>
+                </div>
+                <div class="step-arrow">→</div>
+                <div class="step-node">
+                    <span class="step-index">5</span>
+                    <strong>执行命令</strong>
+                    <p>运行内建命令或启动外部进程，返回退出码</p>
+                </div>
+            </div>
+        </div>
+
+        <p class="mt-6">这里最容易忽略的有三点。第一，<strong>赋值右侧会做展开，但不会做单词分割和文件名展开</strong>；这也是为什么 <code>name=$(echo "a b")</code> 在赋值阶段还是一个整体。第二，<strong>重定向在命令执行前就会生效，而且顺序从左到右</strong>，所以 <code>cmd &gt;file 2&gt;&amp;1</code> 和 <code>cmd 2&gt;&amp;1 &gt;file</code> 结果并不相同。第三，<strong>条件结构最终判断的是退出码</strong>：0 代表成功，非 0 代表失败。</p>
+
+        <div class="note-box mt-6">
+            <strong>一个可反复使用的心智模型：</strong> Bash 的核心不是“写脚本语法”，而是“安排字符串如何展开、进程如何连接、数据如何流动”。只要把输入、展开、执行和输出四层分开，很多看似玄学的问题都会变得可解释。
+        </div>
+    </div>
+
+    <div class="chapter" id="parameters">
+        <div class="chapter-header">
+            <h2>3. 变量、位置参数与脚本输入</h2>
+        </div>
+        <p>官方手册把参数定义为“保存值的实体”，变量只是“具名参数”的一种。这个定义看起来抽象，但对 Bash 很关键：<strong><code>$1</code>、<code>$@</code>、<code>$?</code>、<code>$0</code> 虽然不像普通变量那样命名，本质上也属于参数系统的一部分</strong>。这意味着脚本的输入并不只来自文件或 stdin，命令行参数、环境变量、特殊参数共同决定了脚本当前上下文。</p>
+
+        <div class="card">
+            <h3>最常见的脚本输入面</h3>
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 mt-4 text-sm">
+                <div class="io-card">
+                    <h4>命令行参数</h4>
+                    <p><code>$1</code> ~ <code>$9</code>、<code>$@</code>、<code>$#</code></p>
+                    <p>决定脚本处理什么对象</p>
+                </div>
+                <div class="io-card">
+                    <h4>环境变量</h4>
+                    <p><code>HOME</code>、<code>PATH</code>、<code>DEBUG</code></p>
+                    <p>提供配置和运行环境</p>
+                </div>
+                <div class="io-card">
+                    <h4>标准输入</h4>
+                    <p><code>stdin</code> / 管道 / here-doc</p>
+                    <p>提供流式文本数据</p>
+                </div>
+                <div class="io-card">
+                    <h4>脚本内部状态</h4>
+                    <p><code>$?</code>、<code>$$</code>、<code>$!</code></p>
+                    <p>描述上一步执行结果和进程状态</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-6">
+            <h3>输入与输出示例：位置参数如何进入脚本</h3>
+            <div class="io-grid mt-4">
+                <div class="io-card">
+                    <h4>输入</h4>
+                    <div class="terminal-output">$ ./hello.sh Alice engineer</div>
+                </div>
+                <div class="io-card">
+                    <h4>脚本</h4>
+                    <pre class="language-bash"><code>{`#!/bin/bash
+name="$1"
+role="$2"
+
+echo "name=$name"
+echo "role=$role"
+echo "argc=$#"
+echo "all=$@"`}</code></pre>
+                </div>
+                <div class="io-card">
+                    <h4>输出</h4>
+                    <div class="terminal-output">name=Alice
+role=engineer
+argc=2
+all=Alice engineer</div>
+                </div>
+            </div>
+            <p class="mt-4">这里可以立刻看出 Bash 一个重要特征：<strong>脚本输入是字符串序列，不是带类型的对象</strong>。你之后看到的数组、条件判断、算术比较，本质上都是在这一组字符串上继续做解释与转换。</p>
+        </div>
+
+        <div class="card mt-6">
+            <h3>为什么引用几乎总是必要的</h3>
+            <p>BashGuide 和 Bash Hackers Wiki 都反复强调 quoting，因为参数展开之后如果没有引号，往往会继续发生单词分割和路径名扩展。于是“一个变量”可能突然变成“多个参数”，或者被 <code>*</code> 匹配成当前目录的一批文件。</p>
+            <pre class="language-bash"><code>{`file="report final.txt"
+
+# 错误风险：会把空格拆成两个参数
+cat $file
+
+# 更稳妥：把展开结果作为一个整体传递
+cat "$file"`}</code></pre>
+            <div class="bg-amber-50 p-4 rounded-lg border border-amber-100 mt-4">
+                <strong>经验法则：</strong> 除非你非常明确地需要 Bash 再做一次分割，否则变量展开默认都加双引号，尤其是 <code>"$@"</code>、<code>"$var"</code>、<code>"$(command)"</code> 这三类高频位置。
+            </div>
+        </div>
+    </div>
+
+    <div class="chapter" id="conditionals">
+        <div class="chapter-header">
+            <h2>4. 条件判断的本质：退出码而不是 true/false 关键字</h2>
+        </div>
+        <p>很多初学者第一次接触 Bash 会困惑：为什么 <code>if</code> 后面跟的是一条命令或一个测试表达式，而不是像 Python 那样直接写布尔表达式？原因在于 Shell 世界最原生的判定单位不是布尔对象，而是<strong>命令退出状态（exit status）</strong>。约定俗成地，0 表示成功，非 0 表示失败。</p>
+
+        <div class="card">
+            <h3>一个最小判定链路</h3>
+            <div class="io-grid mt-4">
+                <div class="io-card">
+                    <h4>输入</h4>
+                    <div class="terminal-output">$ test -f ./config.yaml
+$ echo $?</div>
+                </div>
+                <div class="io-card">
+                    <h4>解释</h4>
+                    <p><code>test</code> 不负责“打印 true/false”，它只负责返回一个状态码给 shell。</p>
+                </div>
+                <div class="io-card">
+                    <h4>输出</h4>
+                    <div class="terminal-output">0   # 文件存在
+1   # 文件不存在</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-6">
+            <h3><code>test</code>、<code>[ ]</code>、<code>[[ ]]</code>、<code>(( ))</code> 的区别</h3>
+            <div class="overflow-x-auto mt-4">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead>
+                        <tr class="bg-gray-50">
+                            <th class="px-4 py-3 text-left font-semibold text-gray-700">形式</th>
+                            <th class="px-4 py-3 text-left font-semibold text-gray-700">主要用途</th>
+                            <th class="px-4 py-3 text-left font-semibold text-gray-700">边界与特点</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        <tr>
+                            <td class="px-4 py-3 text-gray-600"><code>test expr</code> / <code>[ expr ]</code></td>
+                            <td class="px-4 py-3 text-gray-600">经典条件测试</td>
+                            <td class="px-4 py-3 text-gray-600">语法更老，对引用与空白更敏感</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-3 text-gray-600"><code>[[ expr ]]</code></td>
+                            <td class="px-4 py-3 text-gray-600">更安全的 Bash 条件表达式</td>
+                            <td class="px-4 py-3 text-gray-600">内部不做单词分割和文件名展开，适合字符串匹配和正则</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-3 text-gray-600"><code>(( expr ))</code></td>
+                            <td class="px-4 py-3 text-gray-600">算术条件</td>
+                            <td class="px-4 py-3 text-gray-600">结果非 0 视为成功，0 视为失败</td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-3 text-gray-600"><code>cmd1 &amp;&amp; cmd2</code></td>
+                            <td class="px-4 py-3 text-gray-600">基于成功继续执行</td>
+                            <td class="px-4 py-3 text-gray-600">是命令控制流，不是普通逻辑运算符函数</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mt-6">
+            <h3>示例：根据参数决定执行路径</h3>
+            <pre class="language-bash"><code>{`mode="$1"
+
+if [[ "$mode" == "start" ]]; then
+    echo "starting service"
+elif [[ "$mode" == "stop" ]]; then
+    echo "stopping service"
+else
+    echo "unknown mode: $mode" >&2
+    exit 1
+fi`}</code></pre>
+            <p class="mt-4">这个例子里，<code>[[ "$mode" == "start" ]]</code> 自身就是一条命令；若匹配成功，它的退出码为 0，于是进入 <code>then</code> 分支。<strong>Shell 的条件判断并不是在求值“对象是否为真”，而是在观察“上一条命令是否成功”</strong>。</p>
+        </div>
+    </div>
+
+    <div class="chapter" id="control-flow">
+        <div class="chapter-header">
+            <h2>5. 循环、数组与函数：如何组织非平凡脚本</h2>
+        </div>
+        <p>当 Bash 只是一两行命令时，你可能感觉不到“结构化”的重要性；但一旦脚本需要遍历多个目标、拆分多个阶段、复用一段逻辑，循环、数组和函数就会迅速变成主角。用户原始笔记已经列出了 <code>while</code>、列表型 <code>for</code>、数字范围 <code>for</code>、C 风格 <code>for</code>、<code>until</code>、<code>break</code>/<code>continue</code>。更进一步的问题是：<strong>什么时候该用哪一种，怎样避免脚本越写越乱</strong>？</p>
+
+        <div class="card">
+            <h3>四种循环的语义差异</h3>
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4 text-sm">
+                <div class="io-card">
+                    <h4><code>for item in ...</code></h4>
+                    <p>适合遍历一组离散值或数组元素。</p>
+                </div>
+                <div class="io-card">
+                    <h4><code>for ((i=0; ...))</code></h4>
+                    <p>适合明确的计数循环，与算术条件天然结合。</p>
+                </div>
+                <div class="io-card">
+                    <h4><code>while cond</code></h4>
+                    <p>只要条件命令成功就继续，适合轮询、读输入、等待任务完成。</p>
+                </div>
+                <div class="io-card">
+                    <h4><code>until cond</code></h4>
+                    <p>直到条件成功才停止，本质上是“失败时继续”的循环。</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-6">
+            <h3>数组让“多值输入”不再靠字符串硬拼</h3>
+            <pre class="language-bash"><code>{`servers=(api-01 api-02 worker-01)
+
+for server in "\${servers[@]}"; do
+    echo "checking $server"
+done`}</code></pre>
+            <p class="mt-4">数组最大的价值不是“看起来更像编程语言”，而是它把“多个参数”保留为结构化序列，避免你用一个字符串手搓分隔符再拆开。这里的 <code>"&#36;&#123;servers[@]&#125;"</code> 会把每个元素作为独立参数传入循环体，是 Bash 中非常重要的稳定写法。</p>
+        </div>
+
+        <div class="card mt-6">
+            <h3>函数负责复用逻辑，<code>local</code> 负责限制副作用</h3>
+            <pre class="language-bash"><code>{`scan_file() {
+    local file="$1"
+    local keyword="$2"
+
+    if grep -q "$keyword" "$file"; then
+        echo "hit: $file"
+        return 0
+    fi
+
+    echo "miss: $file"
+    return 1
+}`}</code></pre>
+            <p class="mt-4">Bash 函数没有独立的复杂类型系统，因此副作用控制主要靠约定：<strong>输入通过参数传进来，局部中间变量用 <code>local</code> 限定，结果通过 stdout 或返回码表达</strong>。这里要注意：函数的 <code>return</code> 返回的是退出码，不是任意字符串；若想“返回文本”，常见做法是打印到 stdout，再由调用方捕获。</p>
+        </div>
+    </div>
+
+    <div class="chapter" id="io">
+        <div class="chapter-header">
+            <h2>6. 重定向、管道与 here-doc：Shell 最有辨识度的能力</h2>
+        </div>
+        <p>如果说变量和条件判断让 Bash 像一门脚本语言，那么重定向和管道则是它最像“Unix 组合器”的地方。GNU 手册明确强调：<strong>重定向在命令执行前处理，并且从左到右应用</strong>。这条规则能解释大量看似诡异的现象。</p>
+
+        <div class="card">
+            <h3>标准流与文件描述符可视化</h3>
+            <div class="fd-visual mt-5">
+                <div class="fd-chip"><strong>0</strong><span>stdin</span><em>输入</em></div>
+                <div class="fd-chip"><strong>1</strong><span>stdout</span><em>正常输出</em></div>
+                <div class="fd-chip"><strong>2</strong><span>stderr</span><em>错误输出</em></div>
+            </div>
+            <p class="mt-5">大多数 Bash I/O 技巧，本质上都是在问：<strong>某个文件描述符当前连接到哪里？</strong> 比如 <code>&gt; file</code> 是把 1 号描述符指向文件，<code>2&gt; error.log</code> 是把 2 号描述符指向另一个文件，<code>2&gt;&amp;1</code> 是让 stderr 跟随 stdout 的当前目标。</p>
+        </div>
+
+        <div class="card mt-6">
+            <h3>为什么顺序会影响结果</h3>
+            <div class="overflow-x-auto mt-4">
+                <table class="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead>
+                        <tr class="bg-gray-50">
+                            <th class="px-4 py-3 text-left font-semibold text-gray-700">写法</th>
+                            <th class="px-4 py-3 text-left font-semibold text-gray-700">含义</th>
+                            <th class="px-4 py-3 text-left font-semibold text-gray-700">结果</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        <tr>
+                            <td class="px-4 py-3 text-gray-600"><code>cmd &gt;out.log 2&gt;&amp;1</code></td>
+                            <td class="px-4 py-3 text-gray-600">先把 stdout 指到文件，再让 stderr 跟随 stdout</td>
+                            <td class="px-4 py-3 text-gray-600">stdout 和 stderr 都进入 <code>out.log</code></td>
+                        </tr>
+                        <tr>
+                            <td class="px-4 py-3 text-gray-600"><code>cmd 2&gt;&amp;1 &gt;out.log</code></td>
+                            <td class="px-4 py-3 text-gray-600">先让 stderr 跟随当前 stdout（通常是终端），再改 stdout</td>
+                            <td class="px-4 py-3 text-gray-600">stdout 进文件，stderr 仍留在终端</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mt-6">
+            <h3>输入输出示例：管道如何改变数据流</h3>
+            <div class="io-grid mt-4">
+                <div class="io-card">
+                    <h4>输入</h4>
+                    <div class="terminal-output">$ cat access.log | grep ERROR | wc -l</div>
+                </div>
+                <div class="io-card">
+                    <h4>可视化结果</h4>
+                    <div class="terminal-output">access.log ──▶ grep ERROR ──▶ wc -l
+
+文本流         过滤后文本流        计数</div>
+                </div>
+                <div class="io-card">
+                    <h4>输出</h4>
+                    <div class="terminal-output">17</div>
+                </div>
+            </div>
+            <p class="mt-4">管道的本质是把前一条命令的 stdout 连接到后一条命令的 stdin。也因此，<strong>默认情况下 stderr 不会进入管道</strong>；如果希望错误信息也进入后续处理，需要显式重定向，例如 <code>command 2&gt;&amp;1 | tee result.log</code>。</p>
+        </div>
+
+        <div class="card mt-6">
+            <h3>here-doc 与 here-string：把“文本块”作为输入</h3>
+            <pre class="language-bash"><code>{`cat <<'EOF'
+name=demo
+retry=3
+debug=true
+EOF
+
+grep demo <<< "name=demo env=prod"`}</code></pre>
+            <p class="mt-4">here-doc 适合嵌入多行配置、模板或说明文本；here-string 则适合把一段短字符串直接喂给标准输入。官方手册特别提醒：<strong>如果 here-doc 的定界符被引用，那么正文不会做展开</strong>。这在生成模板文件时非常有用，因为你可以防止其中的 <code>$</code> 被当前 shell 提前展开掉。</p>
+        </div>
+    </div>
+
+    <div class="chapter" id="robust-script">
+        <div class="chapter-header">
+            <h2>7. 一个完整示例：从输入到可视化结果的日志扫描脚本</h2>
+        </div>
+        <p>下面把原始笔记里的多个语法点串起来，构造成一个更接近真实工作的例子：脚本接受一个关键字和若干日志文件，扫描每个文件中是否存在命中项，最终输出命中文件和汇总统计。这个例子同时用到：位置参数、数组、函数、<code>[[ ]]</code>、循环、stdout/stderr、返回码和 <code>set -euo pipefail</code>。</p>
+
+        <div class="card">
+            <h3>脚本</h3>
+            <pre class="language-bash"><code>{`#!/bin/bash
+set -euo pipefail
+
+if [[ $# -lt 2 ]]; then
+    echo "usage: $0 <keyword> <file...>" >&2
+    exit 1
+fi
+
+keyword="$1"
+shift
+files=("$@")
+hits=()
+
+scan_one() {
+    local file="$1"
+    local keyword="$2"
+
+    if [[ ! -f "$file" ]]; then
+        echo "skip: $file not found" >&2
+        return 1
+    fi
+
+    if grep -q "$keyword" "$file"; then
+        hits+=("$file")
+        echo "hit: $file"
+        return 0
+    fi
+
+    echo "miss: $file"
+    return 0
+}
+
+for file in "\${files[@]}"; do
+    scan_one "$file" "$keyword"
+done
+
+echo "summary: \${#hits[@]} file(s) matched"
+printf 'matched => %s\n' "\${hits[@]}"`}</code></pre>
+        </div>
+
+        <div class="card mt-6">
+            <h3>输入 / 输出 / 可视化结果</h3>
+            <div class="io-grid mt-4">
+                <div class="io-card">
+                    <h4>输入</h4>
+                    <div class="terminal-output">$ ./scan.sh ERROR api.log worker.log cron.log</div>
+                    <p class="mt-3 text-sm text-gray-600">参数输入由关键字和多个文件路径组成。</p>
+                </div>
+                <div class="io-card">
+                    <h4>输出</h4>
+                    <div class="terminal-output">hit: api.log
+miss: worker.log
+hit: cron.log
+summary: 2 file(s) matched
+matched =&gt; api.log
+matched =&gt; cron.log</div>
+                </div>
+                <div class="io-card">
+                    <h4>可视化结果</h4>
+                    <div class="result-bars">
+                        <div class="result-bar hit"><span>api.log</span><em>命中</em></div>
+                        <div class="result-bar miss"><span>worker.log</span><em>未命中</em></div>
+                        <div class="result-bar hit"><span>cron.log</span><em>命中</em></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-6">
+            <h3>为什么这里推荐 <code>set -euo pipefail</code></h3>
+            <ul class="list-disc pl-6 space-y-2 text-gray-600">
+                <li><strong><code>set -e</code></strong>：遇到未处理错误时尽早退出，避免脚本在异常状态下继续执行。</li>
+                <li><strong><code>set -u</code></strong>：引用未定义变量立即报错，防止拼写错误悄悄吞掉逻辑。</li>
+                <li><strong><code>set -o pipefail</code></strong>：只要管道中任意命令失败，就让整条管道失败，而不是只看最后一个命令。</li>
+            </ul>
+            <p class="mt-4">不过它们也不是银弹。比如 <code>set -e</code> 在某些条件上下文里并不总按新手想象的方式工作，因此更稳妥的做法依然是：<strong>关键步骤显式判断，预期可失败的命令主动处理</strong>，不要把脚本健壮性完全寄托在某个全局选项上。</p>
+        </div>
+    </div>
+
+    <div class="chapter" id="pitfalls">
+        <div class="chapter-header">
+            <h2>8. 高频误区与实践清单</h2>
+        </div>
+        <p>Bash Hackers Wiki 和 BashGuide 一直在强调同一件事：很多脚本不是“不会写”，而是“能跑但不稳”。下面列几个非常常见的坑，并给出更可靠的写法方向。</p>
+
+        <div class="card">
+            <h3>高频误区</h3>
+            <ol class="list-decimal pl-6 space-y-3 text-gray-600">
+                <li><strong>把 Bash 变量当成带类型变量看待。</strong> 实际上大多数时候它们只是字符串，算术语义需要显式进入 <code>(( ))</code> 或相关上下文。</li>
+                <li><strong>忘记引用变量。</strong> 这会触发额外的单词分割和路径扩展，最常见于路径、命令替换结果和参数转发。</li>
+                <li><strong>误以为 <code>return</code> 可以返回任意文本。</strong> 函数返回的是退出码，字符串结果通常通过 stdout 传出。</li>
+                <li><strong>默认认为 stderr 也会进入管道。</strong> 实际上只会自动连接 stdout。</li>
+                <li><strong>不知道重定向顺序重要。</strong> <code>2&gt;&amp;1</code> 指向的是“当前的 stdout”，不是未来被改写后的 stdout。</li>
+                <li><strong>拿 <code>[ ]</code> 和 <code>[[ ]]</code> 混着背。</strong> 它们的展开和匹配语义并不完全一样；在 Bash 脚本里，<code>[[ ]]</code> 往往更安全、可读性也更强。</li>
+            </ol>
+        </div>
+
+        <div class="card mt-6">
+            <h3>一份简洁的 Bash 编写清单</h3>
+            <ul class="list-disc pl-6 space-y-2 text-gray-600">
+                <li>脚本开头优先写清 shebang，并按需使用 <code>set -euo pipefail</code>。</li>
+                <li>所有外部输入先确认来源：参数、环境变量、stdin，还是文件。</li>
+                <li>变量展开默认加引号；需要拆分时再明确说明原因。</li>
+                <li>多值输入优先用数组，而不是手工拼接字符串。</li>
+                <li>关键分支显式处理返回码，尤其是文件不存在、网络失败、命令缺失等场景。</li>
+                <li>把 stdout 留给正常结果，把 stderr 留给错误和警告信息。</li>
+                <li>把 here-doc 用于模板和多行输入，把 here-string 用于短字符串喂给 stdin。</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="chapter" id="references">
+        <div class="chapter-header">
+            <h2>9. 参考资料</h2>
+        </div>
+        <p>这篇笔记以用户提供的《Bash 语法速查手册》为结构起点，再结合一手和高质量补充资料做展开。原始速查表负责列出常用语法；GNU Bash 官方手册提供参数、条件结构和重定向的准确语义；BashGuide 强调 quoting、参数组织和新手路径；Bash Hackers Wiki 则补足了展开顺序、文件描述符和脚本工程实践中的边界条件。</p>
+
+        <div class="card mt-6">
+            <ul class="list-disc pl-6 space-y-3 text-gray-600">
+                <li><strong>用户提供文档：</strong>《Bash 语法速查手册》——提供循环、条件、变量、特殊变量、数组、函数、重定向与 here-doc 的初始提纲。</li>
+                <li><strong>GNU Bash Reference Manual：</strong><a href="https://www.gnu.org/software/bash/manual/html_node/Shell-Parameters.html" target="_blank" rel="noopener noreferrer">Shell Parameters</a>、<a href="https://www.gnu.org/software/bash/manual/html_node/Conditional-Constructs.html" target="_blank" rel="noopener noreferrer">Conditional Constructs</a>、<a href="https://www.gnu.org/software/bash/manual/html_node/Redirections.html" target="_blank" rel="noopener noreferrer">Redirections</a></li>
+                <li><strong>BashGuide：</strong><a href="https://mywiki.wooledge.org/BashGuide" target="_blank" rel="noopener noreferrer">https://mywiki.wooledge.org/BashGuide</a></li>
+                <li><strong>Bash Hackers Wiki：</strong><a href="https://flokoe.github.io/bash-hackers-wiki/" target="_blank" rel="noopener noreferrer">https://flokoe.github.io/bash-hackers-wiki/</a></li>
+            </ul>
+        </div>
+    </div>
+</BaseLayout>
+
+<style>
+    .io-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+    }
+
+    @media (min-width: 1024px) {
+        .io-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+
+    .io-card {
+        border: 1px solid rgba(148, 163, 184, 0.24);
+        border-radius: 1rem;
+        padding: 1rem;
+        background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(248,250,252,0.92));
+        box-shadow: 0 14px 40px rgba(15, 23, 42, 0.06);
+    }
+
+    .io-card h4 {
+        margin: 0 0 0.75rem;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .terminal-output {
+        white-space: pre-wrap;
+        border-radius: 0.85rem;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 0.95rem 1rem;
+        font-family: 'SFMono-Regular', 'Consolas', monospace;
+        font-size: 0.88rem;
+        line-height: 1.65;
+        overflow-x: auto;
+    }
+
+    .pipeline-diagram {
+        display: grid;
+        gap: 0.75rem;
+        align-items: center;
+    }
+
+    @media (min-width: 1024px) {
+        .pipeline-diagram {
+            grid-template-columns: 1.2fr auto 1.2fr auto 1.2fr auto 1.2fr auto 1.2fr;
+        }
+    }
+
+    .step-node {
+        border-radius: 1rem;
+        border: 1px solid rgba(59, 130, 246, 0.18);
+        background: linear-gradient(180deg, rgba(239, 246, 255, 0.95), rgba(248, 250, 252, 0.96));
+        padding: 1rem;
+        min-height: 100%;
+    }
+
+    .step-node strong {
+        display: block;
+        color: #0f172a;
+        margin-bottom: 0.45rem;
+    }
+
+    .step-node p {
+        margin: 0;
+        font-size: 0.9rem;
+        color: #475569;
+    }
+
+    .step-index {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.85rem;
+        height: 1.85rem;
+        border-radius: 999px;
+        margin-bottom: 0.65rem;
+        background: #2563eb;
+        color: white;
+        font-size: 0.85rem;
+        font-weight: 700;
+    }
+
+    .step-arrow {
+        text-align: center;
+        color: #64748b;
+        font-size: 1.2rem;
+        font-weight: 700;
+    }
+
+    .fd-visual {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(1, minmax(0, 1fr));
+    }
+
+    @media (min-width: 768px) {
+        .fd-visual {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+
+    .fd-chip {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        align-items: flex-start;
+        padding: 1rem 1.1rem;
+        border-radius: 1rem;
+        border: 1px solid rgba(99, 102, 241, 0.15);
+        background: linear-gradient(180deg, rgba(238, 242, 255, 0.92), rgba(255,255,255,0.96));
+    }
+
+    .fd-chip strong {
+        display: inline-flex;
+        width: 2rem;
+        height: 2rem;
+        border-radius: 999px;
+        align-items: center;
+        justify-content: center;
+        background: #1d4ed8;
+        color: white;
+        font-size: 0.95rem;
+    }
+
+    .fd-chip span {
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .fd-chip em {
+        font-style: normal;
+        color: #475569;
+        font-size: 0.92rem;
+    }
+
+    .result-bars {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .result-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.8rem 1rem;
+        border-radius: 999px;
+        font-size: 0.92rem;
+        font-weight: 600;
+    }
+
+    .result-bar span {
+        color: #0f172a;
+    }
+
+    .result-bar em {
+        font-style: normal;
+        color: #334155;
+    }
+
+    .result-bar.hit {
+        background: linear-gradient(90deg, rgba(34, 197, 94, 0.28) 0%, rgba(220, 252, 231, 0.92) 68%, rgba(255,255,255,0.98) 100%);
+        border: 1px solid rgba(34, 197, 94, 0.18);
+    }
+
+    .result-bar.miss {
+        background: linear-gradient(90deg, rgba(148, 163, 184, 0.2) 0%, rgba(241, 245, 249, 0.92) 52%, rgba(255,255,255,0.98) 100%);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+</style>
