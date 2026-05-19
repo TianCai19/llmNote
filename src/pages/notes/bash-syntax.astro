@@ -1,15 +1,13 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
-import { todayYmd } from '../../utils/date';
-
-const createdAt = todayYmd();
 
 export const meta = {
-    number: '24',
+    number: '25',
     title: 'Bash 语法与脚本实践',
     description: '从变量、条件、循环到重定向、管道与脚本健壮性：一篇带输入输出示例和可视化结果的 Bash 深度笔记',
     tags: ['Bash', 'Shell', 'Scripting'],
-    readTime: '26 min'
+    readTime: '26 min',
+    createdAt: '2026-05-19'
 };
 ---
 
@@ -17,7 +15,7 @@ export const meta = {
     <header class="text-center mb-12">
         <h1 class="text-4xl font-bold mb-4 gradient-text">Bash 语法与脚本实践：从命令行到可维护脚本</h1>
         <p class="text-xl text-gray-500">把速查表里的 while、if、数组、重定向和 here-doc 串成一个完整心智模型：<strong>Bash 不只是“命令合集”，而是一套解析输入、展开参数、连接进程和管理输入输出的执行系统</strong>。</p>
-        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
     </header>
 
     <div class="toc">

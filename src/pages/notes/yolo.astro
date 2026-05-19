@@ -11,7 +11,8 @@ export const meta = {
     title: 'YOLO 原理解析',
     description: '密集预测、正样本匹配、loss 与 NMS：把一阶段检测的链条串起来',
     tags: ["CV", "Detection", "Quickstart"],
-    readTime: '8 min'
+    readTime: '8 min',
+    createdAt: '2025-12-31'
 };
 ---
 
@@ -19,7 +20,7 @@ export const meta = {
     <header class="text-center mb-12">
         <h1 class="text-4xl font-bold mb-4 gradient-text">YOLO 原理解析</h1>
         <p class="text-xl text-gray-500">一句话：把检测变成“单次前向的密集预测”，再用后处理筛出最终框</p>
-        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
     </header>
 
     <div class="card">

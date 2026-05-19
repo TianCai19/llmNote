@@ -9,7 +9,8 @@ export const meta = {
     title: '交叉熵函数',
     description: '从信息论到损失函数：BCE、Softmax CE 与 KL 关系',
     tags: ["Loss", "Math", "ML"],
-    readTime: '12 min'
+    readTime: '12 min',
+    createdAt: '2026-01-14'
 };
 ---
 
@@ -18,7 +19,7 @@ export const meta = {
         <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Loss / Information Theory</p>
         <h1 class="text-4xl font-bold mb-4 gradient-text">交叉熵函数：从概率到损失的桥</h1>
         <p class="text-xl text-gray-500">把“预测分布”和“真实分布”之间的差距变成可优化的目标</p>
-        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
     </header>
 
     <div class="card">

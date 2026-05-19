@@ -9,7 +9,8 @@ export const meta = {
     title: 'LoRA 低秩适配',
     description: '冻结大模型、训练低秩矩阵：高效微调的核心思路',
     tags: ["PEFT", "LoRA", "Finetune"],
-    readTime: '14 min'
+    readTime: '14 min',
+    createdAt: '2026-01-12'
 };
 ---
 
@@ -18,7 +19,7 @@ export const meta = {
         <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">PEFT / Low-Rank</p>
         <h1 class="text-4xl font-bold mb-4 gradient-text">LoRA 低秩适配：用小模块改造大模型</h1>
         <p class="text-xl text-gray-500">冻结大模型，只训练少量低秩矩阵，兼顾成本与效果</p>
-        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
     </header>
 
     <div class="card">

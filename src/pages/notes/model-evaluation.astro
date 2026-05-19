@@ -11,7 +11,8 @@ export const meta = {
     title: '模型评估指标',
     description: '从准确率到 F1 Score：混淆矩阵、精确率/召回率权衡与 ROC-AUC',
     tags: ["ML", "Evaluation", "Metrics"],
-    readTime: '15 min'
+    readTime: '15 min',
+    createdAt: '2026-02-19'
 };
 ---
 
@@ -20,7 +21,7 @@ export const meta = {
         <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">ML / Evaluation / Metrics</p>
         <h1 class="text-4xl font-bold mb-4 gradient-text">模型评估指标：从准确率到 F1 Score</h1>
         <p class="text-xl text-gray-500">训练好的模型可靠吗？用正确的指标量化模型性能</p>
-        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">{createdAt}</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">{meta.createdAt}</p>
     </header>
 
     <div class="card">
