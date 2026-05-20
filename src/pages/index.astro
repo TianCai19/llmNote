@@ -2,7 +2,15 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 
 // 自动收集所有笔记页面的 meta 数据，无需手动维护列表
-const noteModules = import.meta.glob('./notes/*.astro', { eager: true }) as Record<string, { meta?: { number: string; title: string; description: string; tags: string[]; readTime: string; createdAt: string } }>;
+type NoteMeta = {
+    title: string;
+    description: string;
+    tags: string[];
+    readTime: string;
+    createdAt: string;
+};
+
+const noteModules = import.meta.glob('./notes/*.astro', { eager: true }) as Record<string, { meta?: NoteMeta }>;
 
 const notes = Object.entries(noteModules)
     .filter(([, mod]) => mod.meta)
@@ -11,7 +19,19 @@ const notes = Object.entries(noteModules)
         href: path.replace('.astro', '').replace('./', '/'),
         date: mod.meta!.createdAt
     }))
-    .sort((a, b) => Number(b.number) - Number(a.number));
+    .sort((a, b) => {
+        const dateCompare = a.date.localeCompare(b.date);
+        if (dateCompare !== 0) {
+            return dateCompare;
+        }
+
+        return a.href.localeCompare(b.href);
+    })
+    .map((note, index) => ({
+        ...note,
+        number: String(index).padStart(2, '0')
+    }))
+    .reverse();
 
 const totalMinutes = notes.reduce((sum, note) => sum + Number.parseInt(note.readTime, 10), 0);
 ---
