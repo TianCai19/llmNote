@@ -1,0 +1,465 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: '视觉表征学习三剑客：CLIP、DINOv2 与 SigLIP2',
+    description: '从对比学习、自蒸馏到 sigmoid loss：系统理解三类主流视觉表征路线，并做本科生友好的公式拆解。',
+    tags: ['Vision', 'CLIP', 'DINOv2', 'SigLIP2'],
+    readTime: '32 min',
+    createdAt: '2026-05-20'
+};
+---
+
+<BaseLayout title="视觉表征学习三剑客：CLIP、DINOv2 与 SigLIP2" description="从对比学习、自蒸馏到 sigmoid loss：系统理解三类主流视觉表征路线，并做本科生友好的公式拆解。">
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">视觉表征学习三剑客：CLIP、DINOv2 与 SigLIP2</h1>
+        <p class="text-xl text-gray-500">把“图文对齐”“无标签自蒸馏”“pairwise sigmoid”放到同一张地图里重新理解</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <nav class="toc" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#intro">1. 为什么这三类模型值得放在一起看</a></li>
+            <li><a href="#unified-view">2. 统一视角：视觉表征到底在学什么</a></li>
+            <li><a href="#clip">3. CLIP：把分类改写成图文匹配</a></li>
+            <li><a href="#dinov2">4. DINOv2：没有文本，也能学到强视觉特征</a></li>
+            <li><a href="#siglip">5. SigLIP 与 SigLIP2：从 softmax 对比到 pairwise sigmoid</a></li>
+            <li><a href="#comparison">6. 三条路线怎么选</a></li>
+            <li><a href="#summary">7. 本科生版总结</a></li>
+            <li><a href="#references">8. 参考资料</a></li>
+        </ul>
+    </nav>
+
+    <div class="card">
+        <h2 id="intro">1. 为什么这三类模型值得放在一起看</h2>
+        <p>如果你最近在看视觉大模型、图文检索、VLM 或视觉编码器，几乎一定会遇到三条路线：<span class="highlight">CLIP</span> 代表“图像和文本对齐”，<span class="highlight">DINOv2</span> 代表“只看图片、靠自监督学通用特征”，而 <span class="highlight">SigLIP / SigLIP2</span> 则代表“仍然做图文对齐，但把损失函数和训练配方做得更适合扩展”。</p>
+        <p>它们看起来都在做“图像编码”，但回答的问题并不一样。CLIP 关心的是：<strong>这张图和哪段文字更匹配？</strong> DINOv2 关心的是：<strong>不依赖文本标签，能不能仅靠图像本身学到稳健表示？</strong> SigLIP 则追问：<strong>如果 CLIP 的 softmax 对比损失对 batch 很敏感，能不能换一种更简单、更稳定的训练目标？</strong></p>
+        <p>把这三类方法放在一起看，有两个好处。第一，你会更清楚“视觉表征”不是一个单一问题，而是不同监督信号下的不同折中。第二，你能更准确地知道下游任务应该选谁：图文检索和零样本分类偏向 CLIP / SigLIP2，密集预测和纯视觉迁移常常更偏向 DINOv2。</p>
+
+        <div class="svg-container">
+            <svg viewBox="0 0 920 260" class="w-full max-w-4xl" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CLIP、DINOv2 和 SigLIP2 三条视觉表征路线图">
+                <defs>
+                    <linearGradient id="visionA" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stop-color="#0f766e"></stop>
+                        <stop offset="100%" stop-color="#14b8a6"></stop>
+                    </linearGradient>
+                    <linearGradient id="visionB" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stop-color="#f97316"></stop>
+                        <stop offset="100%" stop-color="#fb923c"></stop>
+                    </linearGradient>
+                    <linearGradient id="visionC" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stop-color="#7c3aed"></stop>
+                        <stop offset="100%" stop-color="#a78bfa"></stop>
+                    </linearGradient>
+                </defs>
+                <rect x="20" y="32" width="260" height="176" rx="22" fill="url(#visionA)" opacity="0.12"></rect>
+                <rect x="330" y="32" width="260" height="176" rx="22" fill="url(#visionB)" opacity="0.12"></rect>
+                <rect x="640" y="32" width="260" height="176" rx="22" fill="url(#visionC)" opacity="0.12"></rect>
+
+                <text x="150" y="72" text-anchor="middle" font-size="28" font-weight="700" fill="#0f766e">CLIP</text>
+                <text x="150" y="108" text-anchor="middle" font-size="16" fill="#334155">图像 + 文本</text>
+                <text x="150" y="138" text-anchor="middle" font-size="16" fill="#334155">共享嵌入空间</text>
+                <text x="150" y="168" text-anchor="middle" font-size="16" fill="#334155">零样本分类 / 检索</text>
+
+                <text x="460" y="72" text-anchor="middle" font-size="28" font-weight="700" fill="#ea580c">DINOv2</text>
+                <text x="460" y="108" text-anchor="middle" font-size="16" fill="#334155">只有图像</text>
+                <text x="460" y="138" text-anchor="middle" font-size="16" fill="#334155">教师 - 学生自蒸馏</text>
+                <text x="460" y="168" text-anchor="middle" font-size="16" fill="#334155">通用视觉 / 密集特征</text>
+
+                <text x="770" y="72" text-anchor="middle" font-size="28" font-weight="700" fill="#7c3aed">SigLIP2</text>
+                <text x="770" y="108" text-anchor="middle" font-size="16" fill="#334155">图像 + 文本</text>
+                <text x="770" y="138" text-anchor="middle" font-size="16" fill="#334155">pairwise sigmoid + 多任务配方</text>
+                <text x="770" y="168" text-anchor="middle" font-size="16" fill="#334155">多语言 / 定位 / 稠密特征</text>
+
+                <line x1="280" y1="120" x2="330" y2="120" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"></line>
+                <line x1="590" y1="120" x2="640" y2="120" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6"></line>
+
+                <text x="460" y="228" text-anchor="middle" font-size="15" fill="#475569">三者都在学“把图像压缩成可迁移向量”，区别在于监督信号、损失函数和适用任务。</text>
+            </svg>
+        </div>
+
+        <div class="note-box">
+            <strong>本文的来源结构：</strong>
+            <p class="mt-3 mb-0 text-slate-600">正文综合了 OpenAI CLIP 论文与官方页面、Meta DINOv2 论文与官方仓库、Google SigLIP / SigLIP2 论文与官方 big_vision 配置说明，并吸收了你给的现有 HTML 笔记中的章节组织思路；但我把关键公式全部重写成了“先直觉、再变量、再逐项拆解”的版本，目标是让本科生也能连续读懂。</p>
+        </div>
+    </div>
+
+    <article class="chapter" id="unified-view">
+        <header class="chapter-header">
+            <h2>2. 统一视角：视觉表征到底在学什么</h2>
+        </header>
+
+        <p>无论是 CLIP、DINOv2 还是 SigLIP2，它们本质上都想把一张图片 <span set:html={String.raw`$x$`}></span> 变成一个向量表示 <span set:html={String.raw`$z$`}></span>。这个向量不是给人看的，而是给下游模型、分类器、检索系统甚至语言模型使用的。一个好的视觉表示至少要满足三件事：<strong>语义相似的图片距离更近、对无关扰动足够稳定、对下游任务足够有用</strong>。</p>
+        <p>可以先把问题抽象成下面这个统一模板：</p>
+
+        <div class="math-block" set:html={String.raw`$$z = f_\theta(x)$$`}></div>
+
+        <p>其中 <span set:html={String.raw`$f_\theta$`}></span> 是参数为 <span set:html={String.raw`$\theta$`}></span> 的视觉编码器，输入图片 <span set:html={String.raw`$x$`}></span>，输出一个长度固定的向量 <span set:html={String.raw`$z$`}></span>。真正的差异在于：<strong>我们怎样定义“好”的 <span set:html={String.raw`$z$`}></span>？</strong></p>
+
+        <ul>
+            <li><strong>CLIP 的答案：</strong>如果图片和正确文本更接近、和错误文本更远，那么这个表示就是好的。</li>
+            <li><strong>DINOv2 的答案：</strong>如果同一张图片的不同视图在表示空间里足够一致，而且局部 patch 也有稳定语义，那么这个表示就是好的。</li>
+            <li><strong>SigLIP / SigLIP2 的答案：</strong>仍然做图文对齐，但不再强依赖 softmax 的全局归一化，而是把每个图文对当作独立判别问题，同时继续扩展训练配方。</li>
+        </ul>
+
+        <div class="chapter-summary">
+            <p><strong>先记一句话：</strong>视觉表征学习不是“哪一个模型更万能”，而是“你希望这个向量首先对什么关系敏感”。CLIP 对图文语义关系敏感，DINOv2 对纯视觉结构敏感，SigLIP2 则努力在图文语义、训练稳定性和更丰富下游能力之间取得更好的折中。</p>
+        </div>
+    </article>
+
+    <article class="chapter" id="clip">
+        <header class="chapter-header">
+            <h2>3. CLIP：把分类改写成图文匹配</h2>
+        </header>
+
+        <p>CLIP 是 OpenAI 在 2021 年提出的图文预训练模型。它最重要的思想不是某个复杂结构，而是一个非常有“范式感”的改写：<strong>与其让模型在固定的 1000 个类别上做分类，不如让模型学会“图片和文本是否匹配”</strong>。这样一来，文本本身就变成了任务接口，类别定义不再写死在参数里。</p>
+
+        <div class="note-box">
+            <strong>从一手资料里最值得记住的三个事实：</strong>
+            <ul class="mt-3 mb-0">
+                <li>CLIP 使用约 <strong>4 亿</strong> 图文对训练，而不是 ImageNet 这种人工精标数据集。</li>
+                <li>OpenAI 官方页面强调，它可以把类别写成自然语言描述，直接做零样本分类。</li>
+                <li>论文报告它在 <strong>30 多个视觉数据集</strong> 上做零样本迁移，说明它学到的不是单一数据集技巧，而是更通用的图文语义对齐能力。</li>
+            </ul>
+        </div>
+
+        <h3>3.1 基本流程：先把图和文本都变成向量</h3>
+        <p>设一个 batch 有 <span set:html={String.raw`$N$`}></span> 个图文对 <span set:html={String.raw`$(x_i, t_i)$`}></span>。图像编码器把图片编码成向量，文本编码器把文本编码成向量，然后分别做归一化：</p>
+
+        <div class="math-block" set:html={String.raw`$$z_i = \frac{f_\theta(x_i)}{\|f_\theta(x_i)\|_2}, \qquad u_i = \frac{g_\phi(t_i)}{\|g_\phi(t_i)\|_2}$$`}></div>
+
+        <p>这里 <span set:html={String.raw`$z_i$`}></span> 是第 <span set:html={String.raw`$i$`}></span> 张图片的单位向量，<span set:html={String.raw`$u_i$`}></span> 是第 <span set:html={String.raw`$i$`}></span> 段文本的单位向量。归一化后，两个向量的点积就是余弦相似度，数值范围更稳定，训练更容易。</p>
+
+        <p>接下来定义图文相似度矩阵：</p>
+
+        <div class="math-block" set:html={String.raw`$$s_{ij} = \tau \cdot z_i^\top u_j$$`}></div>
+
+        <h4>本科生拆解版</h4>
+        <ul>
+            <li><span set:html={String.raw`$z_i^\top u_j$`}></span>：第 <span set:html={String.raw`$i$`}></span> 张图和第 <span set:html={String.raw`$j$`}></span> 段文本的相似度。</li>
+            <li><span set:html={String.raw`$s_{ii}$`}></span>：正确配对的图文相似度，理想情况下应该更大。</li>
+            <li><span set:html={String.raw`$s_{ij}, i\neq j$`}></span>：错误配对的图文相似度，理想情况下应该更小。</li>
+            <li><span set:html={String.raw`$\tau$`}></span>：温度系数，可以理解成“把分数拉开或压缩”的缩放器。<span set:html={String.raw`$\tau$`}></span> 越大，softmax 越尖锐，模型越在乎谁是第一名。</li>
+        </ul>
+
+        <h3>3.2 CLIP 的损失函数：为什么要做两次 softmax</h3>
+        <p>CLIP 使用的是对称的 InfoNCE / 对比损失：一方面让“给定图片找文本”成立，另一方面让“给定文本找图片”也成立。单看图片到文本这一侧，第 <span set:html={String.raw`$i$`}></span> 个样本的损失写成：</p>
+
+        <div class="math-block" set:html={String.raw`$$\ell_i^{\text{img}} = -\log \frac{\exp(s_{ii})}{\sum_{j=1}^{N} \exp(s_{ij})}$$`}></div>
+
+        <p>文本到图片这一侧类似：</p>
+
+        <div class="math-block" set:html={String.raw`$$\ell_i^{\text{text}} = -\log \frac{\exp(s_{ii})}{\sum_{j=1}^{N} \exp(s_{ji})}$$`}></div>
+
+        <p>最后把两边平均：</p>
+
+        <div class="math-block" set:html={String.raw`$$\mathcal{L}_{\text{CLIP}} = \frac{1}{2N} \sum_{i=1}^{N} \left(\ell_i^{\text{img}} + \ell_i^{\text{text}}\right)$$`}></div>
+
+        <h4>公式拆解版本：每一项到底在做什么</h4>
+        <ol>
+            <li><strong>分子 <span set:html={String.raw`$\exp(s_{ii})$`}></span></strong>：代表“正确图文配对的得分”。如果图和对应文本很像，这一项就大。</li>
+            <li><strong>分母 <span set:html={String.raw`$\sum_{j=1}^{N} \exp(s_{ij})$`}></span></strong>：把同一张图片和 batch 内所有文本都拿来比较。也就是说，模型不能只把正确文本分高一点，而是要在一整行竞争里把它排到最前面。</li>
+            <li><strong>负对数 <span set:html={String.raw`$-\log(\cdot)$`}></span></strong>：如果正确文本的概率很小，损失就会很大；如果已经接近 1，损失就会很小。</li>
+            <li><strong>为什么要做两边</strong>：只做图片到文本，会鼓励“图片能找到文本”；再加上文本到图片，才会保证“文本也能准确找到图片”，两边嵌入空间更对齐。</li>
+        </ol>
+
+        <h4>一个 <span set:html={String.raw`$N=3$`}></span> 的玩具例子</h4>
+        <p>假设某张图片对应三段文本，模型打出的分数是：</p>
+
+        <div class="math-block" set:html={String.raw`$$[s_{i1}, s_{i2}, s_{i3}] = [5.2, 1.3, 0.4]$$`}></div>
+
+        <p>并且第 1 段文本才是正确答案。那么 softmax 后，第 1 项的概率会最大，损失较小；如果分数变成 <span set:html={String.raw`$[1.2, 1.1, 1.0]$`}></span>，说明模型觉得三段文本都差不多，正确答案没有被明显拉开，损失就会变大。这个例子能帮你抓住 CLIP 的核心：<strong>不是单纯把正样本分数拉高，而是要在整组候选里明显胜出</strong>。</p>
+
+        <div class="note-box">
+            <strong>一个最重要的直觉：</strong>
+            <p class="mt-3 mb-0 text-slate-600">CLIP 不是在学“猫”这个标签，而是在学“这张图和『a photo of a cat』这句话应该比和其他句子更接近”。这就是为什么 CLIP 训练完后可以直接拿语言去定义新类别。</p>
+        </div>
+
+        <h3>3.3 为什么 CLIP 特别依赖大 batch</h3>
+        <p>从上面的分母可以直接看出，CLIP 的负样本主要来自 <strong>同一个 batch 里的其他文本或其他图片</strong>。batch 越大，每次比较时可供竞争的候选就越多，训练信号往往越强。这也是为什么 CLIP 路线长期以来非常看重大 batch、大规模分布式训练。</p>
+        <p>这件事也埋下了后面 SigLIP 登场的伏笔：如果一个损失函数严重依赖“同批次里有多少负样本”，那么它的效果就更容易受 batch size 和跨设备通信影响。</p>
+
+        <h3>3.4 零样本分类：CLIP 最出圈的地方</h3>
+        <p>CLIP 的零样本分类其实并不神秘。假设你要做 5 类分类，不再训练一个 5 维线性分类头，而是把类别写成 5 段文本，例如 <code>a photo of a dog</code>、<code>a photo of a cat</code>。然后把测试图片和这 5 段文字分别编码、算相似度，谁高就预测谁：</p>
+
+        <div class="math-block" set:html={String.raw`$$\hat{y} = \arg\max_k \; z_x^\top u_k$$`}></div>
+
+        <p>如果你想把相似度进一步转成概率分布，可以再做一个 softmax：</p>
+
+        <div class="math-block" set:html={String.raw`$$p(y=k\mid x) = \frac{\exp(\gamma z_x^\top u_k)}{\sum_{m} \exp(\gamma z_x^\top u_m)}$$`}></div>
+
+        <h4>这里的变量怎么理解</h4>
+        <ul>
+            <li><span set:html={String.raw`$z_x$`}></span>：测试图片的向量。</li>
+            <li><span set:html={String.raw`$u_k$`}></span>：第 <span set:html={String.raw`$k$`}></span> 个类别提示词的文本向量。</li>
+            <li><span set:html={String.raw`$\gamma$`}></span>：推理时的缩放系数，作用和温度类似，让分布更尖锐或更平滑。</li>
+        </ul>
+
+        <p>所以 CLIP 真正改变的不是“分类精度的一个数字”，而是任务接口：<strong>类别不再来自一个训练好的参数矩阵，而是来自你写给模型的语言描述</strong>。</p>
+
+        <div class="chapter-summary">
+            <p><strong>CLIP 的一句话总结：</strong>用大规模图文对齐把图片和语言放进同一坐标系里，于是“分类”被改写成“图像和哪段文本最匹配”。</p>
+        </div>
+    </article>
+
+    <article class="chapter" id="dinov2">
+        <header class="chapter-header">
+            <h2>4. DINOv2：没有文本，也能学到强视觉特征</h2>
+        </header>
+
+        <p>DINOv2 来自 Meta，核心目标和 CLIP 不同：它不试图对齐图像与文本，而是想回答一个更“纯视觉”的问题——<strong>如果完全不给标签，也不给文本，只给海量图片，能不能学出通用而稳健的视觉表示？</strong></p>
+        <p>这条路线对于很多传统计算机视觉任务非常重要，因为分割、深度估计、匹配、拷贝检测等任务并不一定需要语言接口，却很需要<span class="highlight">局部结构稳定、patch 特征丰富</span>的视觉表示。</p>
+
+        <div class="note-box">
+            <strong>从论文与官方仓库里最值得记住的规模信息：</strong>
+            <ul class="mt-3 mb-0">
+                <li>DINOv2 不是随便拿无标签图像硬训，而是先从更大图像池中自动筛选，构建了 <strong>LVD-142M</strong> 这类高质量数据集。</li>
+                <li>它训练了大约 <strong>1.1B 参数</strong> 的 ViT-g/14，并再蒸馏到更小模型，因此既追求上限，也追求可部署性。</li>
+                <li>官方仓库不仅提供全局特征 backbone，也强调 patch features、深度估计和分割等能力，这正好说明它的表示不只是“整图语义向量”。</li>
+            </ul>
+        </div>
+
+        <h3>4.1 教师 - 学生框架：谁在给谁打分</h3>
+        <p>DINOv2 延续了 DINO 系列的教师 - 学生自蒸馏思路。对于同一张图像，我们做不同增强，得到多个视图。一部分送给 teacher，一部分送给 student。teacher 输出一个“目标分布”，student 去拟合它。</p>
+
+        <div class="math-block" set:html={String.raw`$$p_s = \operatorname{softmax}(g_{\theta_s}(v_s) / T_s), \qquad q_t = \operatorname{softmax}(g_{\theta_t}(v_t) / T_t)$$`}></div>
+
+        <p>这里 <span set:html={String.raw`$v_s$`}></span> 和 <span set:html={String.raw`$v_t$`}></span> 是同一张原图的不同增强视图，<span set:html={String.raw`$g_{\theta_s}$`}></span> 和 <span set:html={String.raw`$g_{\theta_t}$`}></span> 分别是 student / teacher 的输出头，<span set:html={String.raw`$T_s, T_t$`}></span> 是温度参数。</p>
+
+        <p>最基本的蒸馏损失可以写成：</p>
+
+        <div class="math-block" set:html={String.raw`$$\mathcal{L}_{\text{DINO}} = -\sum_{k=1}^{K} q_t^{(k)} \log p_s^{(k)}$$`}></div>
+
+        <h4>本科生拆解版：这一坨式子在说什么</h4>
+        <ul>
+            <li><span set:html={String.raw`$K$`}></span>：可以理解成若干“原型槽位（prototypes）”或离散语义方向。</li>
+            <li><span set:html={String.raw`$q_t^{(k)}$`}></span>：teacher 认为当前视图属于第 <span set:html={String.raw`$k$`}></span> 个语义方向的概率。</li>
+            <li><span set:html={String.raw`$p_s^{(k)}$`}></span>：student 给出的对应概率。</li>
+            <li>交叉熵的意思是：如果 teacher 把概率主要压在某几个方向上，student 也应该学着这么分配。</li>
+        </ul>
+
+        <p>你可以把它类比成：没有老师给标准答案，但系统内部复制出一个“慢更新的老师”，学生不断模仿这个老师的判断。由于同一张图的不同裁剪、不同视图都应该表达类似语义，于是模型被迫学会“对视角变化稳定”的表示。</p>
+
+        <h3>4.2 teacher 为什么不是普通监督标签</h3>
+        <p>DINOv2 的 teacher 并不是人工标签，而是 student 参数的指数滑动平均（EMA）版本：</p>
+
+        <div class="math-block" set:html={String.raw`$$\theta_t \leftarrow m\theta_t + (1-m)\theta_s$$`}></div>
+
+        <h4>这个更新式怎么理解</h4>
+        <ul>
+            <li><span set:html={String.raw`$\theta_s$`}></span>：student 当前参数，更新得快。</li>
+            <li><span set:html={String.raw`$\theta_t$`}></span>：teacher 参数，更新得慢。</li>
+            <li><span set:html={String.raw`$m$`}></span>：动量系数，通常接近 1。越接近 1，teacher 越“稳重”。</li>
+        </ul>
+
+        <p>这种做法的好处是，teacher 不会跟着 student 的每一步抖动，因此更像一个平滑目标。直觉上，它避免了“学生今天改了一个方向，老师明天立刻跟着乱改”的问题。</p>
+
+        <h3>4.3 DINOv2 不只是一个损失，而是一整套训练配方</h3>
+        <p>严格来说，DINOv2 的贡献并不只是上面那个蒸馏公式。论文和官方资料强调得更多的是：<strong>在大模型、大数据、自监督稳定训练这三件事上，DINOv2 把方法配方做得非常完整</strong>。其中包括：</p>
+        <ul>
+            <li>自动化数据筛选与清洗，构建 LVD-142M 这类更高质量的数据集合；</li>
+            <li>结合 iBOT 风格的 masked image modeling，让 patch 级语义更强；</li>
+            <li>加入 KoLeo 等正则项，让特征空间更均匀，不容易坍塌；</li>
+            <li>先训练大 teacher，再蒸馏到更小模型，提升可用性。</li>
+        </ul>
+
+        <p>如果用教学化的方式把它写成一个“理解公式”，可以把 DINOv2 看成这样一个总目标：</p>
+
+        <div class="math-block" set:html={String.raw`$$\mathcal{L}_{\text{total}} \approx \mathcal{L}_{\text{DINO}} + \lambda_{\text{iBOT}}\mathcal{L}_{\text{iBOT}} + \lambda_{\text{KoLeo}}\mathcal{L}_{\text{KoLeo}}$$`}></div>
+
+        <p>这里我故意写成 <span set:html={String.raw`$\approx$`}></span>，意思是“把它理解为一个组合配方”，而不是说论文里只有一个这么简单的闭式总公式。对初学者来说，先抓住它的三层结构最重要：</p>
+        <ol>
+            <li><strong>蒸馏项：</strong>让不同视图的一致性变强；</li>
+            <li><strong>masked 建模项：</strong>迫使模型真的理解局部 patch，而不是只靠全局轮廓；</li>
+            <li><strong>特征均匀性项：</strong>避免所有图片都挤到很小的一块空间里。</li>
+        </ol>
+
+        <h3>4.4 为什么 DINOv2 往往更适合密集预测</h3>
+        <p>CLIP 更强调“整张图和一句话是否匹配”；DINOv2 则更强调“图像内部结构是否能稳定编码出来”。这会直接影响到 patch 特征质量。分割、深度估计、局部匹配这类任务需要的不只是一个全局 CLS 向量，而是对图中各个区域都有可用表示。</p>
+        <p>这也是为什么官方仓库会特别强调 DINOv2 的 patch features、深度估计和语义分割用法。你可以把它理解成：<strong>CLIP 更像会“看懂这张图大概在说什么”，DINOv2 更像会“把这张图内部各个区域稳定地编码出来”</strong>。</p>
+
+        <div class="chapter-summary">
+            <p><strong>DINOv2 的一句话总结：</strong>不靠文本、不靠人工标签，通过教师 - 学生自蒸馏加上一整套大规模训练配方，学出适合图像级和 patch 级任务的通用视觉特征。</p>
+        </div>
+    </article>
+
+    <article class="chapter" id="siglip">
+        <header class="chapter-header">
+            <h2>5. SigLIP 与 SigLIP2：从 softmax 对比到 pairwise sigmoid</h2>
+        </header>
+
+        <p>SigLIP 最值得学习的地方，不是“它比 CLIP 高了几个点”，而是它把一个很多人默认接受的设计重新拆开了：<strong>图文对比学习一定要用 softmax 吗？</strong> Google 的回答是：不一定。你可以把每个图文对单独看成一个二分类问题——这对是不是匹配？</p>
+
+        <div class="note-box">
+            <strong>这一支路线的时间线要分清：</strong>
+            <ul class="mt-3 mb-0">
+                <li><strong>SigLIP（2023）</strong>：核心创新是 pairwise sigmoid loss。</li>
+                <li><strong>SigLIP2（2025）</strong>：在 SigLIP 的基础上继续做多语言、定位、密集特征和多任务训练配方扩展。</li>
+                <li>如果把两者混成同一个模型名，会很容易把“损失函数创新”和“训练配方升级”这两个层次混在一起。</li>
+            </ul>
+        </div>
+
+        <h3>5.1 CLIP 的 softmax 到底痛在哪</h3>
+        <p>回顾 CLIP 的图片到文本损失：</p>
+
+        <div class="math-block" set:html={String.raw`$$\ell_i^{\text{img}} = -\log \frac{\exp(s_{ii})}{\sum_{j=1}^{N} \exp(s_{ij})}$$`}></div>
+
+        <p>这意味着：第 <span set:html={String.raw`$i$`}></span> 张图的学习效果，不仅取决于它和正确文本有多像，还取决于整个 batch 里其他文本的相似度分布。所以一旦 batch 太小、负样本太少，或者跨设备 all-gather 成本太高，训练体验就会变差。</p>
+
+        <h3>5.2 SigLIP 的核心改动：每个图文对独立做二分类</h3>
+        <p>SigLIP 定义每个图文对的标签 <span set:html={String.raw`$y_{ij}$`}></span>：如果图像 <span set:html={String.raw`$i$`}></span> 和文本 <span set:html={String.raw`$j$`}></span> 是正确配对，则 <span set:html={String.raw`$y_{ij}=1$`}></span>；否则 <span set:html={String.raw`$y_{ij}=0$`}></span>。损失写成：</p>
+
+        <div class="math-block" set:html={String.raw`$$\mathcal{L}_{\text{SigLIP}} = -\frac{1}{|B|}\sum_{(i,j)\in B}\Big[y_{ij}\log \sigma(s_{ij}) + (1-y_{ij})\log(1-\sigma(s_{ij}))\Big]$$`}></div>
+
+        <h4>把这个式子翻译成人话</h4>
+        <ul>
+            <li><span set:html={String.raw`$\sigma(s_{ij})$`}></span>：把相似度分数压到 <span set:html={String.raw`$(0,1)$`}></span> 区间，可以理解成“这对图文匹配的概率”。</li>
+            <li>如果 <span set:html={String.raw`$y_{ij}=1$`}></span>，我们希望 <span set:html={String.raw`$\sigma(s_{ij})$`}></span> 越接近 1 越好；</li>
+            <li>如果 <span set:html={String.raw`$y_{ij}=0$`}></span>，我们希望 <span set:html={String.raw`$\sigma(s_{ij})$`}></span> 越接近 0 越好。</li>
+        </ul>
+
+        <p>和 CLIP 最大的区别在于：<strong>SigLIP 不再要求一整行文本一起竞争一个 softmax 排名</strong>。于是 batch size 的角色没那么“生死攸关”了，训练也更适合扩展和工程部署。</p>
+
+        <h4>再做一步公式拆解</h4>
+        <p>如果当前这对样本是正样本，即 <span set:html={String.raw`$y_{ij}=1$`}></span>，损失项会退化成：</p>
+
+        <div class="math-block" set:html={String.raw`$$-\log \sigma(s_{ij})$$`}></div>
+
+        <p>这表示：如果 <span set:html={String.raw`$s_{ij}$`}></span> 很大，<span set:html={String.raw`$\sigma(s_{ij})$`}></span> 接近 1，那么损失很小；反之损失很大。</p>
+
+        <p>如果当前这对样本是负样本，即 <span set:html={String.raw`$y_{ij}=0$`}></span>，损失项变成：</p>
+
+        <div class="math-block" set:html={String.raw`$$-\log (1-\sigma(s_{ij}))$$`}></div>
+
+        <p>这表示：如果错配图文的相似度还很高，模型就会被强烈惩罚。</p>
+
+        <div class="note-box">
+            <strong>一句最关键的对比：</strong>
+            <p class="mt-3 mb-0 text-slate-600">CLIP 在问“在这一排文本里，正确答案能不能排第一？”；SigLIP 在问“这一对图文到底配不配？”前者是排名问题，后者更像独立判别问题。</p>
+        </div>
+
+        <h3>5.3 SigLIP2：不是只换损失，而是继续扩配方</h3>
+        <p>SigLIP2 是 2025 年发布的第二代模型。它继承了 SigLIP 的 pairwise sigmoid 路线，但重点已经不只是“把 softmax 换掉”，而是把训练配方继续往更通用的视觉编码器方向推进。论文和官方配置里强调的关键词包括：</p>
+
+        <ul>
+            <li><strong>多语言能力：</strong>让图文对齐不只服务英语文本。</li>
+            <li><strong>caption-based 预训练：</strong>继续利用图文数据，但不只停留在最基础的图文匹配。</li>
+            <li><strong>自监督补强：</strong>加入自蒸馏、masked prediction 等目标，使局部和密集特征更好。</li>
+            <li><strong>在线数据筛选：</strong>强调更好的数据质量控制，而不是只拼原始规模。</li>
+            <li><strong>NaFlex / 多分辨率策略：</strong>更好保留原始长宽比，适应不同输入尺寸。</li>
+        </ul>
+
+        <p>如果从教学角度把 SigLIP2 的整体训练理解成“一个总配方”，可以写成下面这种示意形式：</p>
+
+        <div class="math-block" set:html={String.raw`$$\mathcal{L}_{\text{SigLIP2}} \approx \lambda_{\text{sig}}\mathcal{L}_{\text{sigmoid-pair}} + \lambda_{\text{cap}}\mathcal{L}_{\text{caption}} + \lambda_{\text{self}}\mathcal{L}_{\text{self-distill}} + \lambda_{\text{mask}}\mathcal{L}_{\text{masked}}$$`}></div>
+
+        <p>这里再次强调：这不是在冒充论文里的单行精确总式，而是帮助你抓结构——<strong>SigLIP2 的提升来自“更好的基础损失 + 更丰富的训练目标 + 更好的数据与分辨率策略”</strong>，而不是某一个魔法技巧。</p>
+
+        <h4>为什么 SigLIP2 更像“编码器升级版”而不只是“CLIP 变体”</h4>
+        <p>原始 CLIP 非常强，但它更偏向图文检索和零样本分类。SigLIP2 在保持图文对齐优势的同时，还显式追求定位、密集特征、多语言迁移，这使它更适合作为新一代 VLM 的视觉编码器候选。也就是说，它希望不仅能回答“这张图和哪句文字最像”，还要把区域级和尺度变化信息保留下来。</p>
+
+        <p>从官方 big_vision 文档看，SigLIP2 还提供了从 ViT-B、L 到 So400m、g 级别的多档模型，并配有固定分辨率版和 NaFlex 版本。对工程实践来说，这意味着它不只是“论文里很强”，而是已经把<strong>模型规模、输入分辨率、长宽比保留</strong>这些真实部署问题纳入设计。</p>
+
+        <div class="chapter-summary">
+            <p><strong>SigLIP 系列的一句话总结：</strong>先用 pairwise sigmoid 缓解 CLIP 对 softmax 全局竞争和大 batch 的依赖，再在 SigLIP2 里把训练目标、数据质量和分辨率处理继续扩成更强的通用视觉编码器配方。</p>
+        </div>
+    </article>
+
+    <article class="chapter" id="comparison">
+        <header class="chapter-header">
+            <h2>6. 三条路线怎么选</h2>
+        </header>
+
+        <p>到这里，你已经可以不再用“哪个模型更先进”这种模糊问法，而是改问：<strong>我的下游任务最需要哪种不变性和哪种接口？</strong></p>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left">维度</th>
+                        <th class="px-4 py-3 text-left">CLIP</th>
+                        <th class="px-4 py-3 text-left">DINOv2</th>
+                        <th class="px-4 py-3 text-left">SigLIP2</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <tr>
+                        <td class="px-4 py-3 font-medium">监督信号</td>
+                        <td class="px-4 py-3">图文对</td>
+                        <td class="px-4 py-3">纯图像自监督</td>
+                        <td class="px-4 py-3">图文对 + 更丰富训练配方</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium">核心目标</td>
+                        <td class="px-4 py-3">共享图文语义空间</td>
+                        <td class="px-4 py-3">稳健通用视觉特征</td>
+                        <td class="px-4 py-3">更稳定的图文对齐与更强迁移</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium">典型强项</td>
+                        <td class="px-4 py-3">零样本分类、图文检索</td>
+                        <td class="px-4 py-3">分割、深度、patch 特征</td>
+                        <td class="px-4 py-3">多语言检索、定位、VLM 编码器</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium">损失特点</td>
+                        <td class="px-4 py-3">softmax 对比，依赖 batch 竞争</td>
+                        <td class="px-4 py-3">自蒸馏 + 组合配方</td>
+                        <td class="px-4 py-3">pairwise sigmoid，更独立判别</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium">如果你要做</td>
+                        <td class="px-4 py-3">开放词汇识别、以文搜图</td>
+                        <td class="px-4 py-3">纯视觉 backbone、密集预测</td>
+                        <td class="px-4 py-3">更强图文编码器或新 VLM 视觉塔</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>6.1 一个实用的选型口诀</h3>
+        <ul>
+            <li><strong>要文字接口、要零样本：</strong>先想 CLIP / SigLIP2。</li>
+            <li><strong>要纯视觉 backbone、要 patch 质量：</strong>先想 DINOv2。</li>
+            <li><strong>要做下一代 VLM 视觉编码器：</strong>SigLIP2 往往比早期 CLIP 更值得优先调研。</li>
+            <li><strong>要做工程上更稳定的图文训练：</strong>理解 SigLIP 为什么不再执着于 softmax，很有价值。</li>
+        </ul>
+
+        <h3>6.2 它们之间不是替代关系，而是坐标系不同</h3>
+        <p>很多初学者容易把这三者理解成线性升级关系：CLIP → DINOv2 → SigLIP2，仿佛后一个一定比前一个全面替代前一个。更准确的理解是：<strong>它们在监督来源、目标函数和任务偏好上不一样，因此更像不同坐标系里的优秀解</strong>。你甚至可以在一个系统里同时借鉴它们的思路：例如用 DINOv2 风格增强纯视觉局部特征，再用 CLIP / SigLIP2 风格对齐语言空间。</p>
+    </article>
+
+    <article class="chapter" id="summary">
+        <header class="chapter-header">
+            <h2>7. 本科生版总结</h2>
+        </header>
+
+        <p>如果把这篇文章压缩成你明天考试还能写出来的版本，可以记下面四句话：</p>
+        <ol>
+            <li><strong>CLIP：</strong>把分类改写成图文匹配，所以文本本身就成了类别定义。</li>
+            <li><strong>DINOv2：</strong>不靠文本标签，靠教师 - 学生自蒸馏和大规模配方学通用视觉特征，特别适合 patch 级任务。</li>
+            <li><strong>SigLIP：</strong>把 CLIP 的 softmax 对比改成 pairwise sigmoid，让每个图文对独立做“配不配”的判别，训练对 batch 的依赖更弱。</li>
+            <li><strong>SigLIP2：</strong>在 SigLIP 的基础上继续叠加多语言、自监督、数据筛选和分辨率策略，让图文编码器更适合迁移、定位和稠密任务。</li>
+        </ol>
+
+        <div class="note-box">
+            <strong>最后一个总直觉：</strong>
+            <p class="mt-3 mb-0 text-slate-600">好的视觉表征，不是“把图片压成一个向量”这么简单；而是你如何用监督信号、损失函数和训练配方，决定这个向量究竟对什么关系最敏感、对什么扰动最稳定、对什么下游任务最有用。</p>
+        </div>
+    </article>
+
+    <div class="card" id="references">
+        <h2>8. 参考资料</h2>
+        <ol class="list-decimal pl-6 text-sm text-gray-600 space-y-3">
+            <li><a href="https://arxiv.org/abs/2103.00020">Radford et al., Learning Transferable Visual Models From Natural Language Supervision (CLIP)</a></li>
+            <li><a href="https://openai.com/index/clip/">OpenAI 官方页面：CLIP: Connecting text and images</a></li>
+            <li><a href="https://github.com/openai/CLIP">OpenAI 官方仓库：openai/CLIP</a></li>
+            <li><a href="https://arxiv.org/abs/2304.07193">Oquab et al., DINOv2: Learning Robust Visual Features without Supervision</a></li>
+            <li><a href="https://github.com/facebookresearch/dinov2">Meta 官方仓库：facebookresearch/dinov2</a></li>
+            <li><a href="https://arxiv.org/abs/2303.15343">Zhai et al., Sigmoid Loss for Language Image Pre-Training (SigLIP)</a></li>
+            <li><a href="https://arxiv.org/abs/2502.14786">SigLIP 2: Multilingual Vision-Language Encoders with Improved Semantic Understanding, Localization, and Dense Features</a></li>
+            <li><a href="https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/image_text/README_siglip2.md">Google Research big_vision: README_siglip2.md</a></li>
+        </ol>
+    </div>
+</BaseLayout>
