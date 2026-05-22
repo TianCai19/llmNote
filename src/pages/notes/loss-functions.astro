@@ -1,0 +1,604 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: '常用损失函数：从 Cross Entropy、KL 到 Huber 与 Focal 的公式拆解',
+    description: '系统梳理常见损失函数的公式、参数含义、适用场景、边界条件与工程误区。',
+    tags: ['Loss', 'Machine Learning', 'Optimization', 'Deep Learning'],
+    readTime: '30 min',
+    createdAt: '2026-05-22'
+};
+---
+
+<BaseLayout
+    title="常用损失函数：从 Cross Entropy、KL 到 Huber 与 Focal 的公式拆解"
+    description="把分类、分布匹配、回归与类别不平衡任务中最常见的损失函数放到同一张地图里，讲清公式、场景、边界与工程细节。"
+>
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Loss Functions / Optimization / Deep Learning</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">常用损失函数：从 Cross Entropy、KL 到 Huber 与 Focal 的公式拆解</h1>
+        <p class="text-xl text-gray-500">同样是“算一个 loss”，不同损失函数其实在定义完全不同的错误观</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>1. 为什么损失函数不是训练附属品，而是任务定义本身？</h2>
+        <p>
+            很多人第一次接触深度学习时，会把损失函数理解为“训练阶段最后随手加的一行 API”：分类就上 <code>CrossEntropyLoss</code>，回归就上
+            <code>MSELoss</code>，不平衡数据集再换成 <code>Focal Loss</code>。这种用法并没有错，但它很容易掩盖一个更本质的事实：
+            <span class="highlight">loss 不是优化过程的装饰，而是在显式规定“什么样的预测算错、错得有多严重、模型应该优先修哪类错误”</span>。
+        </p>
+        <p>
+            例如，交叉熵关心的是“正确类别的概率是不是足够高”；KL 散度关心的是“两个概率分布是不是对齐”；MSE 关心的是“数值偏差是不是大”；
+            Huber 则进一步区分“小误差值得精修，大误差不要让它爆炸主导训练”。从这个角度看，选择损失函数，其实是在选择一种任务世界观：
+            你到底把预测问题理解成<strong>分类</strong>、<strong>分布拟合</strong>、<strong>数值逼近</strong>，还是<strong>对困难样本重新分配注意力</strong>？
+        </p>
+        <p>
+            这篇笔记不想把损失函数写成一本“公式表”。更有价值的做法，是把常见 loss 放进同一张地图里：它们分别作用于什么输出空间，输入是什么，
+            公式中的各个符号是什么意思，什么时候选它，什么时候不该选它，以及工程里最常见的误用是什么。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 760 330" role="img" aria-label="Loss functions map by output space" class="w-full">
+                <defs>
+                    <linearGradient id="lossMapBg" x1="0" x2="1">
+                        <stop offset="0%" stop-color="#f8fafc" />
+                        <stop offset="100%" stop-color="#ecfeff" />
+                    </linearGradient>
+                </defs>
+                <rect x="20" y="20" width="720" height="290" rx="26" fill="url(#lossMapBg)" stroke="#dbeafe" />
+                <text x="380" y="56" text-anchor="middle" font-size="20" font-weight="700" fill="#0f172a">损失函数首先在区分“你在拟合什么”</text>
+
+                <rect x="55" y="92" width="190" height="170" rx="22" fill="#ffffff" stroke="#bae6fd" />
+                <text x="150" y="122" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">分类概率</text>
+                <text x="150" y="150" text-anchor="middle" font-size="13" fill="#475569">互斥类别 / 独立标签</text>
+                <text x="150" y="180" text-anchor="middle" font-size="14" fill="#0f766e">Cross Entropy</text>
+                <text x="150" y="205" text-anchor="middle" font-size="14" fill="#0f766e">BCE / BCEWithLogits</text>
+                <text x="150" y="230" text-anchor="middle" font-size="14" fill="#0f766e">Focal Loss</text>
+
+                <rect x="285" y="92" width="190" height="170" rx="22" fill="#ffffff" stroke="#bbf7d0" />
+                <text x="380" y="122" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">分布对齐</text>
+                <text x="380" y="150" text-anchor="middle" font-size="13" fill="#475569">teacher vs student / posterior vs prior</text>
+                <text x="380" y="186" text-anchor="middle" font-size="14" fill="#0f766e">KL Divergence</text>
+                <text x="380" y="212" text-anchor="middle" font-size="14" fill="#0f766e">Cross Entropy with soft labels</text>
+                <text x="380" y="238" text-anchor="middle" font-size="14" fill="#0f766e">蒸馏中的 soft target loss</text>
+
+                <rect x="515" y="92" width="190" height="170" rx="22" fill="#ffffff" stroke="#fed7aa" />
+                <text x="610" y="122" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a">连续数值</text>
+                <text x="610" y="150" text-anchor="middle" font-size="13" fill="#475569">回归 / 重建 / 框回归</text>
+                <text x="610" y="186" text-anchor="middle" font-size="14" fill="#c2410c">MSE</text>
+                <text x="610" y="212" text-anchor="middle" font-size="14" fill="#c2410c">MAE</text>
+                <text x="610" y="238" text-anchor="middle" font-size="14" fill="#c2410c">Huber / Smooth L1</text>
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">图 1：先判断模型输出是概率、分布还是连续值，再谈应该选哪一种损失函数。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>2. 统一视角：损失函数到底在比较什么对象？</h2>
+        <p>
+            要真正理解 loss，最好的起点不是背公式，而是先问：模型输出的对象到底是什么？如果输出是一个类别分布，那么“错”的含义不是数值偏一点，
+            而是把正确类别的概率压低了；如果输出本身就是连续实数，那么“错”的含义更接近数值距离；如果目标是让两个分布相互逼近，那么我们要比较的就不再是单个标签，
+            而是整条分布曲线。
+        </p>
+        <p>
+            这也解释了为什么很多初学者会误用 loss：比如把多标签任务写成 softmax CE，把原始 logits 直接喂进 KL，把明显存在离群点的回归任务还用纯 MSE。
+            这些错误往往不是“公式记错”，而是没有先分清楚 <strong>输出空间</strong> 和 <strong>标签语义</strong>。
+        </p>
+
+        <div class="overflow-x-auto mt-6">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">任务类型</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">模型输出</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">标签形式</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">常见损失</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">单标签多分类</td>
+                        <td class="px-4 py-3">一组 logits，经 softmax 后形成互斥分布</td>
+                        <td class="px-4 py-3">类别索引或 soft label 分布</td>
+                        <td class="px-4 py-3">Cross Entropy</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">二分类 / 多标签</td>
+                        <td class="px-4 py-3">每个标签独立 logit，经 sigmoid 转成概率</td>
+                        <td class="px-4 py-3">0/1 或 multi-hot</td>
+                        <td class="px-4 py-3">BCE / BCEWithLogits / Focal</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">分布匹配</td>
+                        <td class="px-4 py-3">完整概率分布或 log-prob</td>
+                        <td class="px-4 py-3">另一条分布</td>
+                        <td class="px-4 py-3">KL Divergence</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">数值回归</td>
+                        <td class="px-4 py-3">连续值向量</td>
+                        <td class="px-4 py-3">连续值</td>
+                        <td class="px-4 py-3">MSE / MAE / Huber</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="note-box text-sm mt-4">
+            <p><strong>一个很好用的记忆法：</strong>先问“模型在输出类别、分布还是数值”，再问“我更怕哪一种错误”，最后才去选 loss。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>3. 分类任务的默认答案：Cross Entropy 与 BCE 在惩罚什么？</h2>
+        <p>
+            分类问题里最经典的损失是交叉熵。它来自信息论，但在机器学习里最重要的意义是：它把“正确类概率不够高”变成了一个可微、可优化的目标。
+            如果真实分布记为 <span set:html={String.raw`$y$`}></span>，预测分布记为 <span set:html={String.raw`$p$`}></span>，那么多分类交叉熵写成：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{L}_{CE} = -\sum_{c=1}^{C} y_c \log p_c
+$$`}></div>
+        <p class="mt-4">
+            这里，<span set:html={String.raw`$C$`}></span> 是类别数，<span set:html={String.raw`$y_c$`}></span> 是目标分布在第 <span set:html={String.raw`$c$`}></span> 类上的概率，
+            <span set:html={String.raw`$p_c$`}></span> 是模型预测的第 <span set:html={String.raw`$c$`}></span> 类概率。如果标签是 one-hot，真实类别索引为
+            <span set:html={String.raw`$k$`}></span>，上式就会直接简化成：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{L}_{CE} = -\log p_k
+$$`}></div>
+        <p class="mt-4">
+            这说明 CE 的核心逻辑非常干脆：<strong>只要你给正确类别的概率够高，loss 就会小；给得越低，惩罚越大</strong>。在工程里，模型往往先输出 logits
+            <span set:html={String.raw`$z_c$`}></span>，再通过 softmax 变成概率：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+p_c = \frac{e^{z_c}}{\sum_j e^{z_j}}
+$$`}></div>
+        <p class="mt-4">
+            一个重要的实践细节是：像 PyTorch 的 <code>CrossEntropyLoss</code> 这类 API 往往希望你直接传入 logits，而不是先手动 softmax。一方面这样数值更稳定，
+            另一方面框架内部会把 <code>log-softmax + NLLLoss</code> 合并成更安全的实现。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">3.1 BCE：当每个标签是独立判断，而不是互斥竞争</h3>
+        <p>
+            如果任务不是“在多个类里只能选一个”，而是“每个标签都独立判断要不要出现”，那就不应该继续用 softmax CE，而要转向二元交叉熵 BCE。
+            设单个标签的真实值 <span set:html={String.raw`$y\in\{0,1\}$`}></span>，预测正类概率为 <span set:html={String.raw`$p$`}></span>，则：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{L}_{BCE} = -\left(y\log p + (1-y)\log(1-p)\right)
+$$`}></div>
+        <p class="mt-4">
+            这里的含义很直观：如果标签是 1，我们希望 <span set:html={String.raw`$p$`}></span> 大；如果标签是 0，我们希望 <span set:html={String.raw`$1-p$`}></span> 大。
+            和 CE 相比，BCE 把每个类别当作一条独立的 Bernoulli 判断，因此非常适合多标签分类，例如一张图既可能有“狗”，又可能有“草地”，还可能同时有“人”。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">3.2 BCEWithLogits：为什么工程上更推荐 logits 版本？</h3>
+        <p>
+            实际写代码时，通常不建议先自己对 logits 做 sigmoid，再喂给 BCE；更推荐直接使用 <code>BCEWithLogitsLoss</code>。原因不是“更高级”，而是数值更稳定。
+            若原始 logit 为 <span set:html={String.raw`$z$`}></span>，并记 <span set:html={String.raw`$p=\sigma(z)$`}></span>，稳定实现通常等价于：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{L}_{\text{BCE-logits}} = \max(z,0) - zy + \log(1 + e^{-|z|})
+$$`}></div>
+        <p class="mt-4">
+            它避免了直接算 <span set:html={String.raw`$\log \sigma(z)$`}></span> 或 <span set:html={String.raw`$\log(1-\sigma(z))$`}></span> 时可能出现的数值下溢。
+            如果数据集正负样本极不均衡，还可以进一步用 <code>pos_weight</code> 提高正类的重要性——这会明显影响 precision / recall 的平衡。
+        </p>
+
+        <div class="note-box text-sm mt-4">
+            <p><strong>边界非常重要：</strong>单标签多分类一般用 CE；二分类或多标签一般用 BCE。真正容易犯错的地方，不是记不住公式，而是没先判断“类间是不是互斥”。</p>
+        </div>
+
+        <p class="mt-6">
+            如果你想单独深入看交叉熵的信息论直觉、softmax 展开和与 KL 的基础关系，可以继续读仓库里已有的
+            <a href="/notes/cross-entropy" class="text-[color:var(--accent)] underline">《交叉熵函数：从概率到损失的桥》</a>。
+            这篇新笔记更强调的是“跨损失函数的统一地图”和“什么时候应该换 loss”。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>4. 为什么 KL 总和 Cross Entropy 一起出现？它们相同，又不完全相同</h2>
+        <p>
+            在讨论分类和蒸馏时，KL 散度几乎总会和交叉熵一起出现。它们之所以容易混淆，是因为在很多场景下，对模型来说二者的最优解是一致的；但它们想表达的语义并不完全一样。
+            对离散分布 <span set:html={String.raw`$P$`}></span> 和 <span set:html={String.raw`$Q$`}></span>，KL 散度定义为：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+D_{KL}(P\|Q) = \sum_i P(i) \log \frac{P(i)}{Q(i)}
+$$`}></div>
+        <p class="mt-4">
+            这里，<span set:html={String.raw`$P$`}></span> 往往是目标分布、教师分布或参考分布，<span set:html={String.raw`$Q$`}></span> 是模型当前给出的分布。
+            KL 的含义可以理解为：如果真实世界遵循 <span set:html={String.raw`$P$`}></span>，但你却用 <span set:html={String.raw`$Q$`}></span> 去编码或描述它，需要额外付出多少信息代价。
+        </p>
+        <p>
+            交叉熵和 KL 的联系来自下面这个恒等式：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+H(P,Q) = H(P) + D_{KL}(P\|Q)
+$$`}></div>
+        <p class="mt-4">
+            其中，<span set:html={String.raw`$H(P)$`}></span> 是真实分布自身的熵，只由 <span set:html={String.raw`$P$`}></span> 决定；如果训练时 <span set:html={String.raw`$P$`}></span> 不变，
+            那么最小化交叉熵 <span set:html={String.raw`$H(P,Q)$`}></span> 与最小化 <span set:html={String.raw`$D_{KL}(P\|Q)$`}></span> 的最优点是一致的。
+            这就是为什么很多地方会说“最小化 CE 等价于最小化 KL”。
+        </p>
+        <p>
+            但“等价”不代表“完全同义”。当我们说 CE 时，更多是在强调它是一个监督学习中的分类损失；当我们说 KL 时，更多是在强调<strong>分布对齐</strong>这件事本身。
+            在知识蒸馏、变分推断、策略约束等问题里，KL 的语义会更清晰。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 760 280" role="img" aria-label="Cross entropy and KL relationship" class="w-full">
+                <rect x="20" y="20" width="720" height="240" rx="26" fill="#f8fafc" stroke="#d1fae5" />
+                <text x="380" y="58" text-anchor="middle" font-size="21" font-weight="700" fill="#0f172a">CE 与 KL 的关系更像“目标函数语义不同，但最优点常一致”</text>
+
+                <rect x="70" y="92" width="190" height="120" rx="22" fill="#ffffff" stroke="#bae6fd" />
+                <text x="165" y="126" text-anchor="middle" font-size="18" font-weight="700" fill="#0f172a">H(P, Q)</text>
+                <text x="165" y="154" text-anchor="middle" font-size="13" fill="#475569">交叉熵</text>
+                <text x="165" y="180" text-anchor="middle" font-size="13" fill="#475569">“真实分布看预测分布要花多少信息量”</text>
+
+                <text x="314" y="158" text-anchor="middle" font-size="28" fill="#0f766e">=</text>
+
+                <rect x="360" y="92" width="130" height="120" rx="22" fill="#ffffff" stroke="#e2e8f0" />
+                <text x="425" y="126" text-anchor="middle" font-size="18" font-weight="700" fill="#0f172a">H(P)</text>
+                <text x="425" y="154" text-anchor="middle" font-size="13" fill="#475569">常数项</text>
+                <text x="425" y="180" text-anchor="middle" font-size="13" fill="#475569">与模型无关</text>
+
+                <text x="542" y="158" text-anchor="middle" font-size="28" fill="#0f766e">+</text>
+
+                <rect x="570" y="92" width="130" height="120" rx="22" fill="#ffffff" stroke="#bbf7d0" />
+                <text x="635" y="126" text-anchor="middle" font-size="18" font-weight="700" fill="#0f172a">KL(P||Q)</text>
+                <text x="635" y="154" text-anchor="middle" font-size="13" fill="#475569">可优化项</text>
+                <text x="635" y="180" text-anchor="middle" font-size="13" fill="#475569">分布偏差</text>
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">图 2：当目标分布固定时，CE 和 KL 在优化上只差一个常数项，但它们关注的问题表述并不完全相同。</figcaption>
+        </figure>
+
+        <h3 class="text-teal-700 mt-8">4.1 KL 不是对称距离，这个方向不能写反</h3>
+        <p>
+            另一个非常常见的误区是，把 KL 当成普通距离来理解。实际上它不是对称的：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+D_{KL}(P\|Q) \neq D_{KL}(Q\|P)
+$$`}></div>
+        <p class="mt-4">
+            这意味着“让学生模仿老师”和“让老师模仿学生”在数学上根本不是同一个目标。在蒸馏或分布拟合里，分子分母、目标分布和预测分布谁在前、谁在后，
+            都应该严格按语义来写，不能因为代码能跑就忽略方向问题。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>5. 知识蒸馏为什么几乎总会写成“硬标签 CE + 软标签 KL”？</h2>
+        <p>
+            知识蒸馏是 KL loss 最容易被工程师真正用到的场景之一。它的核心思想不是让学生模型只学老师的 top-1 类别，而是让学生去拟合教师输出分布中蕴含的“暗知识”——
+            哪些类别彼此接近，哪些类别虽然不是正确答案，但也不是完全不可能。
+        </p>
+        <p>
+            设教师 logits 为 <span set:html={String.raw`$z_t$`}></span>，学生 logits 为 <span set:html={String.raw`$z_s$`}></span>，温度参数为
+            <span set:html={String.raw`$T$`}></span>，那么蒸馏中常见的软分布写法是：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+q_T = \operatorname{softmax}(z_t / T), \qquad p_T = \operatorname{softmax}(z_s / T)
+$$`}></div>
+        <p class="mt-4">
+            这里的 <span set:html={String.raw`$T$`}></span> 会把分布“软化”。<span set:html={String.raw`$T$`}></span> 越大，原本非常尖锐的最大类概率就会被拉平，
+            低概率类别也能显露出更多结构信息。于是学生模型不只是在学“哪个类别对”，而是在学“老师认为各类之间相差多少”。
+        </p>
+        <p>
+            实际训练时，常见组合目标是：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{L} = \lambda_{hard}\, CE(y, z_s) + \lambda_{soft}\, T^2\, KL(q_T\|p_T)
+$$`}></div>
+        <p class="mt-4">
+            这里，<span set:html={String.raw`$y$`}></span> 是真实硬标签，<span set:html={String.raw`$CE(y, z_s)$`}></span> 用来保证学生不会偏离真实监督；
+            <span set:html={String.raw`$KL(q_T\|p_T)$`}></span> 负责让学生匹配教师的软分布；<span set:html={String.raw`$\lambda_{hard}$`}></span> 和
+            <span set:html={String.raw`$\lambda_{soft}$`}></span> 是两部分的权重；<span set:html={String.raw`$T^2$`}></span> 则是蒸馏里常见的尺度补偿项。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">5.1 为什么 soft target 比 hard label 多传了一层信息？</h3>
+        <p>
+            假设一张图真实标签是“猫”，硬标签只会告诉学生：猫是 1，别的全是 0。但一个已经训练好的老师模型，可能会给出“猫 0.72，狐狸 0.16，狗 0.08，别的更低”这样的分布。
+            这条分布会告诉学生：在特征空间里，猫和狐狸更接近，狗也比完全无关的类别更像。这种“非最大类上的相对概率”就是蒸馏里所谓的暗知识。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">5.2 KL 在 PyTorch 里一个很容易踩的坑</h3>
+        <p>
+            在 PyTorch 里，<code>KLDivLoss</code> 通常希望 <code>input</code> 位于 log-space，因此学生端常见写法会先做 <code>log_softmax</code>。另外，官方文档也特别提醒，
+            如果你想让 reduction 更接近真正数学意义上的 KL，<code>batchmean</code> 往往比默认的 <code>mean</code> 更合适。
+            这也是为什么很多人“公式看着对，跑出来 loss 却不对”的根源并不在理论，而在接口约定上。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>6. 回归任务不是只有 MSE：MAE 和 Huber 为什么都值得记住？</h2>
+        <p>
+            一旦输出不再是概率，而是连续实数，损失函数的重心就从“概率给得对不对”转向“数值偏差大不大”。此时最常见的基线是 MSE：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{L}_{MSE} = \frac{1}{N}\sum_{i=1}^{N}(\hat{y}_i - y_i)^2
+$$`}></div>
+        <p class="mt-4">
+            其中，<span set:html={String.raw`$N$`}></span> 是样本数或元素数，<span set:html={String.raw`$\hat{y}_i$`}></span> 是预测值，<span set:html={String.raw`$y_i$`}></span>
+            是真实值。MSE 的特点是：误差被平方后，大偏差会被额外放大。这使它在“想强烈惩罚大误差”的场景里非常有效，但代价是对离群点异常敏感。
+        </p>
+        <p>
+            MAE 则换了一种态度：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{L}_{MAE} = \frac{1}{N}\sum_{i=1}^{N}|\hat{y}_i - y_i|
+$$`}></div>
+        <p class="mt-4">
+            与 MSE 相比，MAE 对大误差的增长不再是平方，而是线性，因此更稳健，不容易被少量极端样本牵着跑。但它也有代价：在误差接近 0 的区域，优化形状不如 MSE 平滑。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">6.1 Huber：为什么说它是 MSE 和 MAE 之间的工程折中？</h3>
+        <p>
+            Huber loss 最有价值的地方，就在于它不打算在“精细拟合”与“稳健抗异常”之间二选一，而是显式分两段处理。设残差
+            <span set:html={String.raw`$r = \hat{y} - y$`}></span>，阈值为 <span set:html={String.raw`$\delta$`}></span>，则：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{L}_{Huber}(r)=
+\begin{cases}
+\frac{1}{2}r^2, & |r| \le \delta \\
+\delta\left(|r| - \frac{1}{2}\delta\right), & |r| > \delta
+\end{cases}
+$$`}></div>
+        <p class="mt-4">
+            这意味着：当误差很小时，它像 MSE 一样用二次项鼓励精修；当误差很大时，它改用线性增长，避免某几个异常样本把整体梯度炸飞。也正因为这个结构，Huber
+            经常被视为一种稳健回归的工程默认值，在检测框回归、噪声较重的回归任务里都非常常见。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 760 360" role="img" aria-label="Regression loss comparison" class="w-full">
+                <rect x="20" y="20" width="720" height="320" rx="26" fill="#fff7ed" stroke="#fed7aa" />
+                <text x="380" y="56" text-anchor="middle" font-size="20" font-weight="700" fill="#7c2d12">MSE、MAE、Huber 的关键差异在“大误差区域怎样增长”</text>
+                <line x1="120" y1="290" x2="670" y2="290" stroke="#94a3b8" stroke-width="2" />
+                <line x1="395" y1="90" x2="395" y2="315" stroke="#94a3b8" stroke-width="2" />
+                <text x="675" y="308" font-size="12" fill="#475569">残差 r</text>
+                <text x="358" y="102" font-size="12" fill="#475569">loss</text>
+
+                <path d="M 145 250 Q 260 178 395 290 Q 530 178 645 250" fill="none" stroke="#ef4444" stroke-width="4" />
+                <text x="606" y="164" font-size="13" fill="#ef4444">MSE：平方增长，远离 0 时惩罚急剧变大</text>
+
+                <path d="M 145 235 L 395 290 L 645 235" fill="none" stroke="#0f766e" stroke-width="4" />
+                <text x="575" y="214" font-size="13" fill="#0f766e">MAE：线性增长，更抗离群点</text>
+
+                <path d="M 145 240 L 270 190 Q 395 290 520 190 L 645 240" fill="none" stroke="#7c3aed" stroke-width="4" />
+                <text x="575" y="244" font-size="13" fill="#7c3aed">Huber：中心像 MSE，两侧像 MAE</text>
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">图 3：回归 loss 的差别并不只在公式长相，而在它们如何处理大误差与离群点。</figcaption>
+        </figure>
+
+        <h3 class="text-teal-700 mt-8">6.2 什么时候该从 MSE 换到 Huber？</h3>
+        <p>
+            一个很实用的判断标准是：如果你的数据整体质量不错、希望模型对大误差特别敏感，MSE 往往已经足够；如果你怀疑数据里有明显离群点，但又不想完全放弃小误差区域的精细优化，
+            Huber 往往是更稳妥的折中；如果离群点很多、噪声分布更重尾，MAE 或 Huber 通常都比纯 MSE 更合适。
+        </p>
+        <p>
+            需要注意的是，Huber 里的 <span set:html={String.raw`$\delta$`}></span> 没有“放之四海而皆准”的默认值。它和目标量纲强相关：目标值尺度越大，
+            默认 <span set:html={String.raw`$\delta=1$`}></span> 的意义就越弱。很多时候，真正需要调参的不是模型结构，而是这条“从二次切到线性”的分界线。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>7. 类别不平衡不是一句“加权一下”就完了：Focal Loss 在解决什么？</h2>
+        <p>
+            在目标检测、风控、欺诈识别等任务里，最棘手的问题往往不是“模型不会分类”，而是海量容易样本会淹没掉少量真正有价值的困难样本。
+            比如一阶段检测里，绝大多数 anchor 都是背景，普通 BCE 或 CE 会把大量梯度花在这些已经分得很准的 easy negatives 上，于是模型反而很难学到那些少数、稀有、但关键的正样本。
+        </p>
+        <p>
+            Focal Loss 正是为这个问题设计的。二分类形式下，论文把它写成：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+FL(p_t) = -\alpha_t (1-p_t)^\gamma \log(p_t)
+$$`}></div>
+        <p class="mt-4">
+            其中，<span set:html={String.raw`$p_t$`}></span> 表示“真实类别的预测概率”。更具体地说，如果标签是正类，
+            <span set:html={String.raw`$p_t=p$`}></span>；如果标签是负类，<span set:html={String.raw`$p_t=1-p$`}></span>。参数
+            <span set:html={String.raw`$\alpha_t$`}></span> 用来做类别平衡，<span set:html={String.raw`$\gamma$`}></span> 则是焦点参数，负责降低 easy examples 的权重。
+        </p>
+        <p>
+            为什么这个式子有用？关键就在 <span set:html={String.raw`$(1-p_t)^\gamma$`}></span>。如果一个样本已经被分得很好，
+            <span set:html={String.raw`$p_t$`}></span> 接近 1，那么这项会变得很小，意味着这个样本的损失被大幅压低；反之，如果一个样本很难，
+            <span set:html={String.raw`$p_t$`}></span> 较低，它仍然保留很大的训练信号。于是 Focal 的本质不是“重新定义分类”，而是<strong>重新定义哪些样本值得继续花梯度</strong>。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">7.1 Focal 和 class weight 的区别在哪里？</h3>
+        <p>
+            很多人会把 Focal 理解成“给少数类加权”，但这只对了一半。类别权重主要解决的是<strong>类级别不平衡</strong>：哪一类样本总体更少，就给它更高权重；
+            Focal 除了可以通过 <span set:html={String.raw`$\alpha$`}></span> 处理类级别失衡，更重要的是用 <span set:html={String.raw`$\gamma$`}></span>
+            处理<strong>样本难度失衡</strong>。也就是说，它不只是关心“哪一类更少”，还关心“哪些样本太容易，不该继续主导训练”。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">7.2 Focal 不是万能解药</h3>
+        <p>
+            尽管 Focal 很有名，但它并不意味着“数据不平衡就一定上 Focal”。如果问题仅仅是正负样本比例不均衡，而 easy / hard 的结构没有特别极端，
+            先试 BCEWithLogitsLoss + <code>pos_weight</code> 往往更简单、也更稳定。只有当你明确看到 easy negatives 大量淹没训练信号时，Focal 才会显示出真正价值。
+            同样，如果数据问题本质上是脏标签或标注边界不清，Focal 也未必是正确答案。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>8. 把这些 loss 放到一张表里：它们到底应该怎么选？</h2>
+        <p>
+            到这里其实可以看出，常见损失函数并不是彼此替代的一组按钮，而是分别对应不同任务结构。最实用的方法不是记忆“排行榜”，而是从任务对象反推 loss。下面这张表可以作为一个工作中的速查表：
+        </p>
+
+        <div class="overflow-x-auto mt-6">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">损失函数</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">比较对象</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">典型输出</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">典型场景</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">最大优点</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">主要风险</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Cross Entropy</td>
+                        <td class="px-4 py-3">真实类分布 vs 预测类分布</td>
+                        <td class="px-4 py-3">单标签多分类 logits</td>
+                        <td class="px-4 py-3">图像分类、语言模型、分割</td>
+                        <td class="px-4 py-3">分类默认基线强、梯度简洁</td>
+                        <td class="px-4 py-3">不适合独立多标签任务</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">BCEWithLogits</td>
+                        <td class="px-4 py-3">每个标签的 Bernoulli 概率</td>
+                        <td class="px-4 py-3">二分类 / 多标签 logits</td>
+                        <td class="px-4 py-3">多标签分类、二分类</td>
+                        <td class="px-4 py-3">数值稳定，支持正类加权</td>
+                        <td class="px-4 py-3">容易被 easy negatives 淹没</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">KL Divergence</td>
+                        <td class="px-4 py-3">完整分布 vs 完整分布</td>
+                        <td class="px-4 py-3">log-prob 或 prob</td>
+                        <td class="px-4 py-3">蒸馏、VAE、策略约束</td>
+                        <td class="px-4 py-3">直接表达“分布对齐”</td>
+                        <td class="px-4 py-3">方向容易写反，接口要求高</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">MSE</td>
+                        <td class="px-4 py-3">平方误差</td>
+                        <td class="px-4 py-3">连续数值</td>
+                        <td class="px-4 py-3">标准回归、重建</td>
+                        <td class="px-4 py-3">简单、平滑、对大误差敏感</td>
+                        <td class="px-4 py-3">对离群点非常脆弱</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">MAE</td>
+                        <td class="px-4 py-3">绝对误差</td>
+                        <td class="px-4 py-3">连续数值</td>
+                        <td class="px-4 py-3">稳健回归</td>
+                        <td class="px-4 py-3">更抗离群点</td>
+                        <td class="px-4 py-3">小误差附近不够平滑</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Huber</td>
+                        <td class="px-4 py-3">分段二次 / 线性误差</td>
+                        <td class="px-4 py-3">连续数值</td>
+                        <td class="px-4 py-3">有异常值的回归、框回归</td>
+                        <td class="px-4 py-3">稳健与平滑兼得</td>
+                        <td class="px-4 py-3">阈值 δ 需结合尺度调节</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Focal Loss</td>
+                        <td class="px-4 py-3">带难度重加权的分类误差</td>
+                        <td class="px-4 py-3">分类概率</td>
+                        <td class="px-4 py-3">检测、极不平衡分类</td>
+                        <td class="px-4 py-3">抑制 easy sample 主导训练</td>
+                        <td class="px-4 py-3">若场景不匹配，可能损失有效梯度</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3 class="text-teal-700 mt-8">8.1 一个可执行的选择流程</h3>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-2">
+            <li><strong>先看输出空间：</strong>类别概率、完整分布，还是连续值？</li>
+            <li><strong>再看标签关系：</strong>类间互斥，还是每个标签独立？</li>
+            <li><strong>再看数据问题：</strong>有没有严重不平衡？有没有明显离群点？</li>
+            <li><strong>最后看工程目标：</strong>你更怕大误差、怕长尾样本，还是怕分布偏离？</li>
+        </ol>
+        <p class="mt-4">
+            用这个顺序，很多 loss 选择题其实会变得很直接：单标签多分类多半用 CE；多标签就转 BCE；要做 teacher-student 分布拟合就用 KL；回归默认从 MSE 起步，
+            看到离群点再考虑 Huber；极端不平衡并且 easy negatives 极多时，再认真评估 Focal 是否必要。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>9. 训练时真正常踩的坑，并不在公式，而在接口和语义边界</h2>
+        <p>
+            工程里最常见的 loss 问题，并不是“不知道公式”，而是“语义和接口没对齐”。下面这些坑几乎是每个项目都会反复出现的：
+        </p>
+        <ul class="list-disc pl-6 mb-4 space-y-3 text-gray-600">
+            <li><strong>在 CrossEntropyLoss 前手动做了一次 softmax。</strong> 这通常没有必要，还可能带来数值稳定性问题。</li>
+            <li><strong>在 BCEWithLogitsLoss 前又自己做了 sigmoid。</strong> 结果等于把稳定实现拆散了。</li>
+            <li><strong>多标签任务误用 softmax CE。</strong> 如果标签之间不是互斥关系，这个 loss 就已经偏题了。</li>
+            <li><strong>把原始 logits 直接拿去做 KL。</strong> KL 比较的是分布，很多框架还要求输入在 log-space。</li>
+            <li><strong>Huber 的 δ 没和目标尺度一起调。</strong> 看似用了“稳健 loss”，其实阈值根本不在合理范围。</li>
+            <li><strong>看到类别不平衡就机械换 Focal。</strong> 真实问题可能是标注噪声、采样策略，或者只是正负权重没设好。</li>
+        </ul>
+
+        <h3 class="text-teal-700 mt-8">9.1 从梯度角度看，为什么 CE 这么稳定？</h3>
+        <p>
+            交叉熵在分类里如此常用，还有一个很重要的原因：softmax + CE 的梯度形式非常简洁。若真实分布为
+            <span set:html={String.raw`$y_i$`}></span>，预测概率为 <span set:html={String.raw`$p_i$`}></span>，则对 logit 的梯度可以写成：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\frac{\partial \mathcal{L}}{\partial z_i} = p_i - y_i
+$$`}></div>
+        <p class="mt-4">
+            这个形式意味着：预测比真实多的概率就被拉低，预测比真实少的概率就被拉高。它几乎像是直接在告诉模型“哪里高了、哪里低了”。这也是为什么 CE 往往是分类任务最自然的起点。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">9.2 loss 的数值大小本身不一定可跨任务比较</h3>
+        <p>
+            另一个常见误区是直接比较不同损失函数的数值大小，仿佛“loss 小”就说明方法更好。实际上，CE、KL、MSE、Huber 的数值量纲本来就不同，
+            reduction 方式也可能不同。更可靠的做法，是在同一任务、同一评测协议下比较最终指标，而不是跨任务比较 loss 绝对值。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>10. 放回真实系统里看：LLM、CV 与检测任务分别怎样用这些 loss？</h2>
+        <p>
+            如果只讲公式，loss 仍然很容易显得抽象。真正把它们放到系统里看，会更容易形成稳定直觉。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">10.1 LLM / NLP：Cross Entropy 是地基，KL 常出现在蒸馏与约束里</h3>
+        <p>
+            语言模型预训练或 SFT 阶段，核心目标本质上仍是 next-token 分类，因此最常见的主损失依然是 token-level 的交叉熵。你可以把它理解成：
+            模型在每一步都要给“下一个正确 token”足够高的概率。蒸馏时，则会在此基础上再加入 KL，让学生不仅学硬标签，还学教师给出的完整 token 分布。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">10.2 视觉分类：CE 是默认值，多标签任务切到 BCE</h3>
+        <p>
+            ImageNet 这类单标签分类问题，几乎天然就是 softmax CE 的主场；但如果任务变成多标签图像标注，例如一张图里同时出现“person / bicycle / road”，
+            模型就不该再用 softmax 在类间竞争，而应该让每一类独立判断，此时 BCEWithLogits 会更自然。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">10.3 目标检测：分类不平衡时，Focal 才真正体现价值</h3>
+        <p>
+            目标检测是 Focal Loss 最经典的舞台。一阶段检测器面对海量背景 anchor，如果继续用普通 CE / BCE，训练会被大量已经很好区分的背景样本主导。
+            Focal 通过压低 easy negatives 的损失，让模型把更多能力花在少量真正难分的候选框上。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">10.4 数值预测与框回归：为什么 Huber 比纯 MSE 更“工程化”</h3>
+        <p>
+            在边界框回归、深度估计、价格预测等任务里，异常值和尺度变化往往都比教科书示例复杂得多。纯 MSE 容易被极端样本带偏，纯 MAE 又可能不够平滑。
+            所以 Huber / Smooth L1 在很多工业系统里更像一个工程 compromise：它承认世界并不干净，但仍希望在正常样本上保持精细优化能力。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>11. 一个简单结论：loss 选型，本质是在定义你最想修哪一种错</h2>
+        <p>
+            把这篇文章压缩成一句话，就是：<strong>损失函数不是在告诉模型“别错”，而是在告诉模型“哪一种错最值得优先修”</strong>。交叉熵强调正确类概率，KL 强调分布对齐，
+            MSE 强调大误差不能被放过，MAE 强调稳健性，Huber 试图折中，Focal 则把注意力重新分配给困难样本。
+        </p>
+        <p>
+            所以当你下次再写 <code>loss = ...</code> 的时候，最值得先问的不是“社区默认用哪个”，而是：我的输出对象是什么？标签关系是什么？最怕哪种错误？
+            数据是不是不平衡？有没有离群点？如果这些问题答清楚了，很多 loss 的选择其实并不神秘。
+        </p>
+        <p>
+            从这个角度看，选 loss 并不是在调一个 API，而是在给模型写下训练时的价值函数。模型最后学成什么样，很大程度上就取决于你在这里写了什么。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>12. 参考资料（Primary Sources &amp; Supplementary Sources）</h2>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><a class="text-teal-700 underline" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html" target="_blank" rel="noopener noreferrer">PyTorch: torch.nn.CrossEntropyLoss</a> —— 官方文档，对输入输出约定、soft label、与 LogSoftmax + NLLLoss 的关系最权威。</li>
+            <li><a class="text-teal-700 underline" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.BCEWithLogitsLoss.html" target="_blank" rel="noopener noreferrer">PyTorch: torch.nn.BCEWithLogitsLoss</a> —— 官方文档，解释了 logits 版本的数值稳定性和 <code>pos_weight</code> 的作用。</li>
+            <li><a class="text-teal-700 underline" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.KLDivLoss.html" target="_blank" rel="noopener noreferrer">PyTorch: torch.nn.KLDivLoss</a> —— 官方文档，强调了 log-space 输入与 <code>batchmean</code> reduction 的区别。</li>
+            <li><a class="text-teal-700 underline" href="https://docs.pytorch.org/docs/stable/generated/torch.nn.MSELoss.html" target="_blank" rel="noopener noreferrer">PyTorch: torch.nn.MSELoss</a> —— 官方文档，作为标准回归平方误差的框架定义参考。</li>
+            <li><a class="text-teal-700 underline" href="https://keras.io/api/losses/regression_losses/#huber-function" target="_blank" rel="noopener noreferrer">Keras: Huber loss</a> —— 官方文档，对 Huber 的分段定义和 delta 含义表述简洁清楚。</li>
+            <li><a class="text-teal-700 underline" href="https://docs.pytorch.org/tutorials/beginner/knowledge_distillation_tutorial.html" target="_blank" rel="noopener noreferrer">PyTorch Tutorial: Knowledge Distillation</a> —— 官方教程，对温度、soft target、<span set:html={String.raw`$T^2$`}></span> 缩放和联合目标给出工程化解释。</li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/1503.02531" target="_blank" rel="noopener noreferrer">Distilling the Knowledge in a Neural Network</a> —— 知识蒸馏经典论文，是 soft targets 思路的代表性一手来源。</li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/1708.02002" target="_blank" rel="noopener noreferrer">Focal Loss for Dense Object Detection</a> —— Focal Loss 原始论文，解释了 easy negatives 主导训练的问题背景与 <span set:html={String.raw`$\alpha,\gamma$`}></span> 的作用。</li>
+        </ul>
+    </div>
+</BaseLayout>
