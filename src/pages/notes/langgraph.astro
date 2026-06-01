@@ -5,8 +5,8 @@ export const meta = {
     title: 'LangGraph：把 Agent 从调用链变成可恢复的状态机',
     description: '系统理解 LangGraph 的状态图模型、持久化、interrupt、memory、workflow patterns 与工程实践。',
     tags: ['Agent', 'LangGraph', 'Orchestration', 'Systems'],
-    readTime: '29 min',
-    createdAt: '2026-05-28'
+    readTime: '38 min',
+    createdAt: '2026-06-01'
 };
 ---
 
@@ -37,6 +37,11 @@ export const meta = {
             从官方定位看，LangGraph 是一个面向 <strong>long-running, stateful agents</strong> 的低层 orchestration framework / runtime。
             这个定位非常关键，因为它暗示了两点：第一，它不是只为聊天机器人设计；第二，它不是试图替你决定 agent 的 prompt 或架构，而是提供一层运行时基础设施，
             让你把 agent 做成一个真正可以上线、可以恢复、可以被人干预的系统。
+        </p>
+        <p class="mt-4">
+            本文的写法不是 API 速查，而是把官方 Graph API、Persistence、Interrupts、Memory、Workflows/Agents、Fault Tolerance、Pregel runtime 文档，
+            以及 LangGraph 官方仓库、LangChain/LangSmith 产品页、LangChain 多 agent 博客和 Anthropic 的 agent pattern 文章放在一起读。
+            这些来源共同指向一个结论：LangGraph 的价值不在“多画几条边”，而在于把 agent 从一次性调用链升级为<strong>可持久化、可暂停、可恢复、可审计的状态机</strong>。
         </p>
     </div>
 
@@ -79,9 +84,44 @@ export const meta = {
             因此，LangGraph <strong>不是</strong>一个“更会写 prompt 的库”，也<strong>不是</strong>一个把 agent 神秘化的黑盒框架。它更像一层执行控制面：
             你依然可以用 LangChain 的模型和工具，也可以不用；你依然可以写单 agent、多 agent、router、orchestrator-worker、evaluator-optimizer；
             但这些模式一旦放进 LangGraph，它们都被统一成了“图 + 状态更新 + 路由决策 + 持久化边界”这套共同抽象。
+            官方文档甚至把这条边界讲得很直白：LangGraph 是 orchestration runtime；LangChain 更偏模型、工具和 agent harness；LangSmith 是 tracing、evaluation、deployment 与运营平台；Deep Agents 则是更高层的 batteries-included agent harness。
+            因此，学习 LangGraph 时最好先把它放在“运行时层”理解，而不是把它误读成“LangChain 的另一个链式组件”。
         </p>
         <div class="quote-block mt-6">
             <p>如果说传统 agent loop 是“让模型在回合里自己想下一步”，那么 LangGraph 的核心贡献是把“下一步”这件事从隐式行为变成显式系统结构。</p>
+        </div>
+        <div class="overflow-x-auto mt-6">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">层次</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">官方定位</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">学习时要抓住的问题</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Deep Agents</td>
+                        <td class="px-4 py-3">更高层的长程 agent harness</td>
+                        <td class="px-4 py-3">我能不能更快拿到开箱即用的 agent？</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">LangChain</td>
+                        <td class="px-4 py-3">模型、工具、agent harness 与组件生态</td>
+                        <td class="px-4 py-3">模型和工具如何组合成可调用能力？</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">LangGraph</td>
+                        <td class="px-4 py-3">低层 orchestration runtime</td>
+                        <td class="px-4 py-3">状态、控制流、恢复与人工介入怎么被运行时保证？</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">LangSmith</td>
+                        <td class="px-4 py-3">观测、评测、prompt、部署与运行平台</td>
+                        <td class="px-4 py-3">上线后如何 trace、debug、评估和运营？</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -116,6 +156,8 @@ $$`}></div>
         <p class="mt-4">
             这个形式化写法看起来很简单，但它抓住了 LangGraph 和普通链式调用最根本的区别：<strong>输出不再直接等于答案，而是先变成状态；控制流也不再硬编码在函数调用顺序里，而是由状态驱动。</strong>
             只要抓住这一点，后面 reducer、checkpoint、interrupt、memory、time travel 这些机制都会变得自然。
+            更进一步，LangGraph 的底层执行模型接近 Pregel / BSP（Bulk Synchronous Parallel）式的 super-step：一批活跃节点在同一轮并行执行，写入先被收集，直到下一轮才对后继节点可见。
+            这解释了为什么文档反复强调“super-step 边界”：它既是并行合并的边界，也是 checkpoint 的自然边界。
         </p>
         <figure class="mt-6 rounded-2xl border border-white/70 bg-white/80 p-5">
             <svg viewBox="0 0 900 220" class="w-full" role="img" aria-label="LangGraph runtime flow diagram">
@@ -153,7 +195,7 @@ $$`}></div>
             </svg>
             <figcaption class="text-sm text-gray-500 mt-3">图 1. LangGraph 的运行闭环：节点先产生状态增量，reducer 合并状态，router 决定下一跳，而 checkpoint 与 interrupt 则把“可恢复、可暂停”嵌进这条闭环里。</figcaption>
         </figure>
-        <p class="text-xs text-gray-500 mt-3">对应概念可对照官方 Graph API 与 Persistence 文档。</p>
+        <p class="text-xs text-gray-500 mt-3">对应概念可对照官方 Graph API、Pregel Runtime 与 Persistence 文档。</p>
     </div>
 
     <div class="card">
@@ -197,7 +239,20 @@ $$`}></div>
             这里 <span set:html={String.raw`$k$`}></span> 表示某个状态字段；不同字段可以有不同的 reducer 语义。
         </p>
 
-        <h3 class="text-teal-700 mt-8">4.5 Compile：把声明式图变成可运行图</h3>
+        <h3 class="text-teal-700 mt-8">4.5 Send 与 Command：动态 fan-out 和“更新后跳转”</h3>
+        <p>
+            只靠普通 edge 和 conditional edge，已经可以表达很多流程；但复杂 agent 经常需要更动态的控制。
+            官方 Graph API 里两个非常关键但容易被忽略的对象是 <code>Send</code> 和 <code>Command</code>。
+            <code>Send</code> 适合 map-reduce 式动态派发：路由函数可以根据当前状态生成多个 <code>Send("worker", state_slice)</code>，把不同子任务发给同一个 worker 节点并行处理。
+            <code>Command</code> 则把“写状态”和“下一跳”放到一个返回值里，例如 <code>Command(update=..., goto=...)</code>，常用于节点内部已经完成判断、无需再写单独 router 的场景。
+        </p>
+        <p>
+            这里有一个重要工程提醒：不要随手把同一个节点的静态出边和动态 routing 混在一起。
+            官方文档警告过，如果一个节点既有普通出边，又通过 conditional edge 或 <code>Command</code> 动态跳转，可能会出现两个路径都执行的结果。
+            换句话说，LangGraph 给了你更自由的控制流，但也要求你明确“这个节点到底由谁负责决定下一步”。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">4.6 Compile：把声明式图变成可运行图</h3>
         <p>
             <code>compile()</code> 不是一个形式上的收尾动作，而是把“图定义”落成“运行时对象”的步骤。
             在这一步里，你会把 checkpointer、store、breakpoints、cache 等运行时能力真正绑定到图上。
@@ -268,9 +323,19 @@ $$`}></div>
         </p>
         <p>
             这套设计的意义很大。首先，它让多轮会话和长程任务可以天然地“接着上次跑”，而不是每次重新喂一长串历史消息。其次，它让系统具备 <strong>fault tolerance</strong>：
-            当某个 super-step 中一部分节点已经成功、一部分失败时，LangGraph 可以保留已完成节点的写入，恢复时不必把已经成功的那部分全都重跑。再进一步，历史 checkpoint 还能支持所谓的 <strong>time travel</strong>——从过去某个状态重新分叉一条新轨迹，比较不同决策后果。
+            当某个 super-step 中一部分节点已经成功、一部分失败时，LangGraph 可以把已成功节点的 pending writes 保留下来，恢复时不必把已经成功的那部分全都重跑；完整的状态快照则会在 super-step 成功完成后提交。
+            再进一步，历史 checkpoint 还能支持所谓的 <strong>time travel</strong>——从过去某个状态重新分叉一条新轨迹，比较不同决策后果。
         </p>
-        <p class="text-xs text-gray-500 mt-3">这一节主要对应官方 <a href="https://docs.langchain.com/oss/python/langgraph/persistence" class="text-[color:var(--accent)] underline">Persistence</a> 与 <a href="https://docs.langchain.com/oss/python/langgraph/durable-execution" class="text-[color:var(--accent)] underline">Durable Execution</a> 两页文档中的 checkpoint、pending writes 和 replay 语义。</p>
+        <p>
+            这里必须注意 checkpoint 的粒度：它不是“函数内部任意一行都能续跑”的魔法断点，而是围绕 super-step 保存执行状态。
+            当你从某个旧 <code>checkpoint_id</code> replay 或 fork 时，那个 checkpoint 之前的节点结果会被复用，之后的节点会重新执行；这意味着后续的 LLM 调用、API 调用和 interrupt 都可能再次发生。
+            因此，time travel 的价值不是让外部世界回滚，而是让你能在<strong>状态轨迹</strong>层面做分支实验和调试。
+        </p>
+        <p>
+            官方 Persistence 文档还给出了持久化模式的取舍：<code>exit</code> 只在执行退出、报错或人工中断时落盘，中间状态保护较弱但性能最好；<code>async</code> 在下一步运行时异步持久化，适合大多数性能/可靠性折中；<code>sync</code> 会在下一步开始前同步写入，可靠性最强但开销更高。
+            对 append-heavy 的通道，底层还提供 <code>DeltaChannel</code> 这类思路：不必每轮都保存完整累积值，而是保存增量，并在读取时按满足结合律的 reducer 重建状态。
+        </p>
+        <p class="text-xs text-gray-500 mt-3">这一节主要对应官方 <a href="https://docs.langchain.com/oss/python/langgraph/persistence" class="text-[color:var(--accent)] underline">Persistence</a>、<a href="https://docs.langchain.com/oss/python/langgraph/durable-execution" class="text-[color:var(--accent)] underline">Durable Execution</a>、<a href="https://docs.langchain.com/oss/python/langgraph/fault-tolerance" class="text-[color:var(--accent)] underline">Fault Tolerance</a> 与 <a href="https://docs.langchain.com/oss/python/langgraph/use-time-travel" class="text-[color:var(--accent)] underline">Time Travel</a> 文档中的 checkpoint、pending writes、replay 与 durability 语义。</p>
         <div class="note-box mt-6 text-sm">
             <p><strong>这类能力为什么重要？</strong>因为 agent 不再只是“回答一次问题”，而是在执行一条工作轨迹。只要你关心轨迹，checkpoint 就是核心数据结构，而不只是调试附属品。</p>
         </div>
@@ -287,6 +352,7 @@ $$`}></div>
             这个设计最值得注意的地方是：<strong>恢复并不是从中断那一行继续执行，而是会从该节点开头重新执行</strong>。
             这意味着 interrupt 前面的代码可能会再跑一遍，所以把副作用放在 interrupt 前面就非常危险。
             例如你在 interrupt 前已经向外部系统发了一次转账请求、发了一封邮件或插入了一条数据库记录，恢复时如果节点整体重放，这些动作可能被再次触发。
+            另外，<code>interrupt()</code> 内部依赖特殊暂停信号，不应被宽泛的 <code>try/except</code> 吃掉；payload 也应保持 JSON 可序列化。
         </p>
         <div class="overflow-x-auto mt-6">
             <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -311,7 +377,12 @@ $$`}></div>
                     <tr>
                         <td class="px-4 py-3 font-medium text-slate-700">多次 interrupt</td>
                         <td class="px-4 py-3">保持顺序稳定，不要条件性跳过</td>
-                        <td class="px-4 py-3">恢复匹配依赖稳定顺序</td>
+                        <td class="px-4 py-3">恢复匹配依赖稳定顺序/索引</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">并行分支 interrupt</td>
+                        <td class="px-4 py-3">按 interrupt id 映射恢复值</td>
+                        <td class="px-4 py-3">多个分支可能同时等待不同人工输入</td>
                     </tr>
                 </tbody>
             </table>
@@ -319,8 +390,9 @@ $$`}></div>
         <p class="mt-4">
             这套机制特别适合审批流、工具参数审阅、人工改写草稿、风险操作确认等场景。
             你可以把它理解成：LangGraph 不是在事后补一层“人类按钮”，而是在运行时语义里原生支持“暂停 → 审查 → 恢复”。
+            如果把 interrupt 放在工具内部，还可以实现“模型提出工具调用 → 人审参数 → 执行/修改/拒绝”的细粒度治理；如果把 interrupt 放在 evaluator 后面，也可以实现“机器先评审，人只接管不确定样本”的混合审批流。
         </p>
-        <p class="text-xs text-gray-500 mt-3">关于 pause / resume、thread_id 复用和多次 interrupt 的限制，可直接对照官方 <a href="https://docs.langchain.com/oss/python/langgraph/interrupts" class="text-[color:var(--accent)] underline">Interrupts</a> 文档。</p>
+        <p class="text-xs text-gray-500 mt-3">关于 pause / resume、thread_id 复用、多次 interrupt、并行恢复与 tool-call review，可直接对照官方 <a href="https://docs.langchain.com/oss/python/langgraph/interrupts" class="text-[color:var(--accent)] underline">Interrupts</a> 与 <a href="https://docs.langchain.com/oss/python/langgraph/human-in-the-loop" class="text-[color:var(--accent)] underline">Human-in-the-loop</a> 文档。</p>
     </div>
 
     <div class="card">
@@ -344,6 +416,11 @@ $$`}></div>
             这种设计背后其实有一个很成熟的系统观：<strong>把瞬时执行轨迹和长期身份档案分开管理</strong>。
             如果把所有记忆都塞进同一个 messages 列表里，你既很难压缩，也很难治理；而 LangGraph 把 checkpoint 与 store 分层之后，
             就可以分别对会话内状态做 trim/summarize/delete，对长期记忆做 namespace 隔离、键值写入和语义检索。
+            官方文档还会把长期记忆进一步拆成 semantic、episodic、procedural 三类：事实和偏好属于 semantic，过去经历与案例属于 episodic，如何执行任务的规则或流程更接近 procedural。
+        </p>
+        <p>
+            短期记忆管理也不是简单“截断最后 N 条消息”。比较稳的做法通常有三层：第一，调用模型前用 <code>trim_messages</code> 或类似逻辑控制送入上下文的消息；第二，把早期对话压缩成摘要，保留任务目标、已确认事实与关键约束；第三，如果确实要从持久化 state 中删除消息，则使用 <code>RemoveMessage</code> 这类和 <code>add_messages</code> reducer 配套的机制。
+            需要注意的是，修剪“送给模型的输入”和删除“持久化状态”不是一回事，前者只影响本次 prompt，后者会改变 thread 历史。
         </p>
         <figure class="mt-6 rounded-2xl border border-white/70 bg-white/80 p-5">
             <svg viewBox="0 0 900 180" class="w-full" role="img" aria-label="LangGraph memory layering diagram">
@@ -402,6 +479,48 @@ $$`}></div>
             例如外层用确定性的 workflow 控制阶段边界，内层某一阶段再跑一个有工具循环的 agent；或者先用 routing 决定进入哪个子图，再在子图内部执行一个 evaluator-optimizer 回路。
             换句话说，LangGraph 把“workflow”和“agent”统一成了同一套图运行时，只是控制流的自由度不同。
         </p>
+        <p>
+            Anthropic 在《Building effective agents》里给过一个很实用的提醒：先用足够简单、可组合的 pattern，只有当任务确实需要模型在运行时决定路径时，再增加 agentic autonomy。
+            这条原则和 LangGraph 并不冲突，反而非常契合。LangGraph 的图不是为了把所有任务都变成 autonomous agent，而是让你能精确选择哪些地方该确定、哪些地方该动态、哪些地方必须暂停给人审。
+        </p>
+        <div class="overflow-x-auto mt-6">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">判断问题</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">更适合的模式</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">LangGraph 里的关键设计点</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3">步骤是否基本固定？</td>
+                        <td class="px-4 py-3 font-medium text-slate-700">Prompt chaining / workflow</td>
+                        <td class="px-4 py-3">显式 edge、阶段性状态字段、必要时插入 gate</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3">输入类别是否清晰可分？</td>
+                        <td class="px-4 py-3 font-medium text-slate-700">Routing</td>
+                        <td class="px-4 py-3">结构化路由输出 + conditional edges</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3">子任务是否相互独立？</td>
+                        <td class="px-4 py-3 font-medium text-slate-700">Parallelization</td>
+                        <td class="px-4 py-3">super-step 并行 + reducer 聚合</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3">子任务数量是否运行时才知道？</td>
+                        <td class="px-4 py-3 font-medium text-slate-700">Orchestrator-worker</td>
+                        <td class="px-4 py-3"><code>Send</code> 动态 fan-out + 汇总节点</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3">是否有明确评价标准？</td>
+                        <td class="px-4 py-3 font-medium text-slate-700">Evaluator-optimizer</td>
+                        <td class="px-4 py-3">评审状态字段 + conditional retry</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <div class="card">
@@ -449,6 +568,41 @@ $$`}></div>
             它们共享的是结果状态，但不共享所有自由度。
             这背后体现的是一个很重要的工程原则：<strong>多 agent 的价值不在于人格化角色扮演，而在于把复杂任务切成多个受约束的状态变换器</strong>。
         </p>
+        <p>
+            LangChain 官方多 agent 文章里常见三种结构：第一种是 collaboration/shared scratchpad，所有角色共享一块工作区，透明但容易上下文膨胀；第二种是 supervisor pattern，各 agent 有私有 scratchpad，由 supervisor 负责路由和汇总，隔离性更好但监督器压力更大；第三种是 hierarchical teams，把一组 agent 或子图封装成更高层节点，适合更复杂的组织结构。
+            放到 LangGraph 里，这三种结构本质上都是在回答同一个问题：哪些状态字段全局可见，哪些字段只属于子图，最终由谁把局部结果合并回主状态。
+        </p>
+        <figure class="mt-6 rounded-2xl border border-white/70 bg-white/80 p-5">
+            <svg viewBox="0 0 900 260" class="w-full" role="img" aria-label="LangGraph multi-agent coordination patterns">
+                <rect x="40" y="36" width="240" height="170" rx="20" fill="#ecfeff" stroke="#06b6d4" stroke-width="2"></rect>
+                <text x="160" y="68" text-anchor="middle" fill="#0e7490" font-size="20" font-weight="700">Shared Scratchpad</text>
+                <circle cx="105" cy="116" r="28" fill="#cffafe"></circle>
+                <circle cx="160" cy="116" r="28" fill="#cffafe"></circle>
+                <circle cx="215" cy="116" r="28" fill="#cffafe"></circle>
+                <rect x="88" y="160" width="144" height="28" rx="10" fill="#fff" stroke="#06b6d4"></rect>
+                <text x="160" y="179" text-anchor="middle" fill="#0e7490" font-size="13">global messages / artifacts</text>
+
+                <rect x="330" y="36" width="240" height="170" rx="20" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="2"></rect>
+                <text x="450" y="68" text-anchor="middle" fill="#6d28d9" font-size="20" font-weight="700">Supervisor</text>
+                <circle cx="450" cy="112" r="30" fill="#ede9fe"></circle>
+                <text x="450" y="117" text-anchor="middle" fill="#6d28d9" font-size="13" font-weight="700">route</text>
+                <rect x="360" y="160" width="52" height="28" rx="10" fill="#fff" stroke="#8b5cf6"></rect>
+                <rect x="424" y="160" width="52" height="28" rx="10" fill="#fff" stroke="#8b5cf6"></rect>
+                <rect x="488" y="160" width="52" height="28" rx="10" fill="#fff" stroke="#8b5cf6"></rect>
+                <path d="M450 142 L386 160 M450 142 L450 160 M450 142 L514 160" stroke="#8b5cf6" stroke-width="2" fill="none"></path>
+                <text x="450" y="225" text-anchor="middle" fill="#64748b" font-size="13">private scratchpads + global output</text>
+
+                <rect x="620" y="36" width="240" height="170" rx="20" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"></rect>
+                <text x="740" y="68" text-anchor="middle" fill="#166534" font-size="20" font-weight="700">Hierarchical Teams</text>
+                <rect x="666" y="92" width="148" height="36" rx="12" fill="#dcfce7" stroke="#22c55e"></rect>
+                <text x="740" y="115" text-anchor="middle" fill="#166534" font-size="13" font-weight="700">top graph</text>
+                <rect x="650" y="154" width="72" height="30" rx="10" fill="#fff" stroke="#22c55e"></rect>
+                <rect x="758" y="154" width="72" height="30" rx="10" fill="#fff" stroke="#22c55e"></rect>
+                <path d="M710 128 L686 154 M770 128 L794 154" stroke="#22c55e" stroke-width="2" fill="none"></path>
+                <text x="740" y="225" text-anchor="middle" fill="#64748b" font-size="13">subgraphs own local state</text>
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">图 3. 多 agent 编排的关键不是 agent 数量，而是 scratchpad、supervisor 与子图边界如何决定状态可见性和结果合并方式。</figcaption>
+        </figure>
         <div class="note-box mt-6 text-sm">
             <p><strong>实践提醒：</strong>多 agent 最容易出问题的不是“谁来回答”，而是“谁能写哪些状态字段、谁来决定结束条件、并发结果如何合并”。这正是 LangGraph 的 reducer 和 routing 需要被认真设计的地方。</p>
         </div>
@@ -464,12 +618,15 @@ $$`}></div>
             所谓 deterministic，意思是同样输入下节点应尽量给出可预期的行为边界；所谓 idempotent，则是即使节点因恢复或回放被再次执行，
             外部副作用也不会造成灾难性重复。对于 LLM 调用来说，这意味着你可能要接受输出分布上的随机性，但对数据库写入、支付、发邮件、创建工单这类操作，
             幂等设计几乎是必需的。
+            Fault Tolerance 文档里关于 retry、timeout、graceful drain 的语义也在强化同一个事实：运行时可以保存图状态、重试失败节点、在 super-step 间安全 drain，但它不能替你保证外部系统天然可回滚。
         </p>
         <ul class="list-disc pl-6 text-gray-600 space-y-2 mt-4">
             <li><strong>把外部副作用尽量放在边界清晰的单独节点中</strong>，不要和大段推理逻辑搅在一起。</li>
             <li><strong>给可重复触发的副作用增加去重键</strong>，例如 request id、task id、幂等 token。</li>
             <li><strong>对历史状态依赖强的节点使用更稳定的输入结构</strong>，减少隐式上下文带来的漂移。</li>
             <li><strong>需要人工确认的高风险动作优先放到 interrupt 之后</strong>，而不是之前。</li>
+            <li><strong>把重试策略和错误处理显式写进节点边界</strong>，不要假设一次工具调用必然成功。</li>
+            <li><strong>区分 graph state 和外部副作用日志</strong>，checkpoint 能恢复状态轨迹，但不能自动撤销已经发生的外部动作。</li>
         </ul>
         <p class="mt-4">
             这是理解 LangGraph 工程价值的关键一环：它不是只让你“更方便地连节点”，而是逼着你把运行语义考虑清楚。
@@ -493,6 +650,10 @@ $$`}></div>
         <p class="mt-4">
             典型例子包括：代码 agent、研究助理、报告生成流水线、企业审批工作流、支持多轮与个性化记忆的对话系统、以及需要稳定工具调度的业务 agent。
             这些场景共同指向的不是“模型更聪明”，而是“系统更可治理”。
+        </p>
+        <p>
+            如果把它落到产品工程里，可以用一个简单判断标准：当你已经开始关心“这一步失败后怎么恢复”“这个工具调用要不要人工确认”“不同 worker 的中间产物怎么被追踪”“历史执行能不能回放给评测系统看”时，LangGraph 就比普通链式封装更接近问题本身。
+            反过来，如果你的应用只是“用户问一句、模型答一句”，或者只有一两个固定转换步骤，引入 LangGraph 反而可能增加不必要的概念和运维成本。
         </p>
     </div>
 
@@ -545,9 +706,17 @@ $$`}></div>
             <li><a href="https://docs.langchain.com/oss/python/langgraph/add-memory" class="text-[color:var(--accent)] underline">Add Memory（官方文档）</a>：短期记忆、长期记忆、checkpointer 与 store 的关系。</li>
             <li><a href="https://docs.langchain.com/oss/python/langgraph/workflows-agents" class="text-[color:var(--accent)] underline">Workflows and Agents（官方文档）</a>：workflow 与 agent 的区分及常见编排模式。</li>
             <li><a href="https://docs.langchain.com/oss/python/langgraph/durable-execution" class="text-[color:var(--accent)] underline">Durable Execution（官方文档）</a>：恢复、重放、task writes 与幂等设计的背景。</li>
+            <li><a href="https://docs.langchain.com/oss/python/langgraph/fault-tolerance" class="text-[color:var(--accent)] underline">Fault Tolerance（官方文档）</a>：retry、timeout、pending writes、graceful drain 与失败恢复语义。</li>
+            <li><a href="https://docs.langchain.com/oss/python/langgraph/use-time-travel" class="text-[color:var(--accent)] underline">Time Travel（官方文档）</a>：从历史 checkpoint replay / fork 的语义与限制。</li>
+            <li><a href="https://docs.langchain.com/oss/python/langgraph/pregel" class="text-[color:var(--accent)] underline">Pregel Runtime（官方文档）</a>：super-step、Plan/Execution/Update 与并行节点的底层执行模型。</li>
+            <li><a href="https://docs.langchain.com/oss/python/langgraph/human-in-the-loop" class="text-[color:var(--accent)] underline">Human-in-the-loop（官方文档）</a>：审批、内容编辑、工具调用审阅和多 interrupt 恢复模式。</li>
+            <li><a href="https://docs.langchain.com/oss/python/langgraph/thinking-in-langgraph" class="text-[color:var(--accent)] underline">Thinking in LangGraph（官方文档）</a>：状态设计、节点职责、确定性节点和 LLM 节点的工程建议。</li>
             <li><a href="https://github.com/langchain-ai/langgraph" class="text-[color:var(--accent)] underline">langchain-ai/langgraph（官方仓库）</a>：官方 README、安装方式与生态入口。</li>
             <li><a href="https://www.langchain.com/blog/langgraph" class="text-[color:var(--accent)] underline">LangGraph（LangChain 官方博客）</a>：图/状态机心智模型与设计动机。</li>
+            <li><a href="https://www.langchain.com/blog/langgraph-multi-agent-workflows" class="text-[color:var(--accent)] underline">LangGraph Multi-Agent Workflows（LangChain 官方博客）</a>：shared scratchpad、supervisor 与 hierarchical teams 等多 agent 结构。</li>
+            <li><a href="https://www.anthropic.com/engineering/building-effective-agents" class="text-[color:var(--accent)] underline">Building Effective Agents（Anthropic Engineering）</a>：跨框架的 workflow/agent pattern 选择原则，用作 LangGraph 编排模式的补充参照。</li>
             <li><a href="https://www.langchain.com/langgraph" class="text-[color:var(--accent)] underline">LangGraph 产品页</a>：stateful orchestration、可靠 agent 与典型应用场景。</li>
+            <li><a href="https://www.langchain.com/langsmith" class="text-[color:var(--accent)] underline">LangSmith 产品页</a>：LangGraph 之外的观测、评测与运营平台定位。</li>
         </ul>
     </div>
 </BaseLayout>
