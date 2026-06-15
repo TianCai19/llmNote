@@ -1,0 +1,313 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: 'AI 持续实验迭代流程',
+    description: '把“实验不够好”变成可评测、可追踪、可复盘、可继续迭代的 Agent 工作流',
+    tags: ['Agent', 'Experiment', 'Workflow'],
+    readTime: '16 min',
+    createdAt: '2026-06-12'
+};
+
+const artifactRows = [
+    ['实验总览表', '每轮实验的目标、变量、基线、结论、优先级与是否继续。'],
+    ['评测结果表', '全量 case、关键指标、人工/自动评分、失败样例与可视化。'],
+    ['错误分析表', '错误类型、根因、证据、影响范围、定位链路与修复方向。'],
+    ['实验设计表', '下一轮变量、假设、改动点、保护项、预期效果与风险。'],
+    ['实验结果表', '运行状态、测试日志、异常信息、产物链接、trace 与结论。'],
+    ['中间产物仓库', 'trace、配置、日志、数据切片、模型输出、截图与可复现实验包。'],
+    ['版本 / 迭代记录', '每轮实验的时间、负责人、版本号、差异摘要与保留原因。']
+];
+---
+
+<BaseLayout title="AI 持续实验迭代流程" description={meta.description}>
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Agent Workflow / Experiment Loop</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">AI 持续实验迭代流程</h1>
+        <p class="text-xl text-gray-500">让 Agent 不只是“做一次任务”，而是能持续评测、复盘、设计下一轮并安全推进。</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>1. 这版文档想解决的问题</h2>
+        <p>我真正想要的不是一个“帮我跑一次实验”的 AI，而是一个能持续完成一件事的 AI：它知道第 1 轮实验为什么不好，能把失败讲清楚，把证据落表，然后设计第 2 轮；第 2 轮仍然不好时，它不会遗忘上一轮，也不会在原地乱改，而是继续复盘、定位、设计第 3 轮。</p>
+        <p>这件事的难点不在“循环”本身，而在循环里的每一步都容易失真：评测不全面、只看最终结果、错误定位太粗、为了规避坏 case 破坏了原本正确的能力、中间 trace 不展示、实验记录没有落表、下一轮实验直接覆盖上一轮。于是 AI 看起来很勤奋，但实际上没有形成可靠的实验资产。</p>
+        <p>所以这版流程的核心目标是：<span class="highlight">把实验迭代从“凭感觉继续试”改造成“有基线、有评测、有证据、有版本、有保护项”的闭环系统</span>。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/ai-experiment-iteration-loop/experiment-iteration-flow.jpeg" alt="实验迭代流程设计草图" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">素材草图：从实验 i 开始，经由评测、总结、错误定位、下一轮设计、实验完成与版本推进，直到达到预期目标。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>2. 一句话定义：实验型 Agent 的主循环</h2>
+        <p>可以把这个流程抽象成一个有状态的主循环。注意这里的状态不是聊天上下文里的临时记忆，而是落到文件、表格、trace、版本和产物里的可复查记录。</p>
+        <pre class="language-python"><code>{`i = 1
+experiment_i = start_experiment(i, setup_framework=True, prepare_cases=True)
+
+while not is_good_enough(experiment_i):
+    evaluation = evaluate_fully(experiment_i.results, all_cases=True)
+    write_table("evaluation_results", evaluation)
+
+    summary = summarize_why_not_good(evaluation, experiment_i.outputs)
+    write_table("experiment_summary", summary)
+
+    diagnosis = inspect_intermediate_artifacts(
+        traces=experiment_i.traces,
+        logs=experiment_i.logs,
+        configs=experiment_i.configs,
+        data=experiment_i.data_slices,
+    )
+    write_table("error_analysis", diagnosis)
+
+    design = design_next_experiment(
+        previous=experiment_i,
+        diagnosis=diagnosis,
+        protect_correct_behaviors=True,
+        do_not_modify_in_place=True,
+    )
+    write_table("experiment_design", design)
+
+    experiment_i = run_next_experiment(
+        design,
+        monitor_progress=True,
+        run_test_cases=True,
+        check_data_and_tooling_errors=True,
+    )
+    write_table("experiment_results", experiment_i.results)
+    i += 1`}</code></pre>
+        <div class="note-box text-sm mt-4">
+            <p><strong>关键理解：</strong>循环停止条件不是“跑完了”，而是“经过充分评测后证明足够好”。如果评测不充分，循环就会在错误信号上前进。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>3. 流程总图：从一次实验到下一次实验</h2>
+        <p>这套流程可以拆成五个连续阶段：启动、评测、诊断、设计、执行。每个阶段都有输入、产出和质量门禁，不允许只凭自然语言总结就进入下一步。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 920 360" role="img" aria-label="AI 持续实验迭代流程" class="w-full">
+                <rect x="24" y="24" width="872" height="312" rx="24" fill="#f8fafc" stroke="#dbeafe" />
+                <text x="60" y="64" font-size="16" font-weight="700" fill="#0f172a">实验 i 主循环</text>
+
+                <rect x="60" y="100" width="135" height="70" rx="16" fill="#dbeafe" stroke="#93c5fd" />
+                <text x="127" y="130" text-anchor="middle" font-size="13" fill="#1e3a8a">启动实验 i</text>
+                <text x="127" y="152" text-anchor="middle" font-size="11" fill="#475569">跑通 / 框架 / case</text>
+
+                <rect x="235" y="100" width="135" height="70" rx="16" fill="#e0f2fe" stroke="#7dd3fc" />
+                <text x="302" y="130" text-anchor="middle" font-size="13" fill="#075985">全面评测</text>
+                <text x="302" y="152" text-anchor="middle" font-size="11" fill="#475569">结果 / 指标 / 表格</text>
+
+                <rect x="410" y="100" width="135" height="70" rx="16" fill="#dcfce7" stroke="#86efac" />
+                <text x="477" y="130" text-anchor="middle" font-size="13" fill="#14532d">诊断原因</text>
+                <text x="477" y="152" text-anchor="middle" font-size="11" fill="#475569">trace / 日志 / 根因</text>
+
+                <rect x="585" y="100" width="135" height="70" rx="16" fill="#ffedd5" stroke="#fdba74" />
+                <text x="652" y="130" text-anchor="middle" font-size="13" fill="#9a3412">设计 i+1</text>
+                <text x="652" y="152" text-anchor="middle" font-size="11" fill="#475569">变量 / 保护项 / 假设</text>
+
+                <rect x="760" y="100" width="90" height="70" rx="16" fill="#fee2e2" stroke="#fca5a5" />
+                <text x="805" y="130" text-anchor="middle" font-size="13" fill="#991b1b">执行 i+1</text>
+                <text x="805" y="152" text-anchor="middle" font-size="11" fill="#475569">监控 / 测试</text>
+
+                <line x1="195" y1="135" x2="235" y2="135" stroke="#64748b" stroke-width="2" />
+                <line x1="370" y1="135" x2="410" y2="135" stroke="#64748b" stroke-width="2" />
+                <line x1="545" y1="135" x2="585" y2="135" stroke="#64748b" stroke-width="2" />
+                <line x1="720" y1="135" x2="760" y2="135" stroke="#64748b" stroke-width="2" />
+
+                <path d="M805 170 C805 245 127 245 127 170" fill="none" stroke="#f97316" stroke-width="2.5" stroke-dasharray="7 7" />
+                <text x="462" y="270" text-anchor="middle" font-size="12" fill="#9a3412">如果仍然不够好：i = i + 1，进入下一轮；不覆盖上一轮实验</text>
+
+                <rect x="238" y="292" width="444" height="26" rx="13" fill="#ecfeff" stroke="#67e8f9" />
+                <text x="460" y="310" text-anchor="middle" font-size="12" fill="#0e7490">每一轮都必须产出：表格 + trace + 配置 + 版本记录 + 结论</text>
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">主循环强调“证据驱动的下一轮设计”，而不是原地调参或盲目重跑。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>4. 阶段一：实验 i 开始</h2>
+        <p>实验开始阶段的目标不是立刻追求最好结果，而是先保证这轮实验是可运行、可观察、可复现的。很多迭代失败不是因为方案错，而是因为实验框架没跑通、case 没准备、数据没拿到、日志缺失，导致后续复盘没有证据。</p>
+        <h3>启动清单</h3>
+        <ul class="list-disc pl-6">
+            <li><strong>跑通最小链路：</strong>从输入、处理、执行到输出至少跑通一个小样例。</li>
+            <li><strong>搭好框架：</strong>明确配置入口、实验脚本、结果目录、日志目录、trace 目录。</li>
+            <li><strong>准备 case：</strong>至少包含正例、反例、边界例、历史失败例和关键保护例。</li>
+            <li><strong>定义评价标准：</strong>写清楚什么叫好，什么叫不够好，哪些指标是硬门槛。</li>
+            <li><strong>记录基线：</strong>保留本轮开始前的代码版本、参数、数据版本与预期目标。</li>
+        </ul>
+        <div class="note-box text-sm mt-4">
+            <p><strong>我的偏好：</strong>宁愿先把实验记录结构搭得笨一点，也不要靠聊天上下文记住“刚才跑了什么”。可复现比一轮跑得快更重要。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>5. 阶段二：判断实验 i 是否足够好</h2>
+        <p>“不好”不能只是一句主观判断。AI 必须先做充分、全面的评测，再把结果落表。这里的评测需要覆盖最终指标、逐 case 结果、失败样例、可视化证据和异常检查。</p>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-5">
+                <h3 class="mt-0">评测输入</h3>
+                <ul class="list-disc pl-6 text-sm text-slate-600">
+                    <li>实验输出结果与中间产物</li>
+                    <li>完整测试 case 集合</li>
+                    <li>预设指标与通过阈值</li>
+                    <li>历史版本结果和基线结果</li>
+                    <li>日志、trace、失败截图或样例</li>
+                </ul>
+            </div>
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-5">
+                <h3 class="mt-0">评测输出</h3>
+                <ul class="list-disc pl-6 text-sm text-slate-600">
+                    <li>整体结论：通过 / 不通过 / 需要复查</li>
+                    <li>每个指标的数值和变化</li>
+                    <li>每个 case 的结果、评分和原因</li>
+                    <li>失败聚类与优先级</li>
+                    <li>是否存在数据、工具、环境类异常</li>
+                </ul>
+            </div>
+        </div>
+        <p>这里最重要的规则是：<span class="highlight">结果落表，而不是只写在总结里</span>。表格让下一轮实验能对比，也让 Agent 不会遗忘“哪些地方本来是对的”。</p>
+    </div>
+
+    <div class="card">
+        <h2>6. 阶段三：总结为什么不够好</h2>
+        <p>如果实验 i 不够好，下一步不是马上改参数，而是回答“为什么”。这个问题需要从结果和中间产物共同判断：最终结果说明现象，中间 trace 才能帮助定位原因。</p>
+        <h3>错误分析的三层结构</h3>
+        <ol class="list-decimal pl-6">
+            <li><strong>现象层：</strong>哪些 case 失败？失败比例是多少？失败是否集中在某类任务、输入、模型输出或数据切片上？</li>
+            <li><strong>链路层：</strong>失败发生在检索、规划、工具调用、数据读取、参数设置、生成、评测还是落盘阶段？</li>
+            <li><strong>根因层：</strong>是需求理解错、约束缺失、参数不合理、代码流程有 bug、数据缺失、评测脚本错，还是环境不稳定？</li>
+        </ol>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 820 250" role="img" aria-label="错误定位链路" class="w-full">
+                <rect x="40" y="40" width="210" height="150" rx="18" fill="#fee2e2" stroke="#fca5a5" />
+                <text x="145" y="75" text-anchor="middle" font-size="14" font-weight="700" fill="#991b1b">结果现象</text>
+                <text x="145" y="108" text-anchor="middle" font-size="12" fill="#475569">失败 case / 指标下降</text>
+                <text x="145" y="132" text-anchor="middle" font-size="12" fill="#475569">异常输出 / 退化样例</text>
+                <text x="145" y="156" text-anchor="middle" font-size="12" fill="#475569">对比基线</text>
+
+                <rect x="305" y="40" width="210" height="150" rx="18" fill="#e0f2fe" stroke="#7dd3fc" />
+                <text x="410" y="75" text-anchor="middle" font-size="14" font-weight="700" fill="#075985">中间证据</text>
+                <text x="410" y="108" text-anchor="middle" font-size="12" fill="#475569">trace / 日志 / 配置</text>
+                <text x="410" y="132" text-anchor="middle" font-size="12" fill="#475569">工具调用 / 数据切片</text>
+                <text x="410" y="156" text-anchor="middle" font-size="12" fill="#475569">执行时间线</text>
+
+                <rect x="570" y="40" width="210" height="150" rx="18" fill="#dcfce7" stroke="#86efac" />
+                <text x="675" y="75" text-anchor="middle" font-size="14" font-weight="700" fill="#14532d">根因定位</text>
+                <text x="675" y="108" text-anchor="middle" font-size="12" fill="#475569">错误类型</text>
+                <text x="675" y="132" text-anchor="middle" font-size="12" fill="#475569">影响范围</text>
+                <text x="675" y="156" text-anchor="middle" font-size="12" fill="#475569">下一轮假设</text>
+
+                <line x1="250" y1="115" x2="305" y2="115" stroke="#64748b" stroke-width="2" />
+                <line x1="515" y1="115" x2="570" y2="115" stroke="#64748b" stroke-width="2" />
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3">不要只看最终结果；中间产物是定位错误点、避免误修的关键。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>7. 阶段四：设计实验 i+1</h2>
+        <p>下一轮实验设计必须从错误分析出发，而不是随便换一个方案。它可以修改代码流程、参数、prompt、数据、评测方式或工具链，但每个改动都要回答三个问题：它试图规避哪个错误？会不会破坏原来正确的地方？如何验证它真的有效？</p>
+        <h3>实验设计表的核心字段</h3>
+        <div class="overflow-x-auto rounded-2xl border border-white/70 bg-white/80">
+            <table class="min-w-full divide-y divide-slate-200 text-sm">
+                <thead class="bg-slate-50/80 text-slate-700">
+                    <tr>
+                        <th class="px-4 py-3 text-left font-semibold">字段</th>
+                        <th class="px-4 py-3 text-left font-semibold">说明</th>
+                        <th class="px-4 py-3 text-left font-semibold">检查问题</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-slate-600">
+                    <tr><td class="px-4 py-3">假设</td><td class="px-4 py-3">本轮认为失败的主因是什么</td><td class="px-4 py-3">是否来自证据，而不是猜测？</td></tr>
+                    <tr><td class="px-4 py-3">变量</td><td class="px-4 py-3">这轮只改变哪些参数、流程或策略</td><td class="px-4 py-3">是否能归因？是否改动过大？</td></tr>
+                    <tr><td class="px-4 py-3">保护项</td><td class="px-4 py-3">上一轮已经正确的 case 与能力</td><td class="px-4 py-3">是否有回归测试覆盖？</td></tr>
+                    <tr><td class="px-4 py-3">预期效果</td><td class="px-4 py-3">预计改善哪些指标和样例</td><td class="px-4 py-3">是否可量化、可观测？</td></tr>
+                    <tr><td class="px-4 py-3">风险</td><td class="px-4 py-3">可能引入的新错误或退化</td><td class="px-4 py-3">是否设计了反例和边界例？</td></tr>
+                    <tr><td class="px-4 py-3">版本</td><td class="px-4 py-3">新实验目录、分支、配置号</td><td class="px-4 py-3">是否没有原地覆盖实验 i？</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="note-box text-sm mt-4">
+            <p><strong>最重要的约束：</strong>不要为了规避错误，把原来正确的部分改错。下一轮设计必须显式保留“保护 case”和“回归检查”。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>8. 阶段五：完成实验 i+1</h2>
+        <p>执行下一轮实验时，Agent 不能只等待命令结束。它需要监控进度、防止错误、跑测试 case，并检测是否出现中间错误，例如数据没有拿到、路径写错、接口失败、评测脚本空跑、日志缺失等。</p>
+        <h3>执行期监控</h3>
+        <ul class="list-disc pl-6">
+            <li><strong>进度监控：</strong>记录开始时间、阶段状态、耗时、当前处理到的 case 与剩余任务。</li>
+            <li><strong>异常监控：</strong>捕获报错、超时、空输出、重复输出、数据量异常和工具调用失败。</li>
+            <li><strong>测试 case：</strong>先跑小批量 smoke case，再跑完整 case；失败时保留失败现场。</li>
+            <li><strong>产物检查：</strong>确认结果文件、日志、trace、配置快照和报告都真实存在。</li>
+            <li><strong>结果落表：</strong>把本轮结果写入实验结果表，并链接到中间产物。</li>
+        </ul>
+        <p>执行完成后，新的实验 i+1 会变成下一轮判断的实验 i。这个转换必须伴随版本记录，而不是只在对话里说“已经进入下一轮”。</p>
+    </div>
+
+    <div class="card">
+        <h2>9. 重要文档与表格资产</h2>
+        <p>这套流程的价值在于沉淀资产。下面这些表和目录不是形式主义，而是为了让 AI 在第 5 轮、第 10 轮时仍然能知道自己为什么这么走。</p>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {artifactRows.map(([name, desc]) => (
+                <div class="rounded-2xl border border-white/70 bg-white/80 p-5">
+                    <p class="mb-2 font-semibold text-[color:var(--accent-strong)]">{name}</p>
+                    <p class="mb-0 text-sm leading-relaxed text-slate-600">{desc}</p>
+                </div>
+            ))}
+        </div>
+        <h3>推荐目录结构</h3>
+        <pre class="language-text"><code>{`experiments/
+  exp-001/
+    config.yaml
+    cases.csv
+    results.csv
+    evaluation.md
+    traces/
+    logs/
+    artifacts/
+  exp-002/
+    config.yaml
+    design.md
+    results.csv
+    error-analysis.md
+    traces/
+  experiment-index.csv
+  iteration-record.md`}</code></pre>
+    </div>
+
+    <div class="card">
+        <h2>10. 给 Agent 的操作协议</h2>
+        <p>如果把这套流程交给 AI 执行，我希望它遵守下面的协议。它不是建议，而是每轮实验的质量门禁。</p>
+        <ol class="list-decimal pl-6">
+            <li><strong>先建立实验 i：</strong>明确目标、基线、case、目录、配置和评测标准。</li>
+            <li><strong>不够好时先评测：</strong>必须全面看结果，不能只挑几个失败样例。</li>
+            <li><strong>总结必须有来源：</strong>每个结论都要链接到结果、日志、trace、case 或配置。</li>
+            <li><strong>迭代必须有设计：</strong>实验 i+1 的变量、假设、风险、保护项要落表。</li>
+            <li><strong>禁止原地覆盖：</strong>每一轮都创建新版本、新目录或新配置，保留可回溯链路。</li>
+            <li><strong>中间产物要展示：</strong>关键 trace、日志、失败样例、配置差异不能藏起来。</li>
+            <li><strong>执行要防错：</strong>监控进度，检测数据缺失、空跑、工具失败和环境异常。</li>
+            <li><strong>结果要闭环：</strong>每轮结束都更新表格、版本记录和下一步决策。</li>
+        </ol>
+        <div class="note-box text-sm mt-4">
+            <p><strong>最终标准：</strong>一个好的实验迭代 Agent，应该能让人随时打开实验表格和中间产物，理解“为什么失败、为什么这么改、改完是否真的更好”。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>11. 最小可执行模板</h2>
+        <p>当任务开始时，可以直接把下面这段作为 Agent 的执行提示词骨架：</p>
+        <pre class="language-markdown"><code>{`你要持续完成这个实验迭代任务，而不是只跑一次。
+
+每轮实验必须执行：
+1. 建立实验版本：目标、配置、case、结果目录、trace 目录。
+2. 运行实验并监控：先 smoke case，再完整 case；检测数据、工具、路径和空输出异常。
+3. 全面评测：逐 case、逐指标、对比基线；结果写入评测结果表。
+4. 复盘失败：从结果和中间产物定位错误类型、根因和影响范围；写入错误分析表。
+5. 设计下一轮：提出实验 i+1 的假设、变量、保护项、风险和预期效果；写入实验设计表。
+6. 禁止原地覆盖：每轮实验必须创建新版本，保留 trace、配置、日志和结果。
+7. 如果不够好，i = i + 1，继续下一轮；如果足够好，输出最终结论和最佳方案。`}</code></pre>
+        <p>这段提示词的重点不是让 AI “更努力”，而是让它的努力变成结构化资产。只有这样，持续迭代才不会变成持续试错。</p>
+    </div>
+</BaseLayout>
