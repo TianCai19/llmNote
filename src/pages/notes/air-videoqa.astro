@@ -1,0 +1,435 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: 'A.I.R.：面向 VideoQA 的自适应迭代式选帧',
+    description: '深入解读 A.I.R. 论文：为何长视频问答需要 query-aware frame selection，以及自适应初采样、区间势能排序、VLM 推理校验与局部密度采样如何形成高效闭环。',
+    tags: ['VideoQA', 'Video', 'VLM', 'Frame Selection'],
+    readTime: '38 min',
+    createdAt: '2026-06-17'
+};
+---
+
+<BaseLayout title="A.I.R.：面向 VideoQA 的自适应迭代式选帧" description="从 CLIP Top-K 到 reasoning-based iterative selection：系统理解 A.I.R. 如何在长视频问答中提升准确率与效率。">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">VideoQA / Frame Selection / VLM / Long Video</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">A.I.R.：面向 VideoQA 的自适应迭代式选帧</h1>
+        <p class="text-xl text-gray-500">把“先均匀抽几帧再问模型”升级成“围绕问题做分阶段、可迭代、带推理校验的证据检索”</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <div class="note-box text-sm">
+        <p><strong>论文信息：</strong><em>A.I.R.: Enabling Adaptive, Iterative, and Reasoning-based Frame Selection For Video Question Answering</em>，ICLR 2026 Poster，arXiv:2510.04428v3。</p>
+        <p class="mt-2"><strong>核心判断：</strong>A.I.R. 不是再训练一个新 Video VLM，而是插在基础 VLM 之前的 <strong>training-free frame selection module</strong>。它试图解决一个长期被低估的问题：真正限制长视频问答的，往往不是回答模型不会推理，而是 <strong>给它看的帧不对</strong>。</p>
+    </div>
+
+    <nav class="toc mt-8" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#intro">1. Introduction：为什么 VideoQA 的瓶颈首先是选帧</a></li>
+            <li><a href="#background">2. Background：均匀采样、CLIP 检索和直接 VLM 分析各自卡在哪里</a></li>
+            <li><a href="#overview">3. Method Overview：A.I.R. 的三阶段结构</a></li>
+            <li><a href="#initial">4. Adaptive Initial Sampling：先用轻量相似度找到“事件段”</a></li>
+            <li><a href="#iterative">5. Iterative Frame Selection：为什么要把 VLM 放进迭代闭环里</a></li>
+            <li><a href="#formula">6. 关键公式与算法直觉：预算、区间势能、验证筛选与 LDS</a></li>
+            <li><a href="#experiments">7. Experiments：结果到底说明了什么</a></li>
+            <li><a href="#discussion">8. Discussion：A.I.R. 真正有价值的地方与边界</a></li>
+            <li><a href="#figures">9. Original Figures &amp; References</a></li>
+        </ul>
+    </nav>
+
+    <div class="card" id="intro">
+        <h2>1. Introduction：为什么 VideoQA 的瓶颈首先是选帧</h2>
+        <p>
+            长视频问答看起来像一个“模型理解视频”的问题，但从系统实现角度看，它首先是一个“在有限上下文里给模型看哪些帧”的问题。
+            一个 20 分钟甚至 40 分钟的视频包含成千上万帧，而主流 VLM 无论是 token budget 还是推理时延，都不可能把整条视频逐帧吞进去。
+            于是几乎所有 VideoQA 系统都会先做一件事：从长视频里选出一小部分帧，再把这些帧和问题一起交给回答模型。
+        </p>
+        <p>
+            问题在于，这一步常常被当成“工程上的预处理”，但它事实上直接决定上限。
+            如果被送进模型的帧没有覆盖真正相关的动作、时间点或上下文，那么再强的回答模型也只能在错误证据上做推理。
+            论文一开头就明确指出：<span class="highlight">VideoQA 的核心矛盾不只是视频太长，而是“需要用很少的帧，同时保留足够完整的证据”</span>。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/air-videoqa/x1.png" alt="Figure 1: frame selection pipeline and challenge" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 1. 论文先用总览图把问题说清楚：query-related frame selection 需要在轻量但粗糙的相似度模型与昂贵但语义更深的 VLM 分析之间做权衡。</figcaption>
+        </figure>
+
+        <div class="note-box text-sm mt-4">
+            <p><strong>原文摘录：</strong></p>
+            <p class="text-sm text-gray-600 italic">“Effectively applying Vision-Language Models (VLMs) to Video Question Answering (VideoQA) hinges on selecting a concise yet comprehensive set of frames, as processing entire videos is computationally infeasible.”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/abs/2510.04428" class="text-[color:var(--accent)] underline">arXiv Abstract</a> / <a href="https://openreview.net/forum?id=SZVpOKw0YD" class="text-[color:var(--accent)] underline">OpenReview</a></p>
+        </div>
+
+        <p class="mt-4">
+            这句话很关键。它其实把问题拆成了两个要求：一是 <strong>concise</strong>，你不能塞太多帧；二是 <strong>comprehensive</strong>，你又必须尽量保留完整的证据链。
+            对于“视频里一共用了几种釉色”“开完会后男主立刻做了什么”“火山熔岩是怎样形成 Nahuku 的”这类问题，真正有用的答案证据往往既不是单一关键帧，也不是均匀分散的几个瞬间，而是一段围绕某个事件簇展开的局部时间区域。
+            A.I.R. 的出发点，正是把选帧从“按固定规则抽点”升级成“围绕 query 主动搜索证据段”。
+        </p>
+    </div>
+
+    <div class="card" id="background">
+        <h2>2. Background：均匀采样、CLIP 检索和直接 VLM 分析各自卡在哪里</h2>
+        <p>
+            论文认为现有方法大致分成三路。第一路是最常见的 <strong>uniform sampling</strong>，即从整条视频按固定间隔均匀抽若干帧。
+            它的优点是快、简单、几乎零额外计算，但缺点也非常明显：它完全不关心问题内容。
+            对于长视频和稀疏事件型问题，均匀采样很容易把预算浪费在无关段落上，真正相关的动作却只被摸到一两帧，甚至完全错过。
+        </p>
+        <p>
+            第二路是 <strong>query-aware retrieval</strong>，通常借助 CLIP 或其他轻量视觉文本相似度模型，先算 query-frame similarity，再挑 Top-K 帧。
+            这比均匀采样前进了一步，因为它至少会看问题；但它的问题在于，相似度模型更擅长“静态语义对齐”，不擅长理解复杂时序与细粒度因果。
+            当问题涉及动作顺序、事件前后关系、细节推理或隐含语义时，单帧相似度常常并不能真实反映“这帧对回答有多重要”。
+        </p>
+        <p>
+            第三路则是最重的一类：直接让强 VLM 在大量帧上做深度分析。这一类方法的语义能力通常更好，因为 VLM 可以围绕具体问题进行 richer reasoning；
+            但成本也会迅速爆炸。如果你对 32 帧、64 帧、128 帧甚至更多帧逐个做 VLM 分析，推理时间和 GPU 成本都很难接受。
+            这就是论文在摘要里说的 trade-off：<strong>轻量模型不够懂问题，重模型又太贵</strong>。
+        </p>
+
+        <div class="overflow-x-auto mt-6">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">路线</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">优点</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">主要缺点</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Uniform Sampling</td>
+                        <td class="px-4 py-3">简单、快、零额外模型开销</td>
+                        <td class="px-4 py-3">完全不看 query，预算会浪费在无关时段</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">CLIP Top-K / lightweight similarity</td>
+                        <td class="px-4 py-3">能感知 query，成本相对低</td>
+                        <td class="px-4 py-3">单帧相似度难表达复杂语义、时间关系和推理需求</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Direct VLM Analysis</td>
+                        <td class="px-4 py-3">语义分析更深，理论上更接近问题需求</td>
+                        <td class="px-4 py-3">对大量帧做逐帧推理成本高，无法实际扩展到长视频</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p class="mt-6">
+            A.I.R. 的策略不是简单选择其中一边，而是把这三种思路重新编排成一个分层系统：
+            <strong>先用轻量相似度做粗定位，再用小批量 VLM 做深分析，然后围绕被验证的区域继续细化采样</strong>。
+            这也是它名字里 Adaptive、Iterative、Reasoning-based 三个词的真正含义。
+        </p>
+    </div>
+
+    <div class="card" id="overview">
+        <h2>3. Method Overview：A.I.R. 的三阶段结构</h2>
+        <p>
+            论文把 A.I.R. 分成三个阶段：<strong>Adaptive Initial Sampling</strong>、<strong>Iterative Frame Selection</strong> 和最后的 <strong>QA Stage</strong>。
+            输入是一条视频和一个问题；输出是一个最终帧集合 <span set:html={String.raw`$\mathcal{F}^{*}_{\mathrm{final}}$`}></span>，再把这个集合送给回答用的基础 VLM。
+            这里最重要的一点是：A.I.R. 自己并不回答问题，它负责的是 <strong>给回答模型挑证据</strong>。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/air-videoqa/x2.png" alt="Figure 2: AIR overall pipeline" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 2. A.I.R. 总流水线：先对 1 FPS 初采样帧打 query-frame similarity，再做自适应初筛，随后把 VLM 放进迭代循环，最后才进入一次性 QA 推理。</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            从工程上看，这个设计相当于把选帧拆成两个层次。第一层是 cheap-but-global 的检索层，它覆盖全视频但只用轻量信号；第二层是 expensive-but-local 的分析层，它不再全局暴力扫描，而是只在高潜力区域反复确认和扩展。
+            这种两层结构比“全局 Top-K”更强的地方，在于它允许系统逐步更新对视频的认识。初始 similarity 只是一个稀疏且粗糙的线索，真正决定下一步往哪里深入的，是后续 VLM 的 reasoning score 与局部再采样反馈。
+        </p>
+        <p>
+            论文还强调，最终选中的帧数 <span set:html={String.raw`$B = |\mathcal{F}^{*}_{\mathrm{final}}|$`}></span> 不是固定常数，而是由视频长度驱动的自适应预算。
+            这意味着 A.I.R. 不把 3 分钟短视频和 30 分钟长视频视作同一类输入，而是允许预算随视频规模增长，同时又被 <span set:html={String.raw`$V_{\min}$`}></span> 和 <span set:html={String.raw`$V_{\max}$`}></span> 夹住。
+            这个设计看起来简单，却是后面效率优势的基础。
+        </p>
+    </div>
+
+    <div class="card" id="initial">
+        <h2>4. Adaptive Initial Sampling：先用轻量相似度找到“事件段”</h2>
+        <p>
+            A.I.R. 的第一阶段不是直接从初采样帧里取 Top-K，而是先把这些稀疏 similarity 信号组织成一组 <strong>event</strong>。
+            具体做法是：先按固定帧率从视频抽样得到 <span set:html={String.raw`$n$`}></span> 个初始帧，用 CLIP 之类的模型计算 query-frame similarity，形成一个在整条视频上稀疏定义的向量 <span set:html={String.raw`$S \in \mathbb{R}^{N}$`}></span>。
+            注意这个向量只在采样到的位置有值，其余位置是未知的，不是零。
+        </p>
+        <p>
+            接下来，论文用一个两分量 GMM 去拟合这些相似度分数，把它们理解成“高相关簇”和“低相关簇”的混合。
+            与许多方法直接设固定阈值不同，A.I.R. 通过视频内部分布自适应算出阈值 <span set:html={String.raw`$T$`}></span>，从而避免“一个统一阈值对所有视频都适用”的粗糙假设。
+            其核心公式是：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+T=\max(\mu_{1},\mu_{2})-\gamma\cdot\max(\sigma_{1},\sigma_{2})
+$$`}></div>
+        <p class="text-sm text-gray-600 mt-3">
+            这里 <span set:html={String.raw`$(\mu_1,\sigma_1),(\mu_2,\sigma_2)$`}></span> 是两簇高斯分量的均值和标准差，<span set:html={String.raw`$\gamma$`}></span> 控制阈值的严格程度。论文默认 <span set:html={String.raw`$\gamma=0.7$`}></span>。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/air-videoqa/x3.png" alt="Figure 3: adaptive initial sampling and iterative selection" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 3. 论文最关键的一张机制图。(a) 用 GMM 阈值把相似度峰值整理成事件段，再按事件长度分配初始采样预算；(b) 进入迭代式选择闭环。</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            得到阈值后，系统不直接保留所有高于阈值的点，而是把连续高于阈值的区间聚成候选事件：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{E}^{\prime}=\bigcap\left\{\mathcal{E}_{j}^{\prime}=[t^{\mathrm{start}}_{j},t^{\mathrm{end}}_{j}]\mid\forall i\in\mathcal{E}_{j}^{\prime},S_{i}\geq T\right\}
+$$`}></div>
+        <p>
+            这里的直觉是：真正相关的信息往往不是一个孤立采样点，而是一段连续时间区域。
+            之后论文再做两步启发式后处理：把间距太近的事件合并，把太短的事件剔除。
+            默认设置里，相距少于 2 秒的事件会被合并，短于 3 秒的片段会被剪掉。这样做的目的是把 noisy 峰值整理成更像真实动作段的 temporal chunks。
+        </p>
+        <p>
+            最后才进入 <strong>event-wise sampling</strong>。系统要求每个保留下来的事件都至少贡献一个帧，同时更长的事件应分到更多预算。
+            于是它不是简单按全局 similarity 排名，而是先按事件长度分配每个事件应取多少帧，再在事件内部挑 similarity 最高的局部峰值。
+            这一步的结果是初始帧集合 <span set:html={String.raw`$\mathcal{F}_{\mathrm{initial}}$`}></span>。你可以把它理解为“既保证全局覆盖，又保留 query-aware 稠密证据”的第一版候选答案。
+        </p>
+    </div>
+
+    <div class="card" id="iterative">
+        <h2>5. Iterative Frame Selection：为什么要把 VLM 放进迭代闭环里</h2>
+        <p>
+            只做 Adaptive Initial Sampling 还不够，因为初始候选集通常仍然偏大，直接让强 VLM 对全部候选逐帧分析仍然贵。
+            所以 A.I.R. 的核心其实在第二阶段：<strong>Iterative Frame Selection</strong>。论文把它设计成一个四步循环，每一轮都只分析一小批最值得看的候选，再根据分析结果决定是否停止，以及下一轮去哪里继续细化。
+        </p>
+        <p>
+            这四步分别是：<strong>Interval Potential Ranking</strong>、<strong>Reasoning-Based VLM Analysis</strong>、<strong>Early Stop</strong> 和 <strong>Localized Density Sampling</strong>。
+            这四个步骤是有内在逻辑闭环的。第一步负责选“本轮值得送进 VLM 的地方”，第二步负责用更强语义判断它们是不是真相关，第三步负责检查是否已经够回答问题，第四步则负责沿着被验证的区域继续向更细粒度的原始视频采样。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">5.1 区间优先，而不是帧优先</h3>
+        <p>
+            这篇论文一个很好的设计是，它在迭代阶段不再按单帧 similarity 排序，而是先构造时间区间 <span set:html={String.raw`$\mathrm{I}_i$`}></span>：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathrm{I}_{i}=[f_{i},f_{i+1}]=\{j\in\mathbb{N}\mid f_{i}\leq j\leq f_{i+1}\}
+$$`}></div>
+        <p>
+            这等价于说：当前已有采样帧把整条视频切成若干区间，我们评估的对象不再是“哪一帧相似度最高”，而是“哪一段时间区域最可能隐藏重要证据”。
+            这比帧级 Top-K 更稳，因为很多问题需要一段时间上下文才能判断其是否真正 relevant。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">5.2 用 VLM 做 reasoning-based validation，而不是盲信 similarity</h3>
+        <p>
+            被区间势能选出来的候选帧会进入分析 VLM。注意这里的 VLM 并不是直接回答最终问题，而是对候选帧做“与问题相关吗”的推理打分与文字解释。
+            论文里 VLM 评分是 1 到 5 分，默认阈值是 <span set:html={String.raw`$\theta=3$`}></span>，通过阈值的帧进入验证集：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{F}^{*}=\{f_{i}\in\mathcal{F}_{\mathrm{cand}}\mid R_{i}>\theta\}
+$$`}></div>
+        <p>
+            这里最重要的变化是：系统不再把 CLIP 分数当作最终真理，而是把它当作“检索线索”，再用更强 VLM 做语义复核。
+            这一步正对应标题中的 <strong>Reasoning-based</strong>。也正因为如此，A.I.R. 能处理那些“视觉上看起来不像答案，但语义上高度相关”的帧。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">5.3 为什么还需要 Localized Density Sampling</h3>
+        <p>
+            如果迭代只停留在“从现有候选里筛选”，它仍然会被初始采样分辨率限制住。真正关键的是第四步：围绕已验证帧，在原始视频上做更密的局部再采样。
+            论文强调 LDS 不是在 1 FPS 的初始网格上继续选，而是直接回到完整原视频时轴，在被确认高价值的邻域内增密。
+            这相当于系统先用粗视角发现“这里可能有事发生”，再用更细的时间分辨率把动作边界和关键瞬间补齐。
+        </p>
+        <p>
+            这也是 A.I.R. 比 CLIP Top-K 更像“搜索过程”的地方。
+            它不是一次性静态选帧，而是用已验证证据去引导下一轮采样，让搜索区域逐步收缩到真正相关的 temporal neighborhoods。
+            论文中的 Fig.6 和 Fig.7 很直观地展示了这一点：系统最开始抓到的是大概位置，随后通过几轮 ranking + VLM analysis + LDS，慢慢把证据集中到真正回答问题的动作链上。
+        </p>
+    </div>
+
+    <div class="card" id="formula">
+        <h2>6. 关键公式与算法直觉：预算、区间势能、验证筛选与 LDS</h2>
+        <p>
+            这一节把论文里最值得保留的几个公式集中拆开。它们不是纯数学装饰，而是整个方法为什么能兼顾准确率与效率的关键。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">6.1 自适应预算：为什么不同视频不该用同一帧数</h3>
+        <p>
+            A.I.R. 用视频长度决定最终帧预算 <span set:html={String.raw`$B$`}></span>。论文附录给出的形式是：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+B=\max\left(\min\left(\left\lfloor V_{\max}\cdot\frac{n}{300}\right\rfloor,V_{\max}\right),V_{\min}\right), \qquad
+n=\frac{\mathrm{FPS}\cdot N}{\mathrm{rate}}
+$$`}></div>
+        <p class="text-sm text-gray-600 mt-3">
+            这里 <span set:html={String.raw`$V_{\min}$`}></span> 和 <span set:html={String.raw`$V_{\max}$`}></span> 分别是最小与最大预算。论文默认 1 FPS 初采样，<span set:html={String.raw`$V_{\min}=8$`}></span>，并在多数主结果中用 <span set:html={String.raw`$V_{\max}=32$`}></span>。
+        </p>
+        <p>
+            直觉上，这个式子做的事并不复杂：视频越长，预算上限越应该增加；但增长不能无限制，否则又回到 brute force。
+            因此 A.I.R. 在“跟视频长度成比例”与“保持预算封顶”之间取了一个实用平衡。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">6.2 区间势能：把相关性、复杂性和长度乘在一起</h3>
+        <p>
+            对于每个时间区间 <span set:html={String.raw`$\mathrm{I}_i$`}></span>，A.I.R. 定义其势能：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathrm{Potential}(\mathrm{I}_{i})=
+\underbrace{\mathrm{Mean}(S_{f_{i}:f_{i+1}})}_{\textit{Relevance}}
+\cdot
+\underbrace{\left(1+\frac{\sum_{j=f_{i}}^{f_{i+1}}|S_{j+1}-S_{j}|}{f_{i+1}-f_{i}}\right)}_{\textit{Complexity}}
+\cdot
+\underbrace{\left(1+c_{\mathrm{len}}\cdot\lg(f_{i+1}-f_{i})\right)}_{\textit{Length}}
+$$`}></div>
+        <p>
+            这个式子非常值得保留，因为它明确表达了作者对“值得继续探索的区间”是怎么定义的。
+            第一项是平均相关性，表示这一段整体和 query 是否对齐；第二项是复杂性，表示这一段内部相似度变化是否丰富，变化越大越可能藏着动作转折或信息密集点；第三项是长度，表示过短片段即使有高峰值，也未必比持续更久的事件更值得分配预算。
+        </p>
+        <p>
+            换句话说，A.I.R. 并不认为“最高相似度帧”就一定最重要，而是认为“高相关、内部变化丰富、且持续一定长度的时间区域”更值得送进 VLM 深分析。
+            这正是它从帧级排序转向区间级排序的关键一步。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">6.3 验证筛选与 fallback</h3>
+        <p>
+            候选帧进入 VLM 后，如果通过阈值筛选，就并入当前轮的 validated set；如果通过的太少，论文还设计了 fallback 机制。
+            fallback 会在“中立”与“负样本”中按优先级和原始 similarity 再补若干帧，避免某轮完全空转。
+            这体现出作者一个很务实的工程判断：VLM 评分本身也会噪声化，系统要允许局部误判，而不是把每轮都当成绝对真值。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">6.4 Localized Density Sampling 的超参含义</h3>
+        <p>
+            LDS 的目标是在验证通过的帧周围采更多细粒度帧。论文默认设置里，最关键的两个量是最小帧距 <span set:html={String.raw`$\alpha$`}></span> 和增长系数 <span set:html={String.raw`$\beta$`}></span>，
+            其中默认值为：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\alpha=\max(0.05\cdot|\mathrm{I}_{i}|,15), \qquad \beta=1.5
+$$`}></div>
+        <p>
+            这意味着局部增密并不是盲目做超密采样，而是会随着当前区间长度自适应调节步长。
+            小区间不会采得过于拥挤，大区间也不会因为尺度太大而只得到寥寥几点。这个设计保证 LDS 真的是“围绕高价值局部做渐进细化”，而不是重新退化成另一种均匀采样。
+        </p>
+    </div>
+
+    <div class="card" id="experiments">
+        <h2>7. Experiments：结果到底说明了什么</h2>
+        <p>
+            A.I.R. 的实验覆盖了长视频和短视频两个层面。长视频基准包括 Video-MME、MLVU 和 LongVideoBench，短视频基准包括 EgoSchema 和 NextQA。
+            论文把自己和两类对象比较：一类是直接用 uniform sampling 的基础 VLM，另一类是已有的 frame selection 方法，比如 Frame-Voyager、MDP3、BOLT、VideoAgent 等。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/air-videoqa/x4.png" alt="Figure 4: question type analysis" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 4. 在 Video-MME 六类题型上的对比。A.I.R. 在信息概述、OCR、感知和识别上都稳定领先，计数仍然是最难的类别。</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            先看长视频主结果。以 InternVL3-8B 为例，在 Video-MME（无字幕）上，uniform baseline 是 65.6，A.I.R. 提升到 68.2；在 LongVideoBench val 上，baseline 68.4，A.I.R. 到 74.5。
+            这类提升的意义不只是分数更高，而是说明“更聪明的选帧”能把同一个回答模型抬到新的水平。
+            也就是说，很多长视频理解任务的增益并不一定来自换更大的回答模型，而可能来自前端证据检索是否做对。
+        </p>
+        <p>
+            再看跨模型泛化。论文在 Qwen2.5-VL 7B / 32B / 72B 以及 GPT-4o 上都验证了增益，其中 7B 小模型增益尤其明显，例如 Qwen2.5-VL-7B 在 Video-MME 上从 60.8 提到 65.0。
+            这说明 A.I.R. 对小模型更关键，因为小模型自身对 irrelevant 帧 的容忍度更差，一旦证据被污染，回答能力下滑更明显。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/air-videoqa/x5.png" alt="Figure 5: accuracy versus sampled frame number" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 5. 随最大采样预算增加，A.I.R. 始终高于 uniform sampling，也通常高于 CLIP-based query-aware 方法，说明它不是“靠多看帧硬堆出来”的。</figcaption>
+        </figure>
+
+        <h3 class="text-teal-700 mt-8">7.1 最重要的不是高分，而是效率-性能比</h3>
+        <p>
+            论文最有说服力的部分其实不是绝对最高分，而是效率对比。在 NextQA 上，当最坏工作量 <span set:html={String.raw`$w_{\mathrm{worst}}=72$`}></span> 时，A.I.R. 平均只分析 32.2 帧，却达到 82.6 的准确率；
+            当 <span set:html={String.raw`$w_{\mathrm{worst}}=16$`}></span> 时，平均只分析 12.4 帧，仍有 81.7。
+            这说明它并不是必须靠大量 VLM 逐帧分析才能工作。
+        </p>
+        <p>
+            Video-MME 的时间对比更直接。论文给出的 controlled comparison 里，Direct VLM Analysis 处理 128 帧要 162.03 秒，而 A.I.R. 在默认配置下平均只分析 36.5 帧，耗时 42.31 秒；
+            就算把 Adaptive Initial Sampling 和 Iterative Frame Selection 本身的额外开销算上，总体算法框架只比 uniform baseline 多了约 0.21 秒级的轻量控制成本。
+            这非常重要，因为它表明 A.I.R. 不是靠引入一个庞大前处理系统换准确率，而是用非常便宜的控制逻辑，去减少最贵的 VLM 分析调用次数。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">7.2 消融说明哪些组件最关键</h3>
+        <p>
+            在 Video-MME 上，完整 A.I.R. 用 InternVL3-8B 得到 68.2，平均回答帧数 24.8。去掉整个 Iterative Frame Selection 后会掉到 65.2；去掉 Reasoning-based VLM Analysis 后是 66.0；去掉 Interval Potential Ranking 后是 66.7；去掉 Adaptive Initial Sampling 后是 66.9。
+            这些结果说明 A.I.R. 不是靠某一个孤立技巧在起作用，而是“粗定位 + 区间排序 + 推理校验 + 局部增密”几个环节一起工作。
+        </p>
+        <p>
+            另一个有意思的结果是：固定 32 帧版本的 A.I.R. 能做到 68.3，只比自适应预算版高 0.1，但后者平均只用 24.8 帧。
+            这进一步解释了作者为什么坚持自适应预算作为默认配置：它追求的不是纯粹最高点，而是更实际的效率-效果折中。
+        </p>
+    </div>
+
+    <div class="card" id="discussion">
+        <h2>8. Discussion：A.I.R. 真正有价值的地方与边界</h2>
+        <p>
+            从系统视角看，A.I.R. 最大的贡献不是“又发明了一个选帧 heuristic”，而是给出了一个非常清晰的范式：
+            <strong>轻量检索信号负责全局扫描，强语义模型负责局部验证，而新的采样机会由已验证证据反向生成</strong>。
+            这其实是一种通用的 coarse-to-fine evidence search 思路，完全可以迁移到 temporal grounding、长视频 summarization，甚至某些多页文档检索场景。
+        </p>
+        <p>
+            论文自己也验证了这一点：在 Charades-STA temporal grounding 上，A.I.R. 用 Qwen2.5-VL-7B 达到 59.5 的 R1@0.3 和 39.5 的 R1@0.5，显著好于通用 VideoLLM baseline。
+            这说明它的能力并不局限在“多选题式的 VideoQA”，而是更广泛的“从长时序里定位与语言相关的关键片段”。
+        </p>
+        <p>
+            当然，这篇方法也有明确边界。第一，它最终仍依赖底层 analysis VLM 的能力；如果分析模型本身对某类视觉概念不敏感，A.I.R. 也无从补救。
+            第二，论文明确承认计数类问题仍然最难，因为这类任务往往需要高密度、细粒度且全局一致的观测，局部证据检索并不总能完整保留计数所需信息。
+            第三，它目前只看视觉轨，不看音频，因此对于声音驱动的问题或多模态对齐问题会天然吃亏。
+        </p>
+        <p>
+            还有一个值得注意的点是，A.I.R. 依然不是“实时系统”。
+            它已经比 direct VLM analysis 快得多，但 iterative loop 本身意味着多轮控制和推理，因此更适合离线评测、长视频问答和非实时场景，而不是毫秒级反馈系统。
+        </p>
+
+        <div class="note-box text-sm mt-6">
+            <p><strong>一句话总结这篇论文：</strong>A.I.R. 的价值不在于让 VLM 更会回答，而在于让 VLM 更少看错帧。对长视频任务来说，这往往比单纯换更大的回答模型更重要。</p>
+        </div>
+    </div>
+
+    <div class="card" id="figures">
+        <h2>9. Original Figures &amp; References</h2>
+        <p>
+            下方保留论文原图，便于快速回看。正文重点引用了 Fig.1-6，附加的 Fig.7-9 则更偏定性分析与样例对比。
+        </p>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2 mt-6">
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/air-videoqa/x1.png" alt="Figure 1" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 1. Query-related frame selection 的总体挑战图。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/air-videoqa/x2.png" alt="Figure 2" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 2. A.I.R. 三阶段总流水线。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/air-videoqa/x3.png" alt="Figure 3" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 3. Adaptive Initial Sampling 与 Iterative Frame Selection 的核心机制图。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/air-videoqa/x4.png" alt="Figure 4" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 4. Video-MME 六类题型对比。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/air-videoqa/x5.png" alt="Figure 5" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 5. 不同最大采样预算下的准确率变化。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/air-videoqa/x6.png" alt="Figure 6" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 6. 在 33 分钟 Video-MME 样例上的迭代选帧细化过程。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/air-videoqa/x7.png" alt="Figure 7" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 7. 另一条长视频样例中的 reasoning-driven iterative selection 过程。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/air-videoqa/q1.png" alt="Figure 8" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 8. 火山形成样例中，Uniform Sampling、CLIP Top-K 与 A.I.R. 的定性对比。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4 md:col-span-2">
+                <img src="/notes/air-videoqa/q2.png" alt="Figure 9" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 9. 日常活动排序样例中，A.I.R. 如何构造更完整的时序证据链。</figcaption>
+            </figure>
+        </div>
+
+        <h3 class="mt-8">参考资料</h3>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><a href="https://arxiv.org/abs/2510.04428" class="text-[color:var(--accent)] underline">A.I.R. arXiv abstract</a>：用于核对论文标题、作者、摘要、版本与公开链接。</li>
+            <li><a href="https://arxiv.org/html/2510.04428v3" class="text-[color:var(--accent)] underline">A.I.R. arXiv HTML</a>：本文的一手主来源，用于提取方法细节、公式、图号、表格和附录超参。</li>
+            <li><a href="https://openreview.net/forum?id=SZVpOKw0YD" class="text-[color:var(--accent)] underline">OpenReview forum page</a>：用于确认会议归属为 ICLR 2026 Poster，并补充关键词和官方 PDF 链接。</li>
+            <li><a href="https://video-mme.github.io/home_page.html" class="text-[color:var(--accent)] underline">Video-MME project page</a>：用于理解论文主实验中长视频 benchmark 的定位与任务构成。</li>
+            <li><a href="https://openreview.net/forum?id=LNL7zKvm7e" class="text-[color:var(--accent)] underline">Frame-Voyager</a>：作为对比方法，用于理解训练式 query-aware frame querying 的代表路线。</li>
+            <li><a href="https://arxiv.org/html/2403.10517" class="text-[color:var(--accent)] underline">VideoAgent</a>：作为 agent-style video understanding 基线，用于对照 A.I.R. 在“分析更少帧但保留更强时序证据”上的差异。</li>
+        </ul>
+    </div>
+</BaseLayout>
