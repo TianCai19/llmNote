@@ -1,0 +1,310 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+
+export const meta = {
+    number: '23',
+    title: 'Agentic Proposing × SkillClaw：从“生成可验证数据”到“多用户技能演化”',
+    description: '阅读两篇 2026 arXiv：Agentic Proposing（可组合技能合成）与 SkillClaw（多用户闭环技能更新）——同一条“Agent 自我提升”主线的两种落点',
+    tags: ['Agent', 'Skill', 'Data Synthesis', 'Self-Improvement'],
+    readTime: '26 min'
+};
+---
+
+<BaseLayout
+    title="Agentic Proposing × SkillClaw：从“生成可验证数据”到“多用户技能演化”"
+    description="两篇 2026 arXiv 论文笔记：Agentic Proposing 与 SkillClaw。"
+>
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Agentic Proposing × SkillClaw：从“生成可验证数据”到“多用户技能演化”</h1>
+        <p class="text-xl text-gray-500">一条主线：让 Agent 体系能在真实交互与可验证反馈中持续变强</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>0. 读这篇笔记的方式</h2>
+        <p>
+            两篇论文都在讨论“Agent 如何持续变强”，但落点不同：<strong>Agentic Proposing</strong>把“生成可验证训练轨迹”当作策略学习问题；<strong>SkillClaw</strong>把“多用户真实交互”当作技能库持续更新的证据源。
+        </p>
+        <p>
+            这篇笔记把它们放在一张图景里：<span class="highlight">一个负责“造数据/造题”（proposer），一个负责“改技能”（evolver）</span>，共同构成可扩展的自我提升闭环。
+        </p>
+        <div class="note-box">
+            <strong>原论文链接：</strong>
+            <a class="text-emerald-700" href="https://arxiv.org/abs/2602.03279">Agentic Proposing (arXiv:2602.03279)</a>
+            <span class="mx-2">·</span>
+            <a class="text-emerald-700" href="https://arxiv.org/abs/2604.08377">SkillClaw (arXiv:2604.08377)</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>1. 背景：为什么“技能”与“可验证反馈”是关键瓶颈</h2>
+
+        <h3 class="text-blue-600">1.1 Agentic Proposing 的问题设定</h3>
+        <div class="quote-block">
+            <p>
+                “maintaining structural validity typically restricts problem complexity”
+            </p>
+            <span>
+                — Agentic Proposing 摘要
+                <a href="https://arxiv.org/abs/2602.03279" class="text-emerald-700">[arXiv]</a>
+            </span>
+        </div>
+        <p>
+            论文把“合成训练样本/训练轨迹”当作核心矛盾：越严格地保证题目/样本的结构有效（可解、可验），越难覆盖高复杂度推理；越追求难度，越容易产生不一致或不可解样本。
+        </p>
+
+        <h3 class="text-blue-600">1.2 SkillClaw 的问题设定</h3>
+        <div class="quote-block">
+            <p>
+                “these skills remain largely static after deployment.”
+            </p>
+            <span>
+                — SkillClaw 摘要
+                <a href="https://arxiv.org/abs/2604.08377" class="text-emerald-700">[arXiv]</a>
+            </span>
+        </div>
+        <p>
+            SkillClaw 观察到：在真实使用中，用户会反复触发相似的工作流与失败模式，但技能库往往“部署后静态”，经验无法跨会话/跨用户沉淀。它的核心目标是把多用户交互轨迹变成<strong>可验证的技能更新</strong>，并通过共享仓库同步回所有用户。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>2. Agentic Proposing：把“问题合成”建模为可优化的决策过程</h2>
+
+        <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="/notes/agentic-proposing-skillclaw/agentic-proposing-fig1-proposer-pipeline.png"
+                alt="Agentic Proposing pipeline"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-xs text-gray-500 mt-3">图 1：Agentic Proposing 的 proposer 管线（原论文图，转为本地资源）。</figcaption>
+        </figure>
+
+        <h3 class="text-blue-600">2.1 关键抽象：POMDP + 组合式技能</h3>
+        <p>
+            论文将问题合成视作一个 POMDP：合成过程需要同时控制“逻辑一致性”和“难度”，而难度等属性是潜变量，需要通过反思与工具探测近似。
+        </p>
+        <p>
+            其“技能”以模块化形式出现，记为 <span set:html={"$k\coloneqq\langle\iota,\mu,\delta,\tau\rangle$"}></span>，分别对应意图、方法、对难度的影响，以及工具提示。
+        </p>
+
+        <h3 class="text-blue-600">2.2 行为空间：反思、工具、动态剪枝</h3>
+        <p>
+            动作集合 <span set:html={"$\mathcal{A}=\mathcal{U}\cup\mathcal{T}\cup\mathcal{F}$"}></span>。
+            其中 <span set:html={"$\mathcal{U}$"}></span>是自然语言/内部反思，<span set:html={"$\mathcal{T}$"}></span>是工具调用（执行/编辑），<span set:html={"$\mathcal{F}$"}></span>是终止提交。
+            一个关键工程点是 <span class="highlight"><span set:html={"$\\tau_{edit}$"}></span></span>：在生成过程中可“动态剪枝技能集”，移除被预测会导致不一致的技能。
+        </p>
+
+        <div class="note-box">
+            <strong>把它翻译成工程语言：</strong>proposer 不是一次性写出最终题目，而是在“起草→检查→精炼→提交”的循环里，交替使用（1）内部反思、（2）可执行工具、（3）技能库剪枝来维持可解性。
+        </div>
+
+        <h3 class="text-blue-600">2.3 三阶段训练：技能获取 → SFT → MGPO</h3>
+        <p>
+            论文的训练流程分三段：先从语料抽取候选技能并形式化；再用带验证的专家轨迹做 SFT；最后用 MGPO 做强化学习式优化。
+        </p>
+        <div class="math-block">
+            <p set:html={"$$\mathcal{L}_{\text{SFT}}(\theta)=-\frac{1}{|\mathcal{D}_{\text{SFT}}|}\sum_{\tau}\sum_t\log\pi_\theta(a_t\mid o_t)$$"}></p>
+        </div>
+        <p>
+            MGPO 的要点（按论文描述）：(1) 课程化采样技能类别；(2) 终止奖励结合 verifier 与难度估计 <span set:html={"$\rho(q)$"}></span>（文中示例为 Pass@16）；(3) 轨迹级与阶段级 advantage 分别标准化并融合。
+        </p>
+
+        <h3 class="text-blue-600">2.4 实验与主要结果（论文给出的摘要级数字）</h3>
+        <p>
+            论文报告其合成轨迹能在数学/代码/科学多域带来增益，并强调小规模轨迹也能训练出强 solver。
+        </p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>30B solver（11k trajectories）：</strong>AIME25 达到 91.6% accuracy（论文陈述）。</li>
+            <li><strong>4B solver（10k budget）：</strong>在多个数学/代码/科学基准上相对基线有一致增益（详见原文表格）。</li>
+        </ul>
+        <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="/notes/agentic-proposing-skillclaw/agentic-proposing-fig3-accuracy.png"
+                alt="Agentic Proposing accuracy figure"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-xs text-gray-500 mt-3">图 2：Agentic Proposing 的效果图（裁剪版原图）。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>3. SkillClaw：把“多用户交互”变成可验证的技能更新</h2>
+
+        <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="/notes/agentic-proposing-skillclaw/skillclaw-fig1-overview.png"
+                alt="SkillClaw overview"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-xs text-gray-500 mt-3">图 3：SkillClaw 总览（论文 Figure 1）。</figcaption>
+        </figure>
+
+        <h3 class="text-blue-600">3.1 证据表示：保留 action–feedback 因果链</h3>
+        <p>
+            SkillClaw 强调：技能失败往往是“过程性”的（参数格式、工具调用顺序、缺少校验步骤），只看最终回复无法诊断。因此它把每个 session 记录为完整链路：prompt → action → feedback → … → response，并额外抽取轻量元数据（引用技能、是否出现 tool error、粗质量估计）。
+        </p>
+        <p>
+            然后按“引用的技能”对 sessions 分组：对每个技能 <span set:html={"$s$"}></span>，聚合 <span set:html={"$\mathcal{G}(s)=\{\tau_i\mid s\in\mathcal{K}_i\}$"}></span>，未使用技能的进入 <span set:html={"$\mathcal{G}(\varnothing)$"}></span>。
+        </p>
+
+        <h3 class="text-blue-600">3.2 Agentic Evolver：refine / create / skip</h3>
+        <p>
+            核心是一个带 harness 的“agentic evolver”，输入包括：某技能的成功/失败 sessions、当前技能定义与允许的更新动作集合。它会在三种动作中选择：<strong>refine</strong>（修正/增强现有技能）、<strong>create</strong>（从模式中抽取新技能）、<strong>skip</strong>（证据不足不改）。
+        </p>
+        <pre class="language-text"><code>{`Algorithm: Agentic Collective Skill Evolution (SkillClaw)
+1) 将 sessions 转为结构化 evidence
+2) 按被引用技能分组，得到 {G(s)} 与 G(∅)
+3) 对每个 G(s)：分析成功/失败模式 → 选择 refine/create/skip
+4) 对候选更新做保守编辑与验证，通过后写回共享技能库
+5) 分析 G(∅) 提取缺失但可复用的流程，创建新技能
+6) 同步技能库到所有用户`}</code></pre>
+
+        <h3 class="text-blue-600">3.3 夜间验证：只把“更好且更稳”的技能上线</h3>
+        <p>
+            由于技能是共享资产，SkillClaw 采用夜间验证机制：对候选更新 <span set:html={"$s'$"}></span>，用相同环境与任务对比旧技能 <span set:html={"$s$"}></span> 与新技能的成功率与稳定性，优于当前 best 才 <code>Accept</code>，否则 <code>Reject</code>。
+            论文强调这带来“单调部署”（只接收改进）。
+        </p>
+
+        <h3 class="text-blue-600">3.4 WildClawBench：6 天 day-night 循环的类别级收益</h3>
+        <p>
+            论文在 WildClawBench 上模拟 8 用户、6 天（6 轮）闭环。Day 1 为 baseline，Day 2–6 反映前一晚验证通过后的 best skill pool。
+        </p>
+        <div class="bg-gray-50 p-4 rounded-xl">
+            <p class="font-semibold">User-side daytime results（论文表格节选，Day 1 → Day 6）：</p>
+            <ul class="list-disc pl-6 mt-2 space-y-1 text-gray-600">
+                <li>Social Interaction：54.01% → 60.34%（Abs +6.33，Rel +11.72%）</li>
+                <li>Search &amp; Retrieval：22.73% → 34.55%（Abs +11.82，Rel +52.00%）</li>
+                <li>Creative Synthesis：11.57% → 21.80%（Abs +10.23，Rel +88.41%）</li>
+                <li>Safety &amp; Alignment：24.00% → 32.00%（Abs +8.00，Rel +33.33%）</li>
+            </ul>
+        </div>
+
+        <h3 class="text-blue-600">3.5 机制分析：哪类失败最“吃技能演化”</h3>
+        <p>
+            SkillClaw 的分析强调“类别异质性”：Social 更偏 workflow executability；Search 更偏 input-first；Creative 更偏多模态流水线组织；Safety 更偏真实环境中的可恢复执行策略。
+            论文还用三个自定义 query 做 controlled validation，平均提升 +42.1%（例如 save report 28.3% → 100.0%）。
+        </p>
+
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/agentic-proposing-skillclaw/skillclaw-fig2-case-study-1.png"
+                    alt="SkillClaw case study 1"
+                    class="w-full rounded-xl"
+                    loading="lazy"
+                />
+                <figcaption class="text-xs text-gray-500 mt-3">图 4：case study（Slack message analysis）。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/agentic-proposing-skillclaw/skillclaw-fig3-case-study-2.png"
+                    alt="SkillClaw case study 2"
+                    class="w-full rounded-xl"
+                    loading="lazy"
+                />
+                <figcaption class="text-xs text-gray-500 mt-3">图 5：case study（document analysis / first affiliation）。</figcaption>
+            </figure>
+        </div>
+
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2 mt-6">
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/agentic-proposing-skillclaw/skillclaw-fig4-case-study-3.png"
+                    alt="SkillClaw case study 3"
+                    class="w-full rounded-xl"
+                    loading="lazy"
+                />
+                <figcaption class="text-xs text-gray-500 mt-3">图 6：case study（incomplete execution environment / robustness）。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img
+                    src="/notes/agentic-proposing-skillclaw/skillclaw-fig5-case-study-4.png"
+                    alt="SkillClaw case study 4"
+                    class="w-full rounded-xl"
+                    loading="lazy"
+                />
+                <figcaption class="text-xs text-gray-500 mt-3">图 7：case study（multi-criteria product selection）。</figcaption>
+            </figure>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>4. 放在一起看：一个“自我提升 Agent 系统”的两种闭环</h2>
+
+        <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img
+                src="/notes/agentic-proposing-skillclaw/agentic-proposing-fig2-overall.png"
+                alt="Agentic Proposing overall diagram"
+                class="w-full rounded-xl"
+                loading="lazy"
+            />
+            <figcaption class="text-xs text-gray-500 mt-3">图 8：Agentic Proposing 的 overall 图（重新渲染版）。</figcaption>
+        </figure>
+
+        <p>
+            如果把两篇论文统一成一张系统图：Agentic Proposing 负责把“目标难度/可解性”通过工具与验证器落到<strong>高精度可验证轨迹</strong>；SkillClaw 负责把“真实多用户交互”通过夜间验证落到<strong>可部署的技能更新</strong>。
+        </p>
+        <div class="note-box">
+            <strong>一个可操作的组合：</strong>
+            用 Agentic Proposing 生成 coverage 更好的可验证训练轨迹（补齐长尾能力），用 SkillClaw 把线上 recurring failures 变成技能修复（补齐执行稳定性）。
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>5. 讨论与局限（按两篇论文文本可见范围）</h2>
+        <ul class="list-disc pl-6 space-y-2 text-gray-600">
+            <li><strong>SkillClaw：</strong>论文标注 “Work in Progress”，并在实验中模拟 6 天/8 用户的小规模闭环，更多类别与更长时间窗仍待扩展。</li>
+            <li><strong>Agentic Proposing：</strong>方法依赖 verifier/prober/工具链与较长上下文；对不同领域的 verifier 可靠性与成本，是落地时需要面对的工程变量。</li>
+        </ul>
+    </div>
+
+    <div class="card" id="figures">
+        <h2>Original Figures</h2>
+        <p class="text-[color:var(--muted)]">本页引用的两篇论文原图（均已下载到本仓库的 <code>public/</code> 并本地引用）。</p>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2 mt-6">
+            <figure class="card overflow-hidden">
+                <img src="/notes/agentic-proposing-skillclaw/agentic-proposing-fig1-proposer-pipeline.png" alt="Agentic Proposing fig1" class="w-full rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">Agentic Proposing：proposer pipeline。</figcaption>
+            </figure>
+            <figure class="card overflow-hidden">
+                <img src="/notes/agentic-proposing-skillclaw/agentic-proposing-fig2-overall.png" alt="Agentic Proposing fig2" class="w-full rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">Agentic Proposing：overall。</figcaption>
+            </figure>
+            <figure class="card overflow-hidden">
+                <img src="/notes/agentic-proposing-skillclaw/agentic-proposing-fig3-accuracy.png" alt="Agentic Proposing fig3" class="w-full rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">Agentic Proposing：accuracy / results（裁剪图）。</figcaption>
+            </figure>
+            <figure class="card overflow-hidden">
+                <img src="/notes/agentic-proposing-skillclaw/agentic-proposing-fig4-head.png" alt="Agentic Proposing fig4" class="w-full rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">Agentic Proposing：head / 结构图（裁剪图）。</figcaption>
+            </figure>
+            <figure class="card overflow-hidden">
+                <img src="/notes/agentic-proposing-skillclaw/skillclaw-fig1-overview.png" alt="SkillClaw fig1" class="w-full rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">SkillClaw：overview。</figcaption>
+            </figure>
+            <figure class="card overflow-hidden">
+                <img src="/notes/agentic-proposing-skillclaw/skillclaw-fig2-case-study-1.png" alt="SkillClaw fig2" class="w-full rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">SkillClaw：case study 1。</figcaption>
+            </figure>
+            <figure class="card overflow-hidden">
+                <img src="/notes/agentic-proposing-skillclaw/skillclaw-fig3-case-study-2.png" alt="SkillClaw fig3" class="w-full rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">SkillClaw：case study 2。</figcaption>
+            </figure>
+            <figure class="card overflow-hidden">
+                <img src="/notes/agentic-proposing-skillclaw/skillclaw-fig4-case-study-3.png" alt="SkillClaw fig4" class="w-full rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">SkillClaw：case study 3。</figcaption>
+            </figure>
+            <figure class="card overflow-hidden">
+                <img src="/notes/agentic-proposing-skillclaw/skillclaw-fig5-case-study-4.png" alt="SkillClaw fig5" class="w-full rounded-xl border border-white/70" />
+                <figcaption class="mt-3 text-sm text-gray-600">SkillClaw：case study 4。</figcaption>
+            </figure>
+        </div>
+    </div>
+</BaseLayout>
