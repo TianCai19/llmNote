@@ -1,0 +1,122 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { yesterdayYmd } from '../../utils/date';
+
+const createdAt = yesterdayYmd();
+
+export const meta = {
+    number: '23',
+    title: 'SkillClaw: Let Skills Evolve Collectively',
+    description: '探索如何通过群体交互与 Agentic Evolver 实现智能体技能的持续进化',
+    tags: ["LLM Agents", "Self-Evolution", "Skill Learning"],
+    readTime: '20 min'
+};
+---
+
+<BaseLayout title="SkillClaw: 让智能体技能在群体交互中持续演进">
+    <header class="text-center mb-12">
+        <h1 class="text-4xl font-bold mb-4 gradient-text">SkillClaw: 让智能体技能持续进化</h1>
+        <p class="text-xl text-gray-500">基于群体经验的智能体自进化框架 (SkillClaw: Let Skills Evolve Collectively with Agentic Evolver)</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>摘要 (Abstract)</h2>
+        <p>目前的 LLM 智能体（如 OpenClaw）主要依赖于静态的技能库。然而，这些技能在部署后往往保持不变，导致系统无法从经验中学习，用户在不同场景下反复遇到相同的失败模式。SkillClaw 提出了一个群体技能演化框架，将跨用户和跨时间的交互作为改进技能的主要信号。通过 <strong>Agentic Evolver</strong> 自动聚合轨迹、识别行为模式并更新技能库，SkillClaw 实现了技能的持续演进和跨用户知识迁移。</p>
+        <blockquote class="border-l-4 border-blue-500 pl-4 italic text-gray-700 my-4">
+            "SkillClaw continuously aggregates trajectories generated during use and processes them with an autonomous evolver, which identifies recurring behavioral patterns and translates them into updates to the skill set." 
+            — <a href="https://arxiv.org/abs/2604.08377" target="_blank" class="text-blue-600 hover:underline">SkillClaw Abstract</a>
+        </blockquote>
+    </div>
+
+    <div class="card">
+        <h2>1. Introduction (介绍)</h2>
+        <p>LLM 智能体在现实世界中已展现出巨大潜力，但现有的技能系统大都是“一次性安装”且静态的。当一个智能体在执行任务（如调试 API 或自动化工作流）失败时，这种失败往往是孤立的，系统无法将这次教训转化为对未来任务的改进。更糟糕的是，类似的问题在不同用户之间被反复触发，系统却无法共享这些经验。</p>
+        <p>SkillClaw 的核心目标是打破这种“经验孤岛”，通过群体协作的方式，让每一个用户的交互都能为系统的全局技能库贡献力量。这种模式类似于开源社区的协作，但其进化过程是全自动的。</p>
+        <img src="/notes/skillclaw/shift_contrast.svg" alt="From Experience Silos to Collective Evolution" class="my-6 rounded-lg shadow-md w-full" />
+    </div>
+
+    <div class="card">
+        <h2>2. Background & Motivation (背景与动机)</h2>
+        <p>现有的智能体适应方法（如基于内存的检索或简单的自我反思）主要局限在单次会话或单个实例中。它们难以将异构的交互经验压缩成可重用的结构化技能。SkillClaw 的动机在于：<strong>如果多个用户在不同的上下文中练习相同的技能，这些交互将提供互补的信号，揭示技能的边界和失效条件。</strong></p>
+        <h3 class="text-blue-600">核心挑战</h3>
+        <ul class="list-disc pl-6 space-y-2 text-gray-600">
+            <li><strong>异构经验：</strong> 不同用户的任务背景各异，如何从中提取通用的改进信号？</li>
+            <li><strong>演化稳定性：</strong> 在不断更新技能的同时，如何确保不会引入回归（Regression）？</li>
+            <li><strong>零人工干预：</strong> 整个流程需要完全自动化，无需用户手动编写或纠正技能。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>3. Method / System (系统架构)</h2>
+        <p>SkillClaw 引入了一个闭环的演化流程，核心组件是 <strong>Agentic Evolver</strong>。该系统通过以下步骤运行：</p>
+        <h3 class="text-blue-600">Step 1: 从孤立会话到共享证据 (Shared Evidence)</h3>
+        <p>智能体记录完整的因果链（Causal Chain），包括用户提示、智能体操作、环境反馈（工具输出、错误信息）以及最终响应。这些轨迹被聚合成共享证据库，通过公式描述为：</p>
+        <div class="text-center py-4 font-mono bg-gray-50 rounded-lg my-4" set:html={"$G(s) = \\{ \\tau_i | s \\in K_i \\}$"}></div>
+        <p>其中 <span set:html={"$s$"}></span> 是特定的技能，<span set:html={"$\\tau_i$"}></span> 是引用了该技能的任务轨迹。通过这种分组，系统可以观察到特定技能在不同环境下的表现。</p>
+
+        <h3 class="text-blue-600">Step 2: Agentic Evolver (智能体演化器)</h3>
+        <p>演化器是一个配备了结构化框架的 LLM，它会对每一组证据执行开路推理。它会决定对技能执行以下三种操作之一：</p>
+        <ul class="list-disc pl-6 space-y-2 text-gray-700">
+            <li><strong>Refine (优化):</strong> 根据观察到的失败模式，修正现有技能的逻辑或说明。</li>
+            <li><strong>Create (创建):</strong> 当发现证据中存在反复出现的子过程且现有技能库未覆盖时，创建一个新技能。</li>
+            <li><strong>Skip (跳过):</strong> 如果证据不足以支撑修改，则保持不变。</li>
+        </ul>
+
+        <div class="text-center py-4 font-mono bg-gray-50 rounded-lg my-4" set:html={"$S' = \\Phi(S, T)$"}></div>
+        <p>演化过程 <span set:html={"$\\Phi$"}></span> 接受当前技能库 <span set:html={"$S$"}></span> 和轨迹集 <span set:html={"$T$"}></span>，输出更新后的技能库 <span set:html={"$S'$"}></span>。</p>
+
+        <img src="/notes/skillclaw/skillclaw_main.png" alt="SkillClaw Architecture Overview" class="my-6 rounded-lg shadow-md w-full" />
+    </div>
+
+    <div class="card">
+        <h2>4. Experiments / Evaluation (实验与验证)</h2>
+        <p>研究团队在 <strong>WildClawBench</strong> 上对 SkillClaw 进行了评估。WildClawBench 是一个包含 60 个复杂任务的基准测试，涵盖了办公自动化、代码智能、社交交互等领域。</p>
+        <h3 class="text-blue-600">主要发现</h3>
+        <p>使用 Qwen3-Max 作为骨干模型，SkillClaw 在经过 6 轮演化后，在多个领域展现出了显著的性能提升：</p>
+        <ul class="list-disc pl-6 space-y-2 text-gray-600">
+            <li><strong>搜索与检索:</strong> 性能从 22.73% 提升至 34.55% (+52.00% 相对提升)。</li>
+            <li><strong>社交交互:</strong> 解决了复杂的会议协调逻辑，性能提升了 11.72%。</li>
+            <li><strong>整体趋势:</strong> 系统的改进轨迹呈现出“先解决基础瓶颈，后优化执行细节”的特征。</li>
+        </ul>
+        <img src="/notes/skillclaw/skill_evolution.svg" alt="Skill Evolution Performance Trajectory" class="my-6 rounded-lg shadow-md w-full" />
+    </div>
+
+    <div class="card">
+        <h2>5. Case Study: ICCV 2025 论文分析</h2>
+        <p>在 Case Study 中，研究展示了智能体在处理“统计 ICCV 2025 Oral 论文中 FDU 和 SJTU 比例”的任务时，如何通过演化修复了原本粗糙的正则匹配逻辑，转向了更精确的“验证感知推理”（Verification-aware reasoning），从而消除了由于噪音数据导致的错误统计。</p>
+        <img src="/notes/skillclaw/two_loops.svg" alt="Task-time Loop vs Post-task Evolution Loop" class="my-6 rounded-lg shadow-md w-full" />
+    </div>
+
+    <div class="card">
+        <h2>6. Discussion & Conclusion (讨论与结论)</h2>
+        <p>SkillClaw 证明了：<strong>智能体技能不应该是静态的资源，而应该是随着使用不断进化的动态单元。</strong> 通过将分散的用户体验转化为集中的演化信号，系统实现了累积性的能力增长。</p>
+        <p>未来的工作将聚焦于如何处理更大规模的群体冲突，以及如何在保证安全性的前提下进一步提升演化的开放性。</p>
+    </div>
+
+    <div class="card">
+        <h2>Original Figures (原图展示)</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="space-y-2">
+                <img src="/notes/skillclaw/skillclaw_main.png" alt="Fig 1" class="rounded border" />
+                <p class="text-xs text-gray-500 text-center">Fig 1: SkillClaw 架构概览</p>
+            </div>
+            <div class="space-y-2">
+                <img src="/notes/skillclaw/two_loops.svg" alt="Fig 2" class="rounded border" />
+                <p class="text-xs text-gray-500 text-center">Fig 2: 任务执行环与技能演化环</p>
+            </div>
+            <div class="space-y-2">
+                <img src="/notes/skillclaw/skill_evolution.svg" alt="Fig 3" class="rounded border" />
+                <p class="text-xs text-gray-500 text-center">Fig 3: 技能演化轨迹</p>
+            </div>
+            <div class="space-y-2">
+                <img src="/notes/skillclaw/shift_contrast.svg" alt="Fig 4" class="rounded border" />
+                <p class="text-xs text-gray-500 text-center">Fig 4: 从孤立经验到群体进化的转变</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-8 text-center text-gray-500">
+        <p>参考论文: <a href="https://arxiv.org/abs/2604.08377" target="_blank" class="text-blue-600">arXiv:2604.08377</a></p>
+    </div>
+</BaseLayout>
