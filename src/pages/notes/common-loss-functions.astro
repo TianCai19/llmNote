@@ -1,0 +1,213 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+
+const formulas = {
+    erm: String.raw`$$\min_{\theta} \frac{1}{N} \sum_{i=1}^{N} \mathcal{L}(y_i, f(x_i; \theta))$$`,
+    mse: String.raw`$$\mathcal{L}_{MSE} = \frac{1}{N} \sum_{i=1}^{N} (y_i - \hat{y}_i)^2$$`,
+    mae: String.raw`$$\mathcal{L}_{MAE} = \frac{1}{N} \sum_{i=1}^{N} |y_i - \hat{y}_i|$$`,
+    huber: String.raw`$$\mathcal{L}_{\delta}(a) = \begin{cases} \frac{1}{2}a^2 & \text{for } |a| \le \delta \\ \delta(|a| - \frac{1}{2}\delta) & \text{otherwise} \end{cases}$$`,
+    bce: String.raw`$$\mathcal{L}_{BCE} = -\frac{1}{N} \sum_{i=1}^{N} [y_i \log(\hat{y}_i) + (1-y_i) \log(1-\hat{y}_i)]$$`,
+    kl: String.raw`$$D_{KL}(P \| Q) = \sum_{x} P(x) \log \frac{P(x)}{Q(x)}$$`,
+    hinge: String.raw`$$\mathcal{L}(y, \hat{y}) = \max(0, 1 - y \cdot \hat{y})$$`
+};
+
+export const meta = {
+    number: '25',
+    title: '常用机器学习损失函数',
+    description: '从回归到分类：深度解析 MSE, MAE, Huber, Cross-Entropy 与 KL 散度',
+    tags: ["Loss", "Machine Learning", "Optimization"],
+    readTime: '15 min'
+};
+---
+
+<BaseLayout title="常用机器学习损失函数 | LLM Note">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Optimization / Loss Functions</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">常用机器学习损失函数</h1>
+        <p class="text-xl text-gray-500">选择正确的目标函数，是模型训练成功的基石</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>什么是损失函数？</h2>
+        <p>损失函数（Loss Function）是用来衡量模型<strong>预测值</strong>与<strong>真实值</strong>之间差异的函数。在训练过程中，优化算法（如 SGD）通过最小化损失函数来更新模型参数。</p>
+        <div class="note-box mt-4">
+            <p><strong>经验风险最小化 (ERM)：</strong> 我们的目标是找到参数 <span set:html={"$\\theta$"}></span>，使得在训练集上的平均损失最小：</p>
+            <div
+                class="math-block"
+                set:html={formulas.erm}
+            ></div>
+        </div>
+    </div>
+
+    <div class="chapter" id="regression">
+        <div class="chapter-header">
+            <h2>1. 回归损失 (Regression Loss)</h2>
+        </div>
+        
+        <div class="card">
+            <h3>均方误差 (Mean Squared Error, MSE / L2 Loss)</h3>
+            <p>回归任务中最常用的损失函数。它对误差进行平方，因此<strong>对离群点（Outliers）非常敏感</strong>。</p>
+            <div
+                class="math-block"
+                set:html={formulas.mse}
+            ></div>
+            
+            <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+                <svg viewBox="0 0 600 200" class="w-full h-auto">
+                    <line x1="50" y1="150" x2="550" y2="150" stroke="#94a3b8" stroke-width="2" />
+                    <line x1="50" y1="150" x2="50" y2="20" stroke="#94a3b8" stroke-width="2" />
+                    <path d="M 100 30 Q 300 180 500 30" fill="none" stroke="#3b82f6" stroke-width="3" />
+                    <text x="300" y="190" text-anchor="middle" fill="#64748b" font-size="14">Error (y - y_hat)</text>
+                    <text x="30" y="25" text-anchor="middle" fill="#64748b" font-size="14" transform="rotate(-90 30 25)">Loss</text>
+                    <text x="510" y="40" fill="#3b82f6" font-size="12">MSE (L2)</text>
+                </svg>
+                <figcaption class="text-sm text-gray-500 mt-2 text-center">MSE 随误差平方增长，对大误差惩罚极重</figcaption>
+            </figure>
+
+            <ul class="list-disc pl-6 mt-4 space-y-2 text-gray-600">
+                <li><strong>优点：</strong> 凸函数，易于求导，梯度随误差增大而增大，收敛快。</li>
+                <li><strong>缺点：</strong> 如果数据中存在噪声或离群点，MSE 会为了拟合这些点而产生巨大的损失，导致模型偏移。</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h3>平均绝对误差 (Mean Absolute Error, MAE / L1 Loss)</h3>
+            <p>计算预测值与真实值之间绝对值的平均。它对离群点更具<strong>鲁棒性（Robust）</strong>。</p>
+            <div
+                class="math-block"
+                set:html={formulas.mae}
+            ></div>
+
+            <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+                <svg viewBox="0 0 600 200" class="w-full h-auto">
+                    <line x1="50" y1="150" x2="550" y2="150" stroke="#94a3b8" stroke-width="2" />
+                    <line x1="50" y1="150" x2="50" y2="20" stroke="#94a3b8" stroke-width="2" />
+                    <path d="M 100 30 L 300 150 L 500 30" fill="none" stroke="#10b981" stroke-width="3" />
+                    <text x="300" y="190" text-anchor="middle" fill="#64748b" font-size="14">Error (y - y_hat)</text>
+                    <text x="510" y="40" fill="#10b981" font-size="12">MAE (L1)</text>
+                </svg>
+                <figcaption class="text-sm text-gray-500 mt-2 text-center">MAE 随误差线性增长，惩罚力度恒定</figcaption>
+            </figure>
+
+            <ul class="list-disc pl-6 mt-4 space-y-2 text-gray-600">
+                <li><strong>优点：</strong> 不易受离群点干扰。</li>
+                <li><strong>缺点：</strong> 在零点不可导，且在误差较小时梯度依然恒定，可能导致模型在最优值附近震荡，收敛较慢。</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h3>Huber Loss (Smooth L1 Loss)</h3>
+            <p>结合了 MSE 和 MAE 的优点：误差较小时使用 MSE，误差较大时使用 MAE。它在零点处可导，且对离群点鲁棒。</p>
+            <div
+                class="math-block"
+                set:html={formulas.huber}
+            ></div>
+            <p class="text-sm text-gray-500 mt-2">其中 <span set:html={"$a = y - \\hat{y}$"}></span>，<span set:html={"$\\delta$"}></span> 是一个可调参数，决定了切换的阈值。</p>
+        </div>
+    </div>
+
+    <div class="chapter" id="classification">
+        <div class="chapter-header">
+            <h2>2. 分类损失 (Classification Loss)</h2>
+        </div>
+
+        <div class="card">
+            <h3>交叉熵损失 (Cross-Entropy Loss)</h3>
+            <p>分类任务的标准配置。衡量两个概率分布之间的差异。</p>
+            <p>对于二分类（Binary Cross-Entropy）：</p>
+            <div
+                class="math-block"
+                set:html={formulas.bce}
+            ></div>
+            <div class="note-box mt-4 text-sm">
+                <p>详细解析请参考：<a href="/notes/cross-entropy" class="text-blue-500 hover:underline">交叉熵函数：从概率到损失的桥</a></p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>KL 散度 (Kullback-Leibler Divergence)</h3>
+            <p>也称为相对熵。衡量分布 $P$（真实分布）相对于分布 $Q$（预测分布）的差异。在监督学习中，最小化 KL 散度等价于最小化交叉熵。</p>
+            <div
+                class="math-block"
+                set:html={formulas.kl}
+            ></div>
+            <p><strong>注意：</strong> KL 散度是非对称的，<span set:html={"$D_{KL}(P \\| Q) \\neq D_{KL}(Q \\| P)$"}></span>。</p>
+        </div>
+
+        <div class="card">
+            <h3>合页损失 (Hinge Loss)</h3>
+            <p>主要用于支持向量机（SVM）。它不仅要求分类正确，还要求有一定的<strong>间隔（Margin）</strong>。</p>
+            <div
+                class="math-block"
+                set:html={formulas.hinge}
+            ></div>
+            <p class="text-sm text-gray-500 mt-2">其中标签 <span set:html={"$y \\in \\{-1, 1\\}$"}></span>。如果预测正确且 <span set:html={"$| \\hat{y} | \\ge 1$"}></span>，损失为 0。</p>
+        </div>
+    </div>
+
+    <div class="chapter" id="comparison">
+        <div class="chapter-header">
+            <h2>3. 总结与对比</h2>
+        </div>
+
+        <div class="overflow-x-auto mt-6">
+            <table class="w-full text-left border-collapse bg-white/50 rounded-xl overflow-hidden shadow-sm">
+                <thead class="bg-slate-100/50">
+                    <tr>
+                        <th class="p-4 border-b">损失函数</th>
+                        <th class="p-4 border-b">任务类型</th>
+                        <th class="p-4 border-b">主要特点</th>
+                        <th class="p-4 border-b">适用场景</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    <tr>
+                        <td class="p-4 font-semibold">MSE</td>
+                        <td class="p-4">回归</td>
+                        <td class="p-4">对离群点敏感，梯度大</td>
+                        <td class="p-4">数据质量高，要求快速拟合</td>
+                    </tr>
+                    <tr>
+                        <td class="p-4 font-semibold">MAE</td>
+                        <td class="p-4">回归</td>
+                        <td class="p-4">鲁棒性强，梯度恒定</td>
+                        <td class="p-4">数据含有较多噪声/离群点</td>
+                    </tr>
+                    <tr>
+                        <td class="p-4 font-semibold">Huber</td>
+                        <td class="p-4">回归</td>
+                        <td class="p-4">折衷方案，平滑过渡</td>
+                        <td class="p-4">通用的回归首选</td>
+                    </tr>
+                    <tr>
+                        <td class="p-4 font-semibold">Cross-Entropy</td>
+                        <td class="p-4">分类</td>
+                        <td class="p-4">概率最大化，收敛快</td>
+                        <td class="p-4">绝大多数分类任务</td>
+                    </tr>
+                    <tr>
+                        <td class="p-4 font-semibold">Hinge</td>
+                        <td class="p-4">分类</td>
+                        <td class="p-4">最大化间隔</td>
+                        <td class="p-4">SVM，对置信度有要求</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="chapter">
+        <div class="chapter-header">
+            <h2>实践建议</h2>
+        </div>
+        <ul class="list-disc pl-6 mb-8 space-y-4 text-gray-700">
+            <li><strong>不要盲目追求 MSE：</strong> 如果你的模型在训练集上表现很好，但在测试集上因为几个离群点表现糟糕，试着换成 MAE 或 Huber Loss。</li>
+            <li><strong>Logits 与 LogSoftmax：</strong> 在神经网络中，直接使用 <code>LogSoftmax + NLLLoss</code> 通常比先做 <code>Softmax</code> 再做 <code>CrossEntropy</code> 更具数值稳定性。</li>
+            <li><strong>自定义损失：</strong> 针对特定业务（如预测股票涨跌且不仅关注大小还关注方向），你可以尝试将多个损失函数加权组合。</li>
+        </ul>
+    </div>
+</BaseLayout>
