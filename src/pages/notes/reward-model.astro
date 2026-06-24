@@ -1,0 +1,108 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+
+export const meta = {
+    number: '23',
+    title: 'Reward Model (奖励模型)',
+    description: 'RLHF 的核心：从人类偏好中学习奖励信号',
+    tags: ["RL", "RLHF", "Alignment"],
+    readTime: '15 min'
+};
+---
+
+<BaseLayout title="Reward Model (奖励模型) | LLM Note" description="Reward Model 的原理、数据收集与训练细节">
+    <main>
+        <header>
+            <h1 class="gradient-text">Reward Model (奖励模型)</h1>
+            <p>RLHF 的桥梁：将人类的主观偏好转化为机器可优化的奖励信号</p>
+            <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt}</p>
+        </header>
+
+        <div class="toc">
+            <h2>目录</h2>
+            <ul>
+                <li><a href="#intro">1. 什么是 Reward Model</a></li>
+                <li><a href="#data">2. 数据收集：从排序到偏好</a></li>
+                <li><a href="#bradley-terry">3. 核心理论：Bradley-Terry 模型</a></li>
+                <li><a href="#loss">4. 损失函数与训练</a></li>
+                <li><a href="#challenges">5. 挑战与最佳实践</a></li>
+            </ul>
+        </div>
+
+        <div class="chapter" id="intro">
+            <div class="chapter-header">
+                <h2>1. 什么是 Reward Model</h2>
+            </div>
+            <p>在强化学习从人类反馈中学习 (RLHF) 的流程中，<strong>Reward Model (RM)</strong> 扮演着判别器的角色。</p>
+            <div class="card">
+                <h3>RM 的本质</h3>
+                <p>一个回归模型，输入是 (Prompt, Response) 对，输出是一个实数分数，代表该回答符合人类偏好的程度。</p>
+            </div>
+            <p>为什么不直接让模型生成？因为直接定义"好"的规则很难（如：幽默、有用、无害），但人类很容易判断两个回答哪个更好。</p>
+        </div>
+
+        <div class="chapter" id="data">
+            <div class="chapter-header">
+                <h2>2. 数据收集：从排序到偏好</h2>
+            </div>
+            <p>RM 的训练数据通常通过让标注员对模型生成的多个候选回答进行排序获得。</p>
+            <div class="card">
+                <h3>偏好对 (Pairwise Comparison)</h3>
+                <p>标注员看到：<code>Prompt</code> + <code>Response A</code> + <code>Response B</code>。</p>
+                <p>选择：A 比 B 好 ($y_w = A, y_l = B$)。</p>
+            </div>
+            <p>这种两两比较的方式比直接打分更符合人类的直觉，能够有效降低主观评分的方差。</p>
+        </div>
+
+        <div class="chapter" id="bradley-terry">
+            <div class="chapter-header">
+                <h2>3. 核心理论：Bradley-Terry 模型</h2>
+            </div>
+            <p>RM 假设人类选择 A 而非 B 的概率遵循 Bradley-Terry 模型：</p>
+            <p set:html={"$$P(x_w \succ x_l) = \frac{\exp(r(x, x_w))}{\exp(r(x, x_w)) + \exp(r(x, x_l))} = \sigma(r(x, x_w) - r(x, x_l))$$"}></p>
+            <div class="note-box">
+                <h3>公式含义</h3>
+                <p>其中 $r(x, y)$ 是奖励模型对 Prompt $x$ 和回答 $y$ 给出的标量分数。</p>
+                <p>$\sigma$ 是 Sigmoid 函数。</p>
+                <p>当 $r(x, x_w) \gg r(x, x_l)$ 时，选择 $x_w$ 的概率趋近于 1。</p>
+            </div>
+        </div>
+
+        <div class="chapter" id="loss">
+            <div class="chapter-header">
+                <h2>4. 损失函数与训练</h2>
+            </div>
+            <p>训练 RM 的目标是最大化观察到的偏好的对数似然：</p>
+            <p set:html={"$$L(\theta) = -\mathbb{E}_{(x, y_w, y_l) \sim D} [\log(\sigma(r_\theta(x, y_w) - r_\theta(x, y_l)))]$$"}></p>
+            <div class="card">
+                <h3>训练要点</h3>
+                <ul>
+                    <li><strong>初始化：</strong>通常从 SFT 后的模型冷启动（因为它已经具备理解指令和生成基本回答的能力）。</li>
+                    <li><strong>线性头：</strong>在模型顶部添加一个线性层，将隐藏状态映射到标量输出。</li>
+                    <li><strong>正交性：</strong>RM 只需要学习相对顺序，因此绝对分值大小不重要。</li>
+                    <li><strong>数据多样性：</strong>需要包含不同模型、不同阶段生成的样本，以覆盖更广的状态空间。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="chapter" id="challenges">
+            <div class="chapter-header">
+                <h2>5. 挑战与最佳实践</h2>
+            </div>
+            <div class="card">
+                <h3>常见问题与应对</h3>
+                <ul>
+                    <li><strong>Reward Hacking：</strong>PPO 可能会找到 RM 的漏洞。<strong>对策：</strong>引入 KL 惩罚，限制策略偏离基座模型太远。</li>
+                    <li><strong>分布偏移 (Distribution Shift)：</strong><strong>对策：</strong>在线 RM 或定期重训 RM。</li>
+                    <li><strong>数据质量：</strong>标注一致性问题。<strong>对策：</strong>增加冗余标注，使用 AI Feedback (RLAIF)。</li>
+                </ul>
+            </div>
+            <div class="quote-block">
+                <p><strong>总结：</strong>一个好的奖励模型是 RLHF 成功的基石。如果奖励信号不准，后续的强化学习优化只会让模型在错误的方向上越走越远。</p>
+            </div>
+        </div>
+    </main>
+</BaseLayout>
