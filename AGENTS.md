@@ -26,6 +26,7 @@ There are no automated tests configured in this repository. If you add tests, up
 - Prefer diagrams that show real relationships (parameters, layers, data flow) over generic process flowcharts.
 - Keep sections substantial with meaningful explanations; use subheadings to organize.
 - Ensure formulas are centered, readable, and sized consistently with body text.
+- Explain prerequisite terminology before relying on it. Expand acronyms on first meaningful use, define paper-local shorthand, and add a glossary or related-paper context section when a topic depends on adjacent papers or field-specific metrics.
 
 ## Paper-Note Requirements (When the source is a paper)
 - Read and follow `NOTE_STYLE_REQUIREMENTS.md` before drafting.

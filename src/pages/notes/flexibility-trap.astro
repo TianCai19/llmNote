@@ -27,14 +27,15 @@ export const meta = {
         <h2>目录</h2>
         <ul>
             <li><a href="#introduction">1. Introduction：这篇论文真正挑战的是什么</a></li>
-            <li><a href="#background">2. Background：dLLM、任意顺序与 RLVR 的交汇点</a></li>
-            <li><a href="#formulation">3. Core Formulation：masked diffusion、Pass@k 与 GRPO</a></li>
-            <li><a href="#trap">4. The Flexibility Trap：为什么自由顺序会压缩推理边界</a></li>
-            <li><a href="#entropy">5. Mechanism：entropy degradation 如何发生</a></li>
-            <li><a href="#justgrpo">6. Method：JustGRPO 为什么“少做一点”反而更强</a></li>
-            <li><a href="#experiments">7. Experiments：结果说明了什么</a></li>
-            <li><a href="#discussion">8. Discussion：这对 dLLM 研究和工程系统意味着什么</a></li>
-            <li><a href="#figures">9. Original Figures &amp; References</a></li>
+            <li><a href="#terms">2. 读前术语地图：AO、AR、dLLM、RLVR 到底指什么</a></li>
+            <li><a href="#background">3. Background：dLLM、任意顺序与 RLVR 的交汇点</a></li>
+            <li><a href="#formulation">4. Core Formulation：masked diffusion、Pass@k 与 GRPO</a></li>
+            <li><a href="#trap">5. The Flexibility Trap：为什么自由顺序会压缩推理边界</a></li>
+            <li><a href="#entropy">6. Mechanism：entropy degradation 如何发生</a></li>
+            <li><a href="#justgrpo">7. Method：JustGRPO 为什么“少做一点”反而更强</a></li>
+            <li><a href="#experiments">8. Experiments：结果说明了什么</a></li>
+            <li><a href="#discussion">9. Discussion：这对 dLLM 研究和工程系统意味着什么</a></li>
+            <li><a href="#figures">10. Original Figures &amp; References</a></li>
         </ul>
     </nav>
 
@@ -60,8 +61,98 @@ export const meta = {
         </p>
     </div>
 
+    <div class="card" id="terms">
+        <h2>2. 读前术语地图：AO、AR、dLLM、RLVR 到底指什么</h2>
+        <p>
+            这篇论文有一个阅读门槛：它默认读者已经熟悉扩散语言模型、非自回归解码、RLVR 后训练和 Pass@k 评估。如果直接进入正文，AO、AR、remasking、semi-AR block、reasoning boundary 这些缩写会很快堆在一起。下面先把这篇论文里最关键的术语拆开，后面的机制分析才不会变成缩写互相解释缩写。
+        </p>
+
+        <div class="overflow-x-auto mt-6">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">术语</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">全称 / 来源语境</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">在这篇论文里的含义</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">为什么重要</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">dLLM</td>
+                        <td class="px-4 py-3">Diffusion Large Language Model，代表工作包括 LLaDA 和 Dream 7B</td>
+                        <td class="px-4 py-3">用 mask / denoise 的扩散过程生成文本的大语言模型，而不是严格 next-token prediction</td>
+                        <td class="px-4 py-3">它提供 parallel decoding 和 arbitrary-order generation，是本文讨论的模型家族</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">AR order</td>
+                        <td class="px-4 py-3">Autoregressive order，传统左到右生成顺序</td>
+                        <td class="px-4 py-3">每次提交最左侧未生成 token，不能跳过当前位置</td>
+                        <td class="px-4 py-3">本文发现 AR order 虽然更受限，却在 reasoning Pass@k 上更能保留探索分支</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">AO</td>
+                        <td class="px-4 py-3">Arbitrary Order，本页后文用 AO 指任意顺序解码</td>
+                        <td class="px-4 py-3">模型可以按置信度或熵选择任意位置先填，不必左到右</td>
+                        <td class="px-4 py-3">论文标题里的 flexibility 主要指这个能力；它是被重新估值的对象</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">remasking</td>
+                        <td class="px-4 py-3">LLaDA / masked diffusion sampling 中的重新遮蔽步骤</td>
+                        <td class="px-4 py-3">每轮先预测多个 masked token，再把低置信或被选中的 token 继续 mask，留到后续步骤重采样</td>
+                        <td class="px-4 py-3">AO 通常通过 confidence-based remasking 实现；它决定哪些位置被先提交</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">semi-AR block</td>
+                        <td class="px-4 py-3">半自回归块式解码，Block Diffusion / LLaDA 采样讨论里常见</td>
+                        <td class="px-4 py-3">整段回复按 block 左到右推进，每个 block 内部再用扩散式并行去噪</td>
+                        <td class="px-4 py-3">它是 AR 和完全 AO 之间的连续谱；本文 appendix 发现 block 越小越接近 AR，Pass@k 越好</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">RLVR</td>
+                        <td class="px-4 py-3">Reinforcement Learning with Verifiable Rewards，数学/代码 reasoning 后训练常用范式</td>
+                        <td class="px-4 py-3">用可自动验证的答案、测试用例或执行结果作为 reward，而不是依赖人工偏好</td>
+                        <td class="px-4 py-3">RLVR 只能强化模型采样中已经能偶尔命中的正确轨迹，因此非常依赖探索覆盖</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Pass@k</td>
+                        <td class="px-4 py-3">代码生成评估常用指标，也被 reasoning 论文用作探索上界诊断</td>
+                        <td class="px-4 py-3">采样 k 次，至少有一次正确的概率</td>
+                        <td class="px-4 py-3">本文用它衡量 reasoning potential，而不是只看单次答案准确率</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">GRPO</td>
+                        <td class="px-4 py-3">Group Relative Policy Optimization，DeepSeekMath 提出的 critic-free RL 方法</td>
+                        <td class="px-4 py-3">同一 query 采样一组输出，用组内 reward 标准化 advantage，再做 clipped policy optimization</td>
+                        <td class="px-4 py-3">JustGRPO 的 “just” 指不做复杂 diffusion-specific RL 适配，直接用标准 GRPO</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">forking token</td>
+                        <td class="px-4 py-3">本文用来描述推理链里的分叉位置</td>
+                        <td class="px-4 py-3">例如 Therefore、Since、However 这类会改变后续逻辑方向的 token</td>
+                        <td class="px-4 py-3">AO 容易绕开这些高熵位置，导致 entropy degradation 和解空间塌缩</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>相关论文脉络：为什么这些术语会同时出现</h3>
+        <p>
+            <strong>LLaDA</strong> 是理解本文最直接的背景。它把大语言模型放进 masked diffusion 框架：预训练时随机 mask token，训练 Transformer 预测原 token；采样时从全 mask response 开始，多轮预测和 remask，最后得到完整输出。LLaDA 论文还讨论了 low-confidence remasking 和 semi-autoregressive block sampling，这些概念决定了 dLLM 如何在“并行”和“顺序约束”之间切换。
+        </p>
+        <p>
+            <strong>Dream 7B</strong> 代表了另一条更强调 dLLM 正向价值的叙事。它把 diffusion LLM 的优势写成 inference flexibility：arbitrary-order generation、infilling、可调的质量-速度 trade-off，以及对 planning-intensive 任务的潜在帮助。The Flexibility Trap 并不是否认 Dream 这类工作展示的能力，而是追问：这些能力在数学和代码这种 general reasoning 上是否仍然是净收益。
+        </p>
+        <p>
+            <strong>DeepSeekMath / GRPO</strong> 是理解 JustGRPO 的后训练背景。GRPO 原本是面向 AR LLM 的强化学习算法：同一问题采样一组答案，按组内 reward 估计 advantage，不需要额外 value model。The Flexibility Trap 的关键工程判断是：如果把 dLLM 在 RL 训练时约束成 AR order，就能直接使用这个成熟目标，避免为 arbitrary-order denoising trajectories 设计复杂近似。
+        </p>
+        <p>
+            <strong>RLVR 与 Pass@k 研究</strong> 提供了本文的诊断框架。RLVR 的奖励是可验证的，但奖励不会自动创造探索。如果基础模型在大采样预算下也几乎无法命中正确轨迹，RL 就缺少正样本。Pass@k 因此被用来估计 reasoning boundary：它不是最终用户体验指标，而是“模型分布里是否藏着可被 RL 放大的正确解”的信号。
+        </p>
+    </div>
+
     <div class="card" id="background">
-        <h2>2. Background：dLLM、任意顺序与 RLVR 的交汇点</h2>
+        <h2>3. Background：dLLM、任意顺序与 RLVR 的交汇点</h2>
         <p>
             背景里需要分清三件事。第一，dLLM 的主流形态是 masked diffusion model。它不是给 embedding 加高斯噪声，而是在离散 token 空间里逐步 mask，再学习从 partially masked sequence 恢复原序列。LLaDA 这类模型证明了这种范式可以扩展到 8B 级别，并在 in-context learning、instruction following、reversal reasoning 等任务上展示竞争力。Dream 7B 进一步把扩散语言模型的价值叙述扩展到 arbitrary-order generation、infilling、quality-speed trade-off 和 planning-intensive scenarios。
         </p>
@@ -110,7 +201,7 @@ export const meta = {
     </div>
 
     <div class="card" id="formulation">
-        <h2>3. Core Formulation：masked diffusion、Pass@k 与 GRPO</h2>
+        <h2>4. Core Formulation：masked diffusion、Pass@k 与 GRPO</h2>
         <p>
             为了理解论文的论证，需要先把三个公式放在一起：masked diffusion 的训练目标、Pass@k 的推理边界估计、GRPO 的策略优化目标。它们对应三个层面：模型如何学习恢复 token，模型采样分布里是否有正确轨迹，以及 RL 如何强化这些轨迹。
         </p>
@@ -168,7 +259,7 @@ $$`}></div>
     </div>
 
     <div class="card" id="trap">
-        <h2>4. The Flexibility Trap：为什么自由顺序会压缩推理边界</h2>
+        <h2>5. The Flexibility Trap：为什么自由顺序会压缩推理边界</h2>
         <p>
             论文的第一个实证问题是：任意顺序是否真的带来更高的 Pass@k。作者比较 LLaDA-Instruct、Dream-Instruct 和 LLaDA 1.5 等 dLLM，在 GSM8K、MATH-500、HumanEval、MBPP 等数学和代码任务上，用 arbitrary order 与 AR order 生成多样样本。直觉上，arbitrary order 的轨迹集合更大，应该至少不输 AR；但结果恰好相反。
         </p>
@@ -184,7 +275,7 @@ $$`}></div>
         </p>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
             <img src="/notes/flexibility-trap/venn.png" alt="Solution space overlap between arbitrary order and AR order" class="w-full rounded-xl" loading="lazy" />
-            <figcaption class="text-sm text-gray-500 mt-3">Figure 4. Solution-space Venn 图：AO 不是探索了一个与 AR 互补的大空间，而更像是 AR 可达解空间的一个子集。</figcaption>
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 4. Solution-space Venn 图：AO（Arbitrary Order，任意顺序）不是探索了一个与 AR（Autoregressive，左到右）互补的大空间，而更像是 AR 可达解空间的一个子集。</figcaption>
         </figure>
         <p class="mt-4">
             这就是 flexibility trap 的第一层含义：模型拥有更多形式上的顺序选择，不代表它会把这些选择用于更有效的 reasoning exploration。相反，采样策略可能会偏向最容易局部确定的位置，让输出看起来更流畅、更一致，却牺牲了对关键分支的搜索。
@@ -192,7 +283,7 @@ $$`}></div>
     </div>
 
     <div class="card" id="entropy">
-        <h2>5. Mechanism：entropy degradation 如何发生</h2>
+        <h2>6. Mechanism：entropy degradation 如何发生</h2>
         <p>
             论文提出的核心机制叫 <strong>entropy degradation</strong>。它从一个很具体的观察出发：推理链中的不确定性不是均匀分布的，而是集中在少数“forking tokens”附近。这些 token 可能是 Therefore、Since、Thus，也可能是代码中的分支结构、数学证明中的转折连接词。它们不是普通续写词，而是会把后续推理轨迹导向不同分支的决策点。
         </p>
@@ -208,7 +299,7 @@ $$`}></div>
         </p>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
             <img src="/notes/flexibility-trap/entropy_bar_compare.png" alt="Entropy comparison for forking tokens" class="w-full rounded-xl" loading="lazy" />
-            <figcaption class="text-sm text-gray-500 mt-3">Figure 5. Entropy comparison：AR 在关键逻辑连接词上保留更高平均熵；AO 则出现 entropy degradation，说明分叉不确定性被提前压低。</figcaption>
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 5. Entropy comparison：AR order 在关键逻辑连接词上保留更高平均熵；AO / arbitrary order 则出现 entropy degradation，说明分叉不确定性被提前压低。</figcaption>
         </figure>
         <div class="note-box text-sm mt-4">
             <p><strong>原文摘录：</strong></p>
@@ -225,7 +316,7 @@ $$`}></div>
     </div>
 
     <div class="card" id="justgrpo">
-        <h2>6. Method：JustGRPO 为什么“少做一点”反而更强</h2>
+        <h2>7. Method：JustGRPO 为什么“少做一点”反而更强</h2>
         <p>
             有了上面的机制解释，JustGRPO 的设计就不再反直觉。现有 dLLM RL 方法之所以复杂，是因为它们试图保留 arbitrary-order flexibility。只要保留任意顺序，就会遇到三个结构性麻烦：第一，token-level credit assignment 变得含混，因为同一个最终序列可以由大量不同 denoising trajectories 生成；第二，sequence likelihood 难以精确计算，需要对许多路径做边际化；第三，训练时的 learner 和推理时的 sampler 容易不匹配，近似策略越多，优化越不稳定。
         </p>
@@ -245,7 +336,7 @@ $$`}></div>
     </div>
 
     <div class="card" id="experiments">
-        <h2>7. Experiments：结果说明了什么</h2>
+        <h2>8. Experiments：结果说明了什么</h2>
         <p>
             实验分成两条线：一条线证明 arbitrary order 会降低 reasoning potential，另一条线证明 JustGRPO 可以在实际 RL 后训练中获得更好的结果。第一条线前面已经讨论过，核心证据是 Pass@k scaling curve、solution-space overlap、entropy comparison、temperature/sampling/block-size robustness。第二条线则看训练后模型在 benchmark 上的准确率和并行解码兼容性。
         </p>
@@ -260,12 +351,12 @@ $$`}></div>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
                     <tr>
-                        <td class="px-4 py-3 font-medium text-slate-700">AO 是否扩大 Pass@k</td>
+                        <td class="px-4 py-3 font-medium text-slate-700">AO / arbitrary order 是否扩大 Pass@k</td>
                         <td class="px-4 py-3">LLaDA / Dream / LLaDA 1.5 上 AO 的 Pass@k 曲线更平</td>
                         <td class="px-4 py-3">AO 更像局部一致性策略，不是更强探索策略</td>
                     </tr>
                     <tr>
-                        <td class="px-4 py-3 font-medium text-slate-700">AO 是否探索互补解空间</td>
+                        <td class="px-4 py-3 font-medium text-slate-700">AO / arbitrary order 是否探索互补解空间</td>
                         <td class="px-4 py-3">HumanEval 等任务中 AO 解多为 AR 解空间子集</td>
                         <td class="px-4 py-3">AO 没有稳定发现 AR 找不到的新解</td>
                     </tr>
@@ -302,7 +393,7 @@ $$`}></div>
     </div>
 
     <div class="card" id="discussion">
-        <h2>8. Discussion：这对 dLLM 研究和工程系统意味着什么</h2>
+        <h2>9. Discussion：这对 dLLM 研究和工程系统意味着什么</h2>
         <p>
             这篇论文给 dLLM 研究的启发，不是“以后都不要 arbitrary order”，而是“不要把 arbitrary order 当成未经检验的默认优势”。生成顺序是一个强归纳偏置，它会改变模型面对不确定性的方式，也会改变 RL 能看到什么样的正样本。对于 infilling、editing、结构补全、局部重写等任务，自由顺序仍然可能非常有用；但对于长链路数学、代码和通用推理，系统更需要的是在关键节点保留探索，而不是绕过它们。
         </p>
@@ -318,7 +409,7 @@ $$`}></div>
     </div>
 
     <div class="card" id="figures">
-        <h2>9. Original Figures &amp; References</h2>
+        <h2>10. Original Figures &amp; References</h2>
         <p>
             按论文笔记要求，下面保留项目页公开的原图，便于快速回看。正文引用时没有把图放成孤立画廊，而是插入到了对应机制和实验章节；这里作为补充索引。
         </p>
