@@ -1,0 +1,142 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { todayYmd } from '../../utils/date';
+
+const createdAt = todayYmd();
+
+export const meta = {
+    number: '23',
+    title: 'LM Evaluation Harness',
+    description: '理解 LLM 评测的“底座”：从 EleutherAI Harness 到 Agentic 系统评测架构',
+    tags: ["Harness", "LLM", "Evaluation", "Agent", "Benchmark"],
+    readTime: '15 min'
+};
+---
+
+<BaseLayout title="Harness：让大模型评测可重复、可回归、可对比">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">LLM / Evaluation / Harness / Agent</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Harness：大模型评测的“驱动装置”</h1>
+        <p class="text-xl text-gray-500">不是“跑通一次 demo”，而是将模型、任务、环境与判分机制封装成可工程化的实验系统</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {createdAt} • 15 min</p>
+    </header>
+
+    <div class="card">
+        <h2>前言：为什么要叫 Harness？</h2>
+        <p>在软件工程中，<span class="highlight">Harness (测试驱动装置)</span> 原指一套准备输入、启动被测对象、收集输出并判定结果的框架。在 LLM 时代，Harness 的角色变得至关重要。随着模型能力的涌现，我们不再仅仅关注它能不能“答对一题”，而是关注它在数千个任务、多种 prompt 策略以及动态交互环境下的<strong>稳定性与一致性</strong>。</p>
+        <div class="bg-blue-50 p-4 rounded-lg border border-blue-100 mt-4">
+            <strong>核心定义：</strong> Harness 是一个统一的评测底座。它将“考卷”（Dataset）、“考场环境”（Environment）、“监考老师”（Evaluator）和“答题卡”（Output/Log）封装在一起，确保实验是<strong>可重复 (Reproducible)</strong> 且<strong>可对比 (Comparable)</strong> 的。
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>1. 行业标准：EleutherAI/lm-evaluation-harness</h2>
+        <p>提到 LLM 评测，绕不开的“工业基石”就是 EleutherAI 发起的 <a class="text-emerald-700 font-semibold" href="https://github.com/EleutherAI/lm-evaluation-harness">lm-evaluation-harness</a>。它几乎成为了开源大模型发布时的标配评测工具（如 Open LLM Leaderboard）。</p>
+        
+        <h3 class="text-blue-600 mt-6">核心架构：解耦与统一</h3>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>解耦模型后端：</strong> 支持 HuggingFace Transformers、vLLM、OpenAI API、TextSynth 等。</li>
+            <li><strong>配置驱动任务：</strong> 任务（如 GSM8K, HellaSwag）通过 YAML 配置文件定义，包含 Prompt 模板、Few-shot 示例和过滤规则。</li>
+            <li><strong>分层评估机制：</strong> 针对生成式任务（Generation）和选择式任务（Multiple Choice/Likelihood）提供统一接口。</li>
+        </ul>
+
+        <div class="bg-emerald-50 p-4 rounded-lg border border-emerald-100 mt-4">
+            <p><strong>工程优势：</strong> 它通过 <span class="highlight">Tokenization-agnostic</span>（分词器无关）的接口，屏蔽了不同模型在编码层面的差异，使得不同架构的模型可以在完全相同的逻辑基线上竞争。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>2. 从模型评测到 Agent 评测</h2>
+        <p>传统的 LLM Harness 只需要输入 Prompt 并拿到 Logprobs 或 Text；但 <span class="highlight">Agentic Harness</span> 面临的挑战要复杂得多。Agent 会调用工具、操作文件、浏览网页，其失败可能发生在任何环节。</p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <svg viewBox="0 0 920 300" role="img" aria-label="Agent Harness Architecture" class="w-full">
+                <rect x="24" y="24" width="872" height="252" rx="20" fill="#f8fafc" stroke="#e2e8f0" />
+                <rect x="50" y="70" width="130" height="52" rx="12" fill="#e0f2fe" stroke="#7dd3fc" />
+                <rect x="205" y="70" width="130" height="52" rx="12" fill="#e0f2fe" stroke="#7dd3fc" />
+                <rect x="360" y="70" width="130" height="52" rx="12" fill="#e0f2fe" stroke="#7dd3fc" />
+                <rect x="515" y="70" width="130" height="52" rx="12" fill="#dcfce7" stroke="#86efac" />
+                <rect x="670" y="70" width="130" height="52" rx="12" fill="#fef3c7" stroke="#fcd34d" />
+                <text x="115" y="102" text-anchor="middle" font-size="12" fill="#0f172a">Task Spec</text>
+                <text x="270" y="102" text-anchor="middle" font-size="12" fill="#0f172a">Sandbox</text>
+                <text x="425" y="102" text-anchor="middle" font-size="12" fill="#0f172a">Agent Runner</text>
+                <text x="580" y="102" text-anchor="middle" font-size="12" fill="#14532d">Observer</text>
+                <text x="735" y="102" text-anchor="middle" font-size="12" fill="#92400e">Evaluator</text>
+
+                <rect x="205" y="180" width="150" height="54" rx="12" fill="#fee2e2" stroke="#fca5a5" />
+                <rect x="390" y="180" width="150" height="54" rx="12" fill="#fee2e2" stroke="#fca5a5" />
+                <rect x="575" y="180" width="150" height="54" rx="12" fill="#ede9fe" stroke="#c4b5fd" />
+                <text x="280" y="212" text-anchor="middle" font-size="12" fill="#7f1d1d">Artifacts</text>
+                <text x="465" y="212" text-anchor="middle" font-size="12" fill="#7f1d1d">Trace / Logs</text>
+                <text x="650" y="212" text-anchor="middle" font-size="12" fill="#5b21b6">Report / Analytics</text>
+
+                <line x1="180" y1="96" x2="205" y2="96" stroke="#94a3b8" stroke-width="2" />
+                <line x1="335" y1="96" x2="360" y2="96" stroke="#94a3b8" stroke-width="2" />
+                <line x1="490" y1="96" x2="515" y2="96" stroke="#94a3b8" stroke-width="2" />
+                <line x1="645" y1="96" x2="670" y2="96" stroke="#94a3b8" stroke-width="2" />
+                <line x1="425" y1="122" x2="280" y2="180" stroke="#cbd5e1" stroke-width="1.8" />
+                <line x1="580" y1="122" x2="465" y2="180" stroke="#cbd5e1" stroke-width="1.8" />
+                <line x1="735" y1="122" x2="650" y2="180" stroke="#cbd5e1" stroke-width="1.8" />
+            </svg>
+            <figcaption class="text-sm text-gray-500 mt-3 text-center">Agent Harness 核心组件：不仅仅是推理，更是全链路的观测与验证。</figcaption>
+        </figure>
+
+        <h3 class="text-blue-600 mt-6">Agent Harness 的四大支柱</h3>
+        <ul class="list-disc pl-6 space-y-3 mt-2 text-gray-700">
+            <li><strong>环境隔离 (Sandbox)：</strong> 为每次运行提供干净的 Docker 容器或虚拟机，防止 agent 污染真实系统或任务间相互影响。</li>
+            <li><strong>轨迹记录 (Trace)：</strong> 必须记录每一个 Step、每一个 API 调用以及每一次文件修改，用于事后归因。</li>
+            <li><strong>多维判分 (Metrics)：</strong> 成功率只是冰山一角，还需要衡量成本、延迟和动作有效性。</li>
+            <li><strong>重试与冗余处理：</strong> 处理网络超时、模型随机性导致的执行中断。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>3. 核心评估指标公式</h2>
+        <p>在 Harness 中，我们通常会定义一个综合得分公式，来平衡模型的性能、成本和稳定性。</p>
+        
+        <div class="math-block" set:html={String.raw`$$\text{Score} = w_{pass} \cdot \text{PassRate} + w_{eff} \cdot \text{Efficiency} - \lambda \cdot \text{Cost}$$`}></div>
+        
+        <p class="mt-4">其中，<strong>Efficiency (效率)</strong> 往往由执行步数或 Token 吞吐量决定：</p>
+        <div class="math-block" set:html={String.raw`$$\text{Efficiency} = \frac{\text{Optimal Steps}}{\text{Actual Steps}}$$`}></div>
+        
+        <div class="note-box text-sm mt-4">
+            <p><strong>注：</strong> 在 SWE-bench 等工程评测中，PassRate 通常是二元的（Pass/Fail），但在长链路任务中，我们会引入 <span class="highlight">Requirement Coverage</span>（需求覆盖率）来量化中间进度。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>4. 实践建议：如何选择或构建 Harness？</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-5">
+                <h3 class="font-semibold text-slate-700 mb-3">场景 A：基础模型对比</h3>
+                <p class="text-sm text-gray-600">直接使用 <strong>lm-evaluation-harness</strong>。它支持几乎所有主流数据集，且能产出与行业 Leaderboard 对应的分数。</p>
+            </div>
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-5">
+                <h3 class="font-semibold text-slate-700 mb-3">场景 B：垂直领域 Agent 研发</h3>
+                <p class="text-sm text-gray-600">选择 <strong>OpenAI Evals</strong> 或针对性框架（如 <strong>SWE-agent</strong> 的环境层）。重点建设 Sandbox 和 Observer。</p>
+            </div>
+        </div>
+
+        <h3 class="text-blue-600 mt-8">构建 Checklist：</h3>
+        <ul class="list-decimal pl-6 space-y-2 text-gray-600">
+            <li>输入是否可重现？（固定随机种子、数据快照）</li>
+            <li>环境是否可重置？（Docker 镜像、快照机制）</li>
+            <li>轨迹是否可审计？（记录所有 Tool Calls 和 Diffs）</li>
+            <li>评估是否可解释？（不仅给分数，还要给出失败原因的聚类分析）</li>
+        </ul>
+    </div>
+
+    <div class="mt-8 text-center text-gray-500">
+        <p>Harness 是将 AI 从“实验室 Demo”推向“生产力工具”的第一道防线。</p>
+    </div>
+
+    <div class="card">
+        <h2>参考资料</h2>
+        <ul class="list-disc pl-6 space-y-2 text-sm text-gray-600">
+            <li><a class="text-emerald-700" href="https://github.com/EleutherAI/lm-evaluation-harness">EleutherAI/lm-evaluation-harness (GitHub)</a></li>
+            <li><a class="text-emerald-700" href="https://www.swebench.com/">SWE-bench: Resolving GitHub issues</a></li>
+            <li><a class="text-emerald-700" href="https://github.com/openai/evals">OpenAI Evals: Framework for evaluating LLMs</a></li>
+            <li><a class="text-emerald-700" href="https://arxiv.org/abs/2410.10934">Agent-as-a-Judge: Evaluate Agents with LLMs</a></li>
+        </ul>
+    </div>
+</BaseLayout>
