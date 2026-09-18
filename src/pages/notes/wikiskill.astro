@@ -1,0 +1,514 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: 'WikiSkill：把 Agent 经验编译成持久知识库，驱动技能进化',
+    description: '深入解读 WikiSkill 论文：三层知识架构（Raw/Wiki/Skill）、Wiki Maintainer 与 Skill Proposer 的进化循环、门控回滚、跨模型技能迁移、持久知识消融实验与工程启发。',
+    tags: ['Agent', 'Skill Evolution', 'Knowledge Base', 'Systems'],
+    readTime: '46 min',
+    createdAt: '2026-09-18'
+};
+---
+
+<BaseLayout title="WikiSkill：把 Agent 经验编译成持久知识库，驱动技能进化" description="从散落的优化历史到可复用的持久知识：系统理解 WikiSkill 的三层架构、进化循环、跨模型迁移与消融证据。">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Agent Skills / Skill Evolution / Persistent Knowledge</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">WikiSkill：把 Agent 经验编译成持久知识库，驱动技能进化</h1>
+        <p class="text-xl text-gray-500">让技能不再从零重学：在原始经验与可执行技能之间，插入一层会“复利增长”的知识</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <div class="note-box text-sm">
+        <p><strong>论文信息：</strong><em>WikiSkill: Compiling Agent Experience into Persistent Knowledge for Skill Evolution</em>，arXiv:2608.27454v1，2026-08-27。作者来自 Google Research 与 Virginia Tech（Liyan Tang、Cyrus Rashtchian、Chun-Sung Ferng、Andrew Tomkins、Da-Cheng Juan、Tu Vu）。</p>
+        <p class="mt-2"><strong>核心定位：</strong>WikiSkill 不是一个新模型，也不改动模型参数，而是一套 <strong>技能进化（skill evolution）框架</strong>。它的关键创新是在“原始执行轨迹”与“可执行技能”之间，显式插入一层 <strong>持久、复利增长的知识库（wiki）</strong>。技能可以被回滚，但 wiki 永不重置，让每一轮技能更新都建立在越来越充分、越来越整合的知识之上。</p>
+    </div>
+
+    <nav class="toc mt-8" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#intro">1. Introduction：技能进化为什么需要一层“知识”</a></li>
+            <li><a href="#setup">2. Problem Setup：技能进化的形式化定义</a></li>
+            <li><a href="#architecture">3. 三层知识架构：Raw / Wiki / Skill</a></li>
+            <li><a href="#loop">4. 进化循环：四个组件如何协作</a></li>
+            <li><a href="#gating">5. 门控与回滚：为什么技能可回滚而 wiki 不回滚</a></li>
+            <li><a href="#results">6. 主结果：跨模型、跨任务的一致提升</a></li>
+            <li><a href="#scaling">7. 技能进化与模型规模互补</a></li>
+            <li><a href="#transfer">8. 跨模型技能迁移：发现能力 ≠ 执行能力</a></li>
+            <li><a href="#ablation">9. 消融：持久知识到底贡献了多少</a></li>
+            <li><a href="#dynamics">10. 技能与 Wiki 的动态：一个 ALFWorld 案例</a></li>
+            <li><a href="#practice">11. 工程启发与边界</a></li>
+            <li><a href="#figures">12. Original Figures &amp; References</a></li>
+        </ul>
+    </nav>
+
+    <div class="card" id="intro">
+        <h2>1. Introduction：技能进化为什么需要一层“知识”</h2>
+        <p>
+            通用 Agent 已经能在很多领域完成复杂任务，但真正把现实任务做可靠，往往需要 <strong>领域专属的程序性知识与工作流</strong>：处理某类电子表格的库限制、在长文档里怎么检索、在具身环境里怎么避免死循环。
+            近两年出现的 <strong>Agent Skills（智能体技能）</strong> 提供了一种轻量、开放的格式来沉淀这类专长——它不更新模型参数，而是把指令、脚本和参考资料打包成一个文件系统里的目录模块。
+            按照 Anthropic 的定义，每个技能核心是一个带 YAML frontmatter 的 <code>SKILL.md</code>，Claude 在虚拟机里像读“新人 onboarding 文档”一样按需加载它。
+            这种设计天然支持 <span class="highlight">渐进式披露（progressive disclosure）</span>：Agent 只在需要时加载相关内容，从而节省上下文空间，也让专长知识变得一致、可审计、可跨 Agent 复用。
+        </p>
+        <p>
+            问题在于：好技能怎么来？大多数技能今天仍靠人手写，这要求作者提前预判 Agent 会用到的流程和知识——这很难。
+            于是最近一批工作转向 <strong>自动从经验中进化技能</strong>：在训练任务上跑 Agent、分析成功与失败的轨迹、据此改写技能。
+            EvoSkill 维护一份“历史提案与评测结果”的累积记录；Trace2Skill 从多条轨迹里抽取并合并教训；SkillOpt 用被拒编辑的反馈和逐轮的元指导。
+            但这些方法有一个共同的结构性缺陷：<span class="highlight">它们没有把“已经学到的东西”维护成一个独立、可演化的知识表示</span>。学到的洞见散落在优化历史里，每一轮技能更新都很难系统地复用上一轮的沉淀。
+        </p>
+        <p>
+            WikiSkill 的灵感来自 Karpathy 提出的 <strong>“LLM Wiki”</strong> 观点：与其在每次查询时从原始文档里临时检索（经典 RAG），不如让 LLM 增量地把原始来源 <em>编译</em> 进一个持久的 Markdown wiki——实体页、概念页、矛盾标注、交叉引用、日志和不断演化的综合。
+            知识只编译一次并持续保持更新，交叉引用、矛盾已经就位，不必每次从零重建。作者把这个思路迁移到技能进化上，提出核心问题：
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p class="text-sm text-gray-600 italic">“Can agent experience be similarly compiled into persistent knowledge to support long-term skill evolution?”（能否把 Agent 经验同样编译成持久知识，以支撑长期的技能进化？）</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/html/2608.27454v1" class="text-[color:var(--accent)] underline">WikiSkill arXiv HTML</a>，§1 Introduction</p>
+        </div>
+        <p class="mt-4">
+            回答是：在“原始经验”与“可执行技能”之间加一层 <strong>结构化知识层</strong>。这样技能开发就能建立在越来越有据可依、越来越整合的知识上，而不是建立在散落各处的进化产物上。
+            这篇笔记会先讲清楚这层知识 <em>是什么</em>、进化循环 <em>怎么转</em>，再用论文的实验数据说明它 <em>为什么有效</em>，最后讨论它对我们做本地 Agent/技能系统的启发和边界。
+        </p>
+    </div>
+
+    <div class="card" id="setup">
+        <h2>2. Problem Setup：技能进化的形式化定义</h2>
+        <p>
+            先把问题写清楚。给定一个任务数据集 <span set:html={"$\\mathcal{D}=\\{(x_i,y_i)\\}_{i=1}^{N}$"}></span>，其中 <span set:html={"$x_i$"}></span> 是任务实例，<span set:html={"$y_i$"}></span> 是标准答案。数据集被划分成互不重叠的三份：训练集 <span set:html={"$\\mathcal{D}_{\\text{train}}$"}></span>、验证集 <span set:html={"$\\mathcal{D}_{\\text{val}}$"}></span>、测试集 <span set:html={"$\\mathcal{D}_{\\text{test}}$"}></span>。
+        </p>
+        <p>
+            一个 Agent <span set:html={"$\\pi$"}></span> 是配备了工具集 <span set:html={"$\\mathcal{U}$"}></span>（如 bash、搜索 API、文件读取）和一组活跃技能 <span set:html={"$S=\\{s_1,\\dots,s_M\\}$"}></span> 的 LLM 系统。
+            执行任务 <span set:html={"$x_i$"}></span> 时，Agent 用工具和技能，在环境里多步交互，产生一条执行轨迹：
+        </p>
+        <div class="math-block" set:html={String.raw`$$\tau_i \sim \pi(x_i;\,S), \qquad \tau_i = (o_1, a_1, o_2, a_2, \dots, o_T, a_T)$$`}></div>
+        <p>
+            其中 <span set:html={"$o_t$"}></span> 是观察，<span set:html={"$a_t$"}></span> 是动作（可能包含对 <span set:html={"$\\mathcal{U}$"}></span> 中工具的调用），最后一个动作 <span set:html={"$a_T$"}></span> 给出预测答案 <span set:html={"$\\hat{y}_i$"}></span>。
+            正确性由一个领域相关的打分函数评估 <span set:html={"$f(\\hat{y}_i, y_i)\\in[0,1]$"}></span>，某个划分上的表现 <span set:html={"$\\mathcal{R}(\\mathcal{T}_{\\text{split}})$"}></span> 就是所有实例得分的平均。
+        </p>
+        <p>
+            WikiSkill 独有的一点是：迭代 <span set:html={"$k$"}></span> 时的系统状态是一个二元组 <span set:html={"$(S_k, W_k)$"}></span>，其中 <span set:html={"$S_k$"}></span> 是活跃技能集，<span set:html={"$W_k$"}></span> 是 <strong>持久知识库（wiki）</strong>。二者从空开始 <span set:html={"$(S_0, W_0)=(\\emptyset, \\emptyset)$"}></span>，联合进化：
+        </p>
+        <div class="math-block" set:html={String.raw`$$(S_0, W_0)=(\emptyset,\emptyset) \;\xrightarrow{\;k=1,\dots,K\;}\; (S_K, W_K)$$`}></div>
+        <p>
+            关键的非对称性在这里就埋下伏笔：<span class="highlight">候选技能更新要经过验证门控，表现下降就回滚；但知识库 <span set:html={"$W_k$"}></span> 会持续保留并跨迭代复利累积</span>。目标是在从未见过的测试集上最大化 <span set:html={"$\\mathcal{R}(\\mathcal{T}_{\\text{test}})$"}></span>。
+            注意技能集 <span set:html={"$S$"}></span> 是对 <em>每个数据集</em> 从空开始独立进化出来的——WikiSkill 学的不是“通用万能技能”，而是“为这个任务分布量身进化的技能 + 知识”。
+        </p>
+    </div>
+
+    <div class="card" id="architecture">
+        <h2>3. 三层知识架构：Raw / Wiki / Skill</h2>
+        <p>
+            WikiSkill 把 Agent 的工作空间分成三个职责清晰、生命周期不同的层。理解这三层的“可变性差异”是理解整个框架的钥匙：越靠底层越不可变、越靠上层越易变，而中间的 wiki 层是“只增不重置”的复利层。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/wikiskill/wikiskill-diagram.png" alt="WikiSkill 三层架构与四步进化循环" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 2. WikiSkill 总体框架。工作空间分成 Raw Layer（不可变执行轨迹）、Wiki Layer（跨迭代复利的持久知识库）、Skills Layer（活跃程序性指令）。每一轮循环里，Inference Agent 注入活跃技能跑 rollout（但被限制访问 wiki），Wiki Maintainer 把轨迹消化进 wiki，Skill Proposer 用 ReAct 机制提出技能更新，wiki 则在所有迭代中被保留。</figcaption>
+        </figure>
+
+        <h3>Raw Layer（<code>raw/</code>）：不可变的执行轨迹</h3>
+        <p>
+            这一层存放每轮训练 rollout 收集到的原始轨迹 <span set:html={"$\\tau_i \\in \\mathcal{T}_{\\text{train},k}$"}></span>。它记录 Agent 完整的逐步交互：推理过程、工具调用、工具返回、最终答案。
+            Wiki Maintainer 和 Skill Proposer 都能读取这些原始轨迹来分析行为。为了保存真实历史，<span class="highlight">这一层是不可变的（write once, permanent）</span>——它是所有上层知识的“事实源”，谁也不能改写它。
+        </p>
+
+        <h3>Wiki Layer（<code>wiki/</code>）：复利增长的持久知识</h3>
+        <p>
+            这是全文最核心的一层。它把原始轨迹编译成结构化、可复利的知识，并在整个进化过程中被持续维护。它包含几个关键部分：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>模式目录 <code>patterns/</code></strong>：一堆独立的 markdown 文件，每个记录一种具体的 <em>失败模式</em> 或 <em>成功策略</em>，附带可操作的解法。还有一个 <code>index.md</code> 作为目录索引。</li>
+            <li><strong>进化日志 <code>logs.md</code></strong>：由 Wiki Maintainer 更新，按时间顺序记录每轮发现了什么、创建/拒绝了什么。</li>
+            <li><strong>技能影响追踪 <code>skill-impact.md</code></strong>：由外层 harness 在验证门控后 <em>以程序方式</em> 更新，记录每个技能提案的 diff 与接受/拒绝结果。</li>
+        </ul>
+        <p class="mt-3">
+            这三样东西一起给了系统 <span class="highlight">跨迭代的长期历史意识</span>：（1）能看到完整的技能接受历史，避免重复提出已被拒绝的干预；（2）能追踪历史上提过什么、成功与否；（3）能识别哪些错误在反复出现。
+            最关键的一句话是：<strong>wiki 不在迭代间重置，而是持续累积并编译知识</strong>。这正是它区别于 EvoSkill/Trace2Skill/SkillOpt 的地方——后者的“记忆”要么是扁平的提案日志，要么直接烧进了技能文本，没有独立演化的知识表示。
+        </p>
+
+        <h3>Skills Layer（<code>skills/</code>）：可回滚的活跃技能</h3>
+        <p>
+            这一层是 Inference Agent 真正会读到的活跃技能集 <span set:html={"$S$"}></span>，编码程序性知识。WikiSkill 里每个技能目录含两个文件：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong><code>SKILL.md</code></strong>：技能的完整内容（触发条件、规则、反模式、修复方法等）。</li>
+            <li><strong><code>PURPOSE.md</code></strong>：把这个技能映射回启发它创建/修改的那些 wiki 模式——即“这个技能为什么长这样、来自哪条经验”。</li>
+        </ul>
+        <p class="mt-3">
+            <code>PURPOSE.md</code> 这个设计很值得注意：它让技能与其“知识来源”之间有了可追溯的链接，使得后续 Proposer 能理解一个技能的历史动机，而不是把它当成一段无来由的文本。
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>一个类比：</strong>可以把三层想成软件工程里的三样东西——Raw Layer 像 <em>不可变的日志/审计流水</em>，Wiki Layer 像 <em>团队不断维护的内部知识库 / 事故复盘 wiki</em>，Skills Layer 像 <em>被版本控制、可回滚的运行手册 runbook</em>。事故流水永远保留，wiki 越写越厚，而 runbook 只有在被验证“确实更好”时才升级，否则回退到上一版。</p>
+        </div>
+    </div>
+
+    <div class="card" id="loop">
+        <h2>4. 进化循环：四个组件如何协作</h2>
+        <p>
+            WikiSkill 的每一轮迭代由四个组件顺序驱动，形成一个持续把“经验”消化成“持久知识”、再用知识支撑技能进化的闭环。下面按执行顺序讲清楚每一步的输入输出与设计考量。
+        </p>
+
+        <h3>Step 1 — Inference Agent：跑 rollout，写轨迹（但不看 wiki）</h3>
+        <p>
+            在迭代 <span set:html={"$k$"}></span>，Inference Agent <span set:html={"$\\pi$"}></span> 以上一轮的活跃技能集 <span set:html={"$S_{k-1}$"}></span> 为条件，用环境工具执行多轮轨迹：
+        </p>
+        <div class="math-block" set:html={String.raw`$$\tau_i \sim \pi(x_i;\,S_{k-1})$$`}></div>
+        <p>
+            两个工程细节很关键。第一，活跃技能 <span set:html={"$S_{k-1}$"}></span> 的 <strong>完整内容被直接注入 Inference Agent 的系统提示词</strong>（full-injection）。这是刻意为之：沿用先前工作的设定，确保程序性指令在任务执行时立刻可用，从而 <span class="highlight">把“技能触发/检索失败”这个混淆变量排除掉</span>——研究的是技能质量本身，而不是检索机制。
+            第二，<strong>训练 rollout 阶段 Inference Agent 被禁止访问 Wiki Layer</strong>。这不是随口设的约束，而是消融实验（见 §9）得出的结论：让 Inference Agent 在训练时也能看 wiki，反而会拉低最终技能质量。直觉是：如果 Agent 能直接从 wiki 拿到解题知识，产生的轨迹对“技能开发”就变得信息量更低了。
+        </p>
+
+        <h3>Step 2 — Wiki Maintainer：把轨迹消化成模式</h3>
+        <p>
+            拿到训练轨迹 <span set:html={"$\\mathcal{T}_{\\text{train},k}$"}></span> 后，系统 <strong>分层采样</strong> 一小批成功与失败轨迹 <span set:html={"$\\mathcal{T}_{\\text{sample},k}$"}></span>（避免撑爆上下文）。Wiki Maintainer <span set:html={"$\\mathcal{M}_{\\text{WM}}$"}></span> 把这些观察消化进上一版 wiki <span set:html={"$W_{k-1}$"}></span>，产出中间状态 <span set:html={"$W'_k$"}></span>：
+        </p>
+        <div class="math-block" set:html={String.raw`$$W'_k \leftarrow \mathcal{M}_{\text{WM}}\big(W_{k-1},\, \mathcal{T}_{\text{sample},k}\big)$$`}></div>
+        <p>
+            Maintainer 收到完整的 wiki 上下文与采样轨迹，对失败任务做 <strong>根因分析（root cause analysis）</strong>，从成功任务里 <strong>抽取有效策略</strong>。它可以在 <code>wiki/patterns/</code> 下创建新模式页，也可以给已有模式页补充新证据或改进解法——更新采用 <span class="highlight">增量、基于补丁（patch-based）的编辑</span>（追加、替换、插入文本片段），而不是整篇重写。每次改动都会同步更新 <code>index.md</code> 目录，并在 <code>logs.md</code> 里追加本轮发现的摘要。
+            论文特意说明：<strong>每轮创建/更新的模式数量没有硬上限</strong>，由 Maintainer 根据轨迹和当前 wiki 状态自行决定。
+        </p>
+        <p>
+            采样预算也写得很具体（附录 C）：每轮最多采 8 条轨迹，分层为 <strong>最多 5 条失败轨迹</strong>（做根因分析）+ <strong>最多 3 条成功轨迹</strong>（提炼有效策略、防止把已 work 的行为改坏），每条日志注入前截断到 15,000 字符。这套“失败偏多、但保留成功样本”的配比，本质是在“修 bug”和“别把好行为改回归”之间做平衡。
+        </p>
+
+        <h3>Step 3 — Wiki-Informed Skill Proposer：以 ReAct 方式提技能</h3>
+        <p>
+            Proposer <span set:html={"$\\mathcal{M}_{\\text{P}}$"}></span> 是负责技能发现与改进的 LLM Agent，以多轮 <strong>ReAct</strong> 风格运行。为避免分析超长历史时撑爆上下文，它 <em>不</em> 拿到一批预先采样好的固定轨迹；而是初始只拿到三样“索引级”信息：wiki 索引 <span set:html={"$I(W'_k)$"}></span>、技能影响追踪 <code>skill-impact.md</code>、以及一份所有训练任务结果的简明摘要（通过/失败、预测与标准答案）。
+        </p>
+        <div class="math-block" set:html={String.raw`$$P_k \leftarrow \mathcal{M}_{\text{P}}\big(W'_k,\, S_{k-1},\, \mathcal{T}_{\text{train},k}\big)$$`}></div>
+        <p>
+            然后它作为一个 <strong>自主 Agent</strong> 主动推理，用环境工具（<code>read_file</code>）按需挑选并检视具体的模式页和原始轨迹 <span set:html={"$\\tau_i$"}></span>，先诊断根因，再合成一个技能提案 <span set:html={"$P_k$"}></span>。
+            这种“先给索引、按需拉取细节”的设计，正是渐进式披露思想在优化器一侧的体现：Proposer 像人类工程师查内部 wiki 一样，先看目录，再点开真正相关的页面。
+        </p>
+
+        <h3>Step 4 — 应用与门控</h3>
+        <p>
+            提案被应用到工作空间，得到候选技能集 <span set:html={"$S'_k \leftarrow \text{Apply}(S_{k-1}, P_k)$"}></span>，然后进入门控与回滚阶段（下一节详述）。无论技能被接受还是回滚，本轮结束时都会把提案结果和技能 diff 写进 wiki，得到最终 wiki 状态 <span set:html={"$W_k$"}></span>。之后进入下一轮迭代。
+        </p>
+
+        <div class="note-box text-sm mt-4">
+            <p><strong>算法一览（Algorithm 1）：</strong>初始化 <span set:html={"$S_0,W_0=\\emptyset$"}></span> 并做基线验证得到 <span set:html={"$\\mathcal{R}_{\\text{best}}$"}></span>；对 <span set:html={"$k=1..K$"}></span>：若 <span set:html={"$\\mathcal{R}_{\\text{best}}=1.0$"}></span> 提前停止；否则跑训练 rollout → 采样 → Wiki 维护得 <span set:html={"$W'_k$"}></span> → Skill 提案得 <span set:html={"$P_k$"}></span> → 应用得 <span set:html={"$S'_k$"}></span> → 在验证集打分；<span set:html={"$\\mathcal{R}(\\mathcal{T}_{\\text{val},k})>\\mathcal{R}_{\\text{best}}$"}></span> 则接受并更新 best，否则回滚到 <span set:html={"$S_{k-1}$"}></span>（<span class="highlight">只回滚技能，wiki 保留</span>）；最后把提案结果写进 wiki 日志。</p>
+        </div>
+
+        <h3>为什么这套编排的算力开销可控</h3>
+        <p>
+            论文分析了优化器的 API 调用复杂度 <span set:html={"$\\mathcal{C}$"}></span>。WikiSkill 每轮迭代的调用数为：
+        </p>
+        <div class="math-block" set:html={String.raw`$$\mathcal{C}_{\text{WikiSkill}} = (1 + T_{\text{ReAct}})\,\frac{N_{\text{train}}}{B}$$`}></div>
+        <p>
+            其中 Wiki Maintainer 每个 batch 消耗 1 次 LLM 调用，Skill Proposer 作为 ReAct Agent 消耗 <span set:html={"$T_{\\text{ReAct}}$"}></span> 轮（实验中约 <span set:html={"$10 \\le T_{\\text{ReAct}} \\le 20$"}></span>），每轮 1 次调用。实验里 batch size 取满训练集大小 <span set:html={"$B=N_{\\text{train}}$"}></span>，此时 <span set:html={"$N_{\\text{train}}/B=1$"}></span>，<span class="highlight">每轮只需 <span set:html={"$1+T_{\\text{ReAct}}$"}></span> 次优化器调用，与训练集大小无关</span>。其渐进复杂度 <span set:html={"$\\mathcal{O}(N_{\\text{train}}/B)$"}></span> 与 EvoSkill、SkillOpt 同量级，比 Trace2Skill 的 <span set:html={"$\\mathcal{O}(N_{\\text{train}}+N_{\\text{train}}/B)$"}></span> 更省。也就是说，多出来的这层 wiki 并没有带来额外量级的成本。
+        </p>
+    </div>
+
+    <div class="card" id="gating">
+        <h2>5. 门控与回滚：为什么技能可回滚而 wiki 不回滚</h2>
+        <p>
+            门控机制本身并不复杂：候选技能集 <span set:html={"$S'_k$"}></span> 在验证集上跑一遍，得到验证得分 <span set:html={"$\\mathcal{R}(\\mathcal{T}_{\\text{val},k})$"}></span>；严格大于历史最优 <span set:html={"$\\mathcal{R}_{\\text{best}}$"}></span> 才接受，否则回滚：
+        </p>
+        <div class="math-block" set:html={String.raw`$$S_k = \begin{cases} S'_k, & \text{if } \mathcal{R}(\mathcal{T}_{\text{val},k}) > \mathcal{R}_{\text{best}} \quad (\text{Accepted}) \\[4pt] S_{k-1}, & \text{otherwise} \quad (\text{Rejected, roll back}) \end{cases}$$`}></div>
+        <p>
+            但真正有洞见的是那句“<strong>只回滚技能，wiki 保留</strong>”。想清楚这个非对称设计，就理解了整篇论文的哲学。
+        </p>
+        <p>
+            在 EvoSkill/SkillOpt 这类方法里，一次被拒的技能提案基本就“白费了”——它没进入活跃技能，相关的分析也没有沉淀成可复用的独立知识。下一轮 Proposer 很可能重新踩同一个坑，甚至再次提出同一个被拒的方案。
+            WikiSkill 的做法是：<span class="highlight">即使技能提案被拒，产生它的经验、诊断和这次失败本身，都会被写进永不重置的 wiki</span>。<code>skill-impact.md</code> 保留了被拒提案的 diff 和拒绝结果，<code>logs.md</code> 保留了时间线，模式页保留了根因。于是下一轮 Proposer 是“带着上一次失败的教训”去提新方案，而不是从零开始。
+        </p>
+        <p>
+            这也解释了为什么严格门控（必须严格提升验证分才接受）在这里不像在别的框架里那样“浪费”：因为被拒轮次并非纯损失——技能层没进步，但知识层仍在增长。论文在 Limitations 里也承认这种严格门控会排除掉“暂时不提升但可能为后续铺路”的中性提案，探索更灵活的接受准则是未来方向；但为了与先前工作公平对比，他们沿用了严格准则。
+        </p>
+    </div>
+
+    <div class="card" id="results">
+        <h2>6. 主结果：跨模型、跨任务的一致提升</h2>
+        <p>
+            WikiSkill 在 <strong>五个基准</strong> × <strong>五个模型</strong> 上评测。五个基准覆盖差异很大的任务形态：
+        </p>
+        <div class="overflow-x-auto mt-4">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">基准</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">任务类型</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">交互 / 工具</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Train/Val/Test</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr><td class="px-4 py-3 font-medium text-slate-700">LiveMath</td><td class="px-4 py-3">数学竞赛选择题（复杂推理）</td><td class="px-4 py-3">单步 / 无工具，直接推理</td><td class="px-4 py-3">35 / 18 / 124</td></tr>
+                    <tr><td class="px-4 py-3 font-medium text-slate-700">SealQA</td><td class="px-4 py-3">学术事实问答（网页检索）</td><td class="px-4 py-3">多步 / web_search, read_file</td><td class="px-4 py-3">16 / 10 / 85</td></tr>
+                    <tr><td class="px-4 py-3 font-medium text-slate-700">SpreadSheet</td><td class="px-4 py-3">电子表格变换（受库限制的写代码）</td><td class="px-4 py-3">多步 / bash</td><td class="px-4 py-3">80 / 40 / 280</td></tr>
+                    <tr><td class="px-4 py-3 font-medium text-slate-700">OfficeQA</td><td class="px-4 py-3">长上下文文档问答（财政公报）</td><td class="px-4 py-3">多步 / glob, grep, read</td><td class="px-4 py-3">50 / 24 / 172</td></tr>
+                    <tr><td class="px-4 py-3 font-medium text-slate-700">ALFWorld</td><td class="px-4 py-3">交互式具身家务任务</td><td class="px-4 py-3">多步 / 模拟器动作空间</td><td class="px-4 py-3">39 / 18 / 134</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="mt-4">
+            所有得分是 <strong>三次独立完整进化流程的平均</strong>，并做了 1000 次的配对 bootstrap 显著性检验。下面是 Table 1 的完整主结果（测试集准确率 %，加粗为该模型最强）：
+        </p>
+
+        <div class="overflow-x-auto mt-4">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">模型</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">方法</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">LiveMath</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">SealQA</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Spread</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">OfficeQA</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">ALFWorld</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Avg.</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr><td class="px-3 py-2 font-medium text-slate-700" rowspan="5">Qwen-3.5-4B</td><td class="px-3 py-2">No skill</td><td class="px-3 py-2 text-right">29.1</td><td class="px-3 py-2 text-right">32.5</td><td class="px-3 py-2 text-right">14.6</td><td class="px-3 py-2 text-right">30.2</td><td class="px-3 py-2 text-right">24.4</td><td class="px-3 py-2 text-right">26.2</td></tr>
+                    <tr><td class="px-3 py-2">Trace2Skill</td><td class="px-3 py-2 text-right">31.5</td><td class="px-3 py-2 text-right">37.6</td><td class="px-3 py-2 text-right">17.5</td><td class="px-3 py-2 text-right">31.0</td><td class="px-3 py-2 text-right">42.8</td><td class="px-3 py-2 text-right">32.1</td></tr>
+                    <tr><td class="px-3 py-2">EvoSkill</td><td class="px-3 py-2 text-right">41.7</td><td class="px-3 py-2 text-right">37.3</td><td class="px-3 py-2 text-right">18.6</td><td class="px-3 py-2 text-right">29.5</td><td class="px-3 py-2 text-right">41.5</td><td class="px-3 py-2 text-right">33.7</td></tr>
+                    <tr><td class="px-3 py-2">SkillOpt</td><td class="px-3 py-2 text-right">48.7</td><td class="px-3 py-2 text-right">33.3</td><td class="px-3 py-2 text-right">14.0</td><td class="px-3 py-2 text-right">34.5</td><td class="px-3 py-2 text-right">45.3</td><td class="px-3 py-2 text-right">35.2</td></tr>
+                    <tr class="bg-emerald-50/50"><td class="px-3 py-2 font-semibold">WikiSkill</td><td class="px-3 py-2 text-right font-semibold">49.7</td><td class="px-3 py-2 text-right font-semibold">39.4</td><td class="px-3 py-2 text-right font-semibold">21.1</td><td class="px-3 py-2 text-right">28.5</td><td class="px-3 py-2 text-right font-semibold">53.7</td><td class="px-3 py-2 text-right font-semibold">38.5</td></tr>
+
+                    <tr><td class="px-3 py-2 font-medium text-slate-700" rowspan="5">Qwen-3.5-9B</td><td class="px-3 py-2">No skill</td><td class="px-3 py-2 text-right">28.2</td><td class="px-3 py-2 text-right">26.3</td><td class="px-3 py-2 text-right">24.3</td><td class="px-3 py-2 text-right">35.9</td><td class="px-3 py-2 text-right">34.7</td><td class="px-3 py-2 text-right">29.9</td></tr>
+                    <tr><td class="px-3 py-2">Trace2Skill</td><td class="px-3 py-2 text-right">33.1</td><td class="px-3 py-2 text-right">36.9</td><td class="px-3 py-2 text-right">26.5</td><td class="px-3 py-2 text-right">38.4</td><td class="px-3 py-2 text-right">48.8</td><td class="px-3 py-2 text-right">36.7</td></tr>
+                    <tr><td class="px-3 py-2">EvoSkill</td><td class="px-3 py-2 text-right">58.1</td><td class="px-3 py-2 text-right">34.5</td><td class="px-3 py-2 text-right">35.4</td><td class="px-3 py-2 text-right">34.9</td><td class="px-3 py-2 text-right">48.5</td><td class="px-3 py-2 text-right">42.3</td></tr>
+                    <tr><td class="px-3 py-2">SkillOpt</td><td class="px-3 py-2 text-right">48.7</td><td class="px-3 py-2 text-right">29.4</td><td class="px-3 py-2 text-right">29.0</td><td class="px-3 py-2 text-right">38.0</td><td class="px-3 py-2 text-right">55.7</td><td class="px-3 py-2 text-right">40.2</td></tr>
+                    <tr class="bg-emerald-50/50"><td class="px-3 py-2 font-semibold">WikiSkill</td><td class="px-3 py-2 text-right">56.3</td><td class="px-3 py-2 text-right font-semibold">43.1</td><td class="px-3 py-2 text-right">33.6</td><td class="px-3 py-2 text-right font-semibold">40.5</td><td class="px-3 py-2 text-right font-semibold">63.4</td><td class="px-3 py-2 text-right font-semibold">47.4</td></tr>
+
+                    <tr><td class="px-3 py-2 font-medium text-slate-700" rowspan="5">Qwen-3.6-27B</td><td class="px-3 py-2">No skill</td><td class="px-3 py-2 text-right">33.9</td><td class="px-3 py-2 text-right">27.5</td><td class="px-3 py-2 text-right">40.8</td><td class="px-3 py-2 text-right">42.1</td><td class="px-3 py-2 text-right">52.8</td><td class="px-3 py-2 text-right">39.4</td></tr>
+                    <tr><td class="px-3 py-2">Trace2Skill</td><td class="px-3 py-2 text-right">36.3</td><td class="px-3 py-2 text-right">37.3</td><td class="px-3 py-2 text-right">53.3</td><td class="px-3 py-2 text-right">54.3</td><td class="px-3 py-2 text-right">55.5</td><td class="px-3 py-2 text-right">47.3</td></tr>
+                    <tr><td class="px-3 py-2">EvoSkill</td><td class="px-3 py-2 text-right">57.3</td><td class="px-3 py-2 text-right">32.9</td><td class="px-3 py-2 text-right">59.5</td><td class="px-3 py-2 text-right">52.5</td><td class="px-3 py-2 text-right">64.2</td><td class="px-3 py-2 text-right">53.3</td></tr>
+                    <tr><td class="px-3 py-2">SkillOpt</td><td class="px-3 py-2 text-right">51.9</td><td class="px-3 py-2 text-right">34.5</td><td class="px-3 py-2 text-right">53.2</td><td class="px-3 py-2 text-right">54.8</td><td class="px-3 py-2 text-right">59.2</td><td class="px-3 py-2 text-right">50.7</td></tr>
+                    <tr class="bg-emerald-50/50"><td class="px-3 py-2 font-semibold">WikiSkill</td><td class="px-3 py-2 text-right font-semibold">61.9</td><td class="px-3 py-2 text-right font-semibold">41.6</td><td class="px-3 py-2 text-right font-semibold">81.7</td><td class="px-3 py-2 text-right">53.7</td><td class="px-3 py-2 text-right font-semibold">77.6</td><td class="px-3 py-2 text-right font-semibold">63.3</td></tr>
+
+                    <tr><td class="px-3 py-2 font-medium text-slate-700" rowspan="5">Gemma-4-31B</td><td class="px-3 py-2">No skill</td><td class="px-3 py-2 text-right">33.9</td><td class="px-3 py-2 text-right">30.6</td><td class="px-3 py-2 text-right">48.3</td><td class="px-3 py-2 text-right">43.3</td><td class="px-3 py-2 text-right">50.4</td><td class="px-3 py-2 text-right">41.3</td></tr>
+                    <tr><td class="px-3 py-2">Trace2Skill</td><td class="px-3 py-2 text-right">32.3</td><td class="px-3 py-2 text-right">37.7</td><td class="px-3 py-2 text-right">58.5</td><td class="px-3 py-2 text-right">43.2</td><td class="px-3 py-2 text-right">57.2</td><td class="px-3 py-2 text-right">45.8</td></tr>
+                    <tr><td class="px-3 py-2">EvoSkill</td><td class="px-3 py-2 text-right">29.8</td><td class="px-3 py-2 text-right">38.4</td><td class="px-3 py-2 text-right">56.4</td><td class="px-3 py-2 text-right">39.9</td><td class="px-3 py-2 text-right">52.6</td><td class="px-3 py-2 text-right">43.4</td></tr>
+                    <tr><td class="px-3 py-2">SkillOpt</td><td class="px-3 py-2 text-right">40.1</td><td class="px-3 py-2 text-right">36.1</td><td class="px-3 py-2 text-right">63.1</td><td class="px-3 py-2 text-right">44.4</td><td class="px-3 py-2 text-right">61.9</td><td class="px-3 py-2 text-right">49.1</td></tr>
+                    <tr class="bg-emerald-50/50"><td class="px-3 py-2 font-semibold">WikiSkill</td><td class="px-3 py-2 text-right font-semibold">56.7</td><td class="px-3 py-2 text-right font-semibold">41.2</td><td class="px-3 py-2 text-right font-semibold">68.0</td><td class="px-3 py-2 text-right">44.2</td><td class="px-3 py-2 text-right font-semibold">64.4</td><td class="px-3 py-2 text-right font-semibold">54.9</td></tr>
+
+                    <tr><td class="px-3 py-2 font-medium text-slate-700" rowspan="5">Gemini-3.5-Flash</td><td class="px-3 py-2">No skill</td><td class="px-3 py-2 text-right">33.0</td><td class="px-3 py-2 text-right">29.4</td><td class="px-3 py-2 text-right">50.5</td><td class="px-3 py-2 text-right">48.6</td><td class="px-3 py-2 text-right">85.9</td><td class="px-3 py-2 text-right">49.5</td></tr>
+                    <tr><td class="px-3 py-2">Trace2Skill</td><td class="px-3 py-2 text-right">41.9</td><td class="px-3 py-2 text-right">44.3</td><td class="px-3 py-2 text-right">56.0</td><td class="px-3 py-2 text-right">50.0</td><td class="px-3 py-2 text-right">85.9</td><td class="px-3 py-2 text-right">55.6</td></tr>
+                    <tr><td class="px-3 py-2">EvoSkill</td><td class="px-3 py-2 text-right">44.6</td><td class="px-3 py-2 text-right">43.6</td><td class="px-3 py-2 text-right">55.4</td><td class="px-3 py-2 text-right">51.2</td><td class="px-3 py-2 text-right">85.9</td><td class="px-3 py-2 text-right">56.1</td></tr>
+                    <tr><td class="px-3 py-2">SkillOpt</td><td class="px-3 py-2 text-right">49.7</td><td class="px-3 py-2 text-right">28.2</td><td class="px-3 py-2 text-right">66.1</td><td class="px-3 py-2 text-right">49.8</td><td class="px-3 py-2 text-right">85.9</td><td class="px-3 py-2 text-right">55.9</td></tr>
+                    <tr class="bg-emerald-50/50"><td class="px-3 py-2 font-semibold">WikiSkill</td><td class="px-3 py-2 text-right font-semibold">72.6</td><td class="px-3 py-2 text-right font-semibold">44.7</td><td class="px-3 py-2 text-right font-semibold">76.6</td><td class="px-3 py-2 text-right font-semibold">60.7</td><td class="px-3 py-2 text-right">85.9</td><td class="px-3 py-2 text-right font-semibold">68.1</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">Table 1. 五模型 × 五基准的测试准确率（%）。WikiSkill 在全部五个模型上取得最高平均分。（Gemini-3.5-Flash 在 ALFWorld 上已接近饱和 85.9%，触发提前停止，故各方法同值。）</p>
+
+        <p class="mt-4">
+            关键读数：<span class="highlight">相对每个模型的最强竞争方法，WikiSkill 分别把平均分提升了 3.3 / 5.1 / 10.0 / 5.8 / 12.0 个点</span>（Qwen-3.5-4B、Qwen-3.5-9B、Qwen-3.6-27B、Gemma-4-31B、Gemini-3.5-Flash）。它在绝大多数“模型×数据集”组合上超过 no-skill 基线，并在平均分上追平或超过每个模型的最强竞争者。
+            提升也可以非常大：Gemini-3.5-Flash 在 LiveMath 上从 33.0% 提到 72.6%、在 SpreadSheet 上从 50.5% 提到 76.6%；Qwen-3.6-27B 在 ALFWorld 上从 52.8% 提到 77.6%。
+            相比之下，现有方法“时好时坏”：EvoSkill 在 LiveMath 上把 Qwen-9B 从 28.2% 大幅提到 58.1%，却把 Gemma-4-31B 从 33.9% 拉低到 29.8%；SkillOpt 甚至把 Gemini-3.5-Flash 在 SealQA 上从 29.4% 拉低到 28.2%。<strong>WikiSkill 的价值不只是更强，更是更“可靠”</strong>。
+        </p>
+    </div>
+
+    <div class="card" id="scaling">
+        <h2>7. 技能进化与模型规模互补</h2>
+        <p>
+            一个反直觉但被数据反复印证的发现：<span class="highlight">模型越强，从技能进化里获益越多</span>。在 Qwen 家族内，WikiSkill 带来的平均提升随规模递增——Qwen-3.5-4B +12.3 点、Qwen-3.5-9B +17.5 点、Qwen-3.6-27B +23.9 点。
+            这个趋势在 SpreadSheet 上尤其夸张：三个模型分别 +6.5、+9.3、<strong>+40.9</strong> 点。也就是说，更强的模型不仅更会“用”技能，还更会在进化中“开发出”更有效的技能。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/wikiskill/average_scaling.svg" alt="平均准确率随模型规模变化，WikiSkill 相对基线的优势随模型增强而扩大" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 1. WikiSkill 一致优于 no-skill 基线与现有技能进化方法（EvoSkill、SkillOpt）；且其优势对更强的模型更明显。纵轴为各模型在评测基准上的平均准确率。</figcaption>
+        </figure>
+
+        <p>
+            另一面同样重要：<span class="highlight">有效技能可以弥补相当大的规模差距</span>。带 WikiSkill 的 Qwen-3.5-9B 达到 47.4% 平均分，反超 <em>不带技能</em> 的 Qwen-3.6-27B（39.4%）；带 WikiSkill 的 Qwen-3.5-4B 也到了 38.5%，逼近更大模型的无技能水平。
+            论文由此提出一个论点：<strong>模型能力与进化出的程序性知识是两种互补的性能来源</strong>——强模型能从技能进化里榨出更多价值，而好技能能让小模型越级击败大模型。
+        </p>
+        <p>
+            但收益的“可进化性”高度依赖任务。对 Qwen-3.6-27B，WikiSkill 在 OfficeQA 只 +11.6、SealQA +14.1，而在 ALFWorld +24.8、LiveMath +28.0、SpreadSheet +40.9。
+            LiveMath 对所有五个模型都稳定受益（+20.6 到 +39.6）；ALFWorld 对参与进化的四个模型受益 +14.0 到 +29.3。
+            OfficeQA 因为长上下文文档检索的特殊难度而分化：大模型能有效利用进化出的检索工作流去导航长文档（Qwen-3.6-27B +11.6、Gemini-3.5-Flash +12.1），而 Qwen-3.5-4B <span class="highlight">执行不了这套多步检索流程，退回默认阅读行为，反而略有下降</span>。这个“小模型执行不动复杂技能”的现象，是下一节跨模型迁移的重要伏笔。
+        </p>
+    </div>
+
+    <div class="card" id="transfer">
+        <h2>8. 跨模型技能迁移：发现能力 ≠ 执行能力</h2>
+        <p>
+            既然技能是纯文本、与参数解耦的，一个自然的问题是：一个模型进化出的技能，能不能直接拿给另一个模型用？论文用 Table 2 系统地研究了这件事，结论相当有启发。
+        </p>
+
+        <div class="overflow-x-auto mt-4">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">推理模型</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">技能来源</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">LiveMath</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">SealQA</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Spread</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">OfficeQA</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">ALFWorld</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr><td class="px-3 py-2 font-medium text-slate-700" rowspan="4">Qwen-3.5-9B</td><td class="px-3 py-2">None（无技能）</td><td class="px-3 py-2 text-right">28.2</td><td class="px-3 py-2 text-right">26.3</td><td class="px-3 py-2 text-right">24.3</td><td class="px-3 py-2 text-right">35.9</td><td class="px-3 py-2 text-right">34.7</td></tr>
+                    <tr><td class="px-3 py-2">← Qwen-3.5-4B</td><td class="px-3 py-2 text-right">61.0</td><td class="px-3 py-2 text-right">40.4</td><td class="px-3 py-2 text-right">25.0</td><td class="px-3 py-2 text-right">40.3</td><td class="px-3 py-2 text-right">69.2</td></tr>
+                    <tr class="bg-slate-50"><td class="px-3 py-2">← 自身（self-evolved）</td><td class="px-3 py-2 text-right">56.3</td><td class="px-3 py-2 text-right">43.1</td><td class="px-3 py-2 text-right">33.6</td><td class="px-3 py-2 text-right">40.5</td><td class="px-3 py-2 text-right">63.4</td></tr>
+                    <tr class="bg-emerald-50/50"><td class="px-3 py-2 font-semibold">← Qwen-3.6-27B</td><td class="px-3 py-2 text-right">59.1</td><td class="px-3 py-2 text-right">40.4</td><td class="px-3 py-2 text-right font-semibold">50.5</td><td class="px-3 py-2 text-right">39.9</td><td class="px-3 py-2 text-right font-semibold">70.2</td></tr>
+
+                    <tr><td class="px-3 py-2 font-medium text-slate-700" rowspan="4">Gemma-4-31B</td><td class="px-3 py-2">None（无技能）</td><td class="px-3 py-2 text-right">33.9</td><td class="px-3 py-2 text-right">30.6</td><td class="px-3 py-2 text-right">48.3</td><td class="px-3 py-2 text-right">43.3</td><td class="px-3 py-2 text-right">50.4</td></tr>
+                    <tr><td class="px-3 py-2">← Qwen-3.5-4B</td><td class="px-3 py-2 text-right">73.1</td><td class="px-3 py-2 text-right">38.8</td><td class="px-3 py-2 text-right">37.1</td><td class="px-3 py-2 text-right">42.1</td><td class="px-3 py-2 text-right">66.9</td></tr>
+                    <tr class="bg-slate-50"><td class="px-3 py-2">← 自身（self-evolved）</td><td class="px-3 py-2 text-right">56.7</td><td class="px-3 py-2 text-right">41.2</td><td class="px-3 py-2 text-right">68.0</td><td class="px-3 py-2 text-right">44.2</td><td class="px-3 py-2 text-right">64.4</td></tr>
+                    <tr class="bg-emerald-50/50"><td class="px-3 py-2 font-semibold">← Qwen-3.6-27B</td><td class="px-3 py-2 text-right font-semibold">73.7</td><td class="px-3 py-2 text-right">37.7</td><td class="px-3 py-2 text-right font-semibold">72.0</td><td class="px-3 py-2 text-right">44.2</td><td class="px-3 py-2 text-right">66.9</td></tr>
+
+                    <tr><td class="px-3 py-2 font-medium text-slate-700" rowspan="4">Gemini-3.5-Flash</td><td class="px-3 py-2">None（无技能）</td><td class="px-3 py-2 text-right">33.0</td><td class="px-3 py-2 text-right">29.4</td><td class="px-3 py-2 text-right">50.5</td><td class="px-3 py-2 text-right">48.6</td><td class="px-3 py-2 text-right">85.9</td></tr>
+                    <tr><td class="px-3 py-2 text-rose-600">← Qwen-3.5-4B</td><td class="px-3 py-2 text-right">67.5</td><td class="px-3 py-2 text-right">40.0</td><td class="px-3 py-2 text-right text-rose-600 font-semibold">18.1</td><td class="px-3 py-2 text-right">48.5</td><td class="px-3 py-2 text-right">87.3</td></tr>
+                    <tr class="bg-slate-50"><td class="px-3 py-2">← 自身（self-evolved）</td><td class="px-3 py-2 text-right">72.6</td><td class="px-3 py-2 text-right">44.7</td><td class="px-3 py-2 text-right">76.6</td><td class="px-3 py-2 text-right">60.7</td><td class="px-3 py-2 text-right">—</td></tr>
+                    <tr class="bg-emerald-50/50"><td class="px-3 py-2 font-semibold">← Qwen-3.6-27B</td><td class="px-3 py-2 text-right font-semibold">73.9</td><td class="px-3 py-2 text-right">43.5</td><td class="px-3 py-2 text-right">63.4</td><td class="px-3 py-2 text-right">47.7</td><td class="px-3 py-2 text-right">86.8</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">Table 2（节选）. 不同来源模型进化出的技能，迁移到不同推理模型上的表现。绿色=迁移技能超过自进化；红色=负迁移。</p>
+
+        <h3>发现一：迁移常常有效，甚至超过自进化</h3>
+        <p>
+            迁移技能经常同时超过 no-skill 基线和 <em>自进化</em> 技能。例如 Qwen-3.6-27B 的技能把 Qwen-3.5-9B 在 SpreadSheet 上从 24.3%（无技能）/ 33.6%（自进化）提到 <strong>50.5%</strong>；把 Gemma-4-31B 在 LiveMath 上从 33.9% / 56.7% 提到 <strong>73.7%</strong>。
+            而且 <span class="highlight">从小模型到大模型的迁移也能奏效</span>：Qwen-3.5-4B 的技能把 Gemma-4-31B 在 LiveMath 提到 73.1%、ALFWorld 提到 66.9%。这说明“强来源模型未必产出更好技能”，程序性知识能跨规模、跨家族迁移。
+        </p>
+
+        <h3>发现二：迁移好不好，取决于技能是“通用流程”还是“模型专属绕坑”</h3>
+        <p>
+            LiveMath 技能迁移特别好：Qwen-3.5-4B 和 Qwen-3.6-27B 的技能把 Gemini-3.5-Flash 从 33.0% 分别提到 67.5% 和 73.9%。
+            但 SpreadSheet 出现了强烈的“源-目标交互”：Qwen-3.5-4B 的技能把 Gemini-3.5-Flash 从 50.5% <strong>砸到 18.1%</strong>（负迁移），而 Qwen-3.6-27B 的技能却把它提到 63.4%。
+            错误分析给出两个原因：其一，小模型（4B）的技能编码了 <em>低层绕坑技巧</em>（单行 Python 命令、字符串转换规则），这些帮小模型避免执行错误，却 <span class="highlight">约束了强模型，让它无法写出更完整的端到端脚本</span>；其二，碎片化的诊断流程引入冗余工具调用，会在任务完成前耗尽 Gemini-3.5-Flash 的交互预算。
+        </p>
+
+        <h3>发现三：迁移收益也取决于“执行能力”</h3>
+        <p>
+            同一来源模型的技能，被不同推理模型使用效果不同。Qwen-3.6-27B 的 SpreadSheet 技能，把 Qwen-3.5-4B / 9B / 27B 相对各自无技能基线分别提升 18.4% / 26.2% / 40.9%——越强的模型越能榨出同一份程序性知识的价值。
+            OfficeQA 里还有个有趣的“利他”现象：Qwen-3.5-4B 进化的技能让 <em>它自己</em> 从 30.2% 掉到 28.5%，却让 Qwen-3.6-27B 从 42.1% 提到 52.9%。轨迹分析显示，长上下文里小模型容易被冗长文档带偏、跟不上多步检索指令而退回默认阅读；强模型则能可靠执行结构化导航。
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>核心洞见：</strong>这些结果把“自进化”通常混为一谈的两种能力清楚地拆开了——<span class="highlight">从经验中发现有用的程序性知识（skill discovery）</span> 和 <span class="highlight">在推理时有效执行这些知识（skill execution）</span> 是两种不同的能力。一个模型可能很会“发现”却不擅长“执行”，反之亦然。这解释了为什么“别人进化的技能”有时比“自己进化的技能”更好用。</p>
+        </div>
+    </div>
+
+    <div class="card" id="ablation">
+        <h2>9. 消融：持久知识到底贡献了多少</h2>
+        <p>
+            WikiSkill 的核心主张是“持久 wiki 很关键”。为了验证，论文用 Gemini-3.5-Flash 做了一个 2×2 消融（Table 3），独立控制两个能用 wiki 的组件——训练 rollout 时的 <strong>Inference Agent</strong> 和技能开发时的 <strong>Skill Proposer</strong>——是否有 wiki 访问权。当 Skill Proposer 无 wiki 访问时，Wiki Maintainer 也一并移除，即彻底没有跨迭代的持久知识累积。默认配置是：<strong>Proposer 有 wiki，Inference Agent 无 wiki</strong>。
+        </p>
+
+        <div class="overflow-x-auto mt-4">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Inference Agent</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Skill Proposer</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">LiveMath</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">SealQA</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Spread</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">OfficeQA</th>
+                        <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Avg.</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr><td class="px-3 py-2" colspan="2">No skill（基线）</td><td class="px-3 py-2 text-right">33.0</td><td class="px-3 py-2 text-right">29.4</td><td class="px-3 py-2 text-right">50.5</td><td class="px-3 py-2 text-right">48.6</td><td class="px-3 py-2 text-right">40.4</td></tr>
+                    <tr><td class="px-3 py-2">✓ Wiki</td><td class="px-3 py-2">✓ Wiki</td><td class="px-3 py-2 text-right">43.8</td><td class="px-3 py-2 text-right">42.0</td><td class="px-3 py-2 text-right">44.4</td><td class="px-3 py-2 text-right">51.0</td><td class="px-3 py-2 text-right">45.3</td></tr>
+                    <tr><td class="px-3 py-2">✗ 无</td><td class="px-3 py-2">✗ 无（无持久知识）</td><td class="px-3 py-2 text-right">51.3</td><td class="px-3 py-2 text-right">38.4</td><td class="px-3 py-2 text-right">49.9</td><td class="px-3 py-2 text-right">55.2</td><td class="px-3 py-2 text-right">48.7</td></tr>
+                    <tr><td class="px-3 py-2">✓ Wiki</td><td class="px-3 py-2">✓ Wiki</td><td class="px-3 py-2 text-right">64.8</td><td class="px-3 py-2 text-right">42.8</td><td class="px-3 py-2 text-right">80.2</td><td class="px-3 py-2 text-right">55.6</td><td class="px-3 py-2 text-right">60.9</td></tr>
+                    <tr class="bg-emerald-50/50"><td class="px-3 py-2 font-semibold">✗ 无（默认）</td><td class="px-3 py-2 font-semibold">✓ Wiki（默认）</td><td class="px-3 py-2 text-right font-semibold">72.6</td><td class="px-3 py-2 text-right font-semibold">44.7</td><td class="px-3 py-2 text-right">76.6</td><td class="px-3 py-2 text-right font-semibold">60.7</td><td class="px-3 py-2 text-right font-semibold">63.7</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">Table 3. Gemini-3.5-Flash 上的 wiki 访问消融（%）。最后一行为默认 WikiSkill 配置。</p>
+
+        <h3>结论一：给 Proposer 持久 wiki，效果剧增</h3>
+        <p>
+            在 Inference Agent 无 wiki 的前提下，<span class="highlight">给 Skill Proposer 接上持久 wiki，把平均分从 48.7% 提到 63.7%（+15.0 点）</span>，其中 LiveMath 51.3%→72.6%、SpreadSheet 49.9%→76.6% 的跃升尤其明显。
+            论文的解释是：没有跨迭代累积的持久知识，Skill Proposer 很难攻克那些复杂、反复出现的失败模式——它每轮都在“重新发现”问题，而不是“接着上轮的诊断往下修”。
+        </p>
+
+        <h3>结论二：让 Inference Agent 也看 wiki，反而变差</h3>
+        <p>
+            在 Skill Proposer 有 wiki 的前提下，<span class="highlight">额外给 Inference Agent 在训练 rollout 时开放 wiki，平均分从 63.7% 掉到 60.9%</span>，LiveMath 从 72.6% 大跌到 64.8%。
+            这就是为什么 §4 里 Inference Agent 被刻意“蒙住” wiki。假说是：当 Inference Agent 同时能看技能和 wiki，一部分解题知识会直接从 wiki 拿到，而不是从技能拿到——于是产生的轨迹对“技能开发”变得不那么有信息量，技能进化的信号被稀释了。
+            <strong>这是一个很干净的职责分离结论：wiki 是给“优化器/Proposer”长记性用的，不是给“执行者/Inference Agent”抄近路用的。</strong>
+        </p>
+    </div>
+
+    <div class="card" id="dynamics">
+        <h2>10. 技能与 Wiki 的动态：一个 ALFWorld 案例</h2>
+        <p>
+            论文还定量刻画了进化过程中技能与 wiki 的“形态”。Table 4 显示：Qwen 系产出更长的程序性技能（118.9–128.6 行），Gemma-4-31B 和 Gemini-3.5-Flash 更紧凑（45.1、81.2 行）；wiki 模式累积也因模型而异（平均创建 6.3–8.9 个模式、编辑 7.0–18.4 次）。
+            按基准看，SpreadSheet 产出最长技能（142.5 行）和最多模式（9.8 个），LiveMath 最短（84.6 行、4.4 个模式）。此外附录 Table 5 显示，被接受的技能更新里 39%–52% 发生在最初阶段（Iter 0–1），但相当比例延续到中后期——SealQA 尤其明显，中期 33%、后期 28% 仍在被接受。
+            这些一起说明：<span class="highlight">持久知识累积支撑了跨迭代的持续技能精炼，而不是“前两轮定型、之后躺平”</span>。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/wikiskill/wiki-demo.png" alt="ALFWorld 上 Wiki 层与 Skill 层交互的案例" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 3. Wiki 引导技能进化的案例（ALFWorld，Qwen-3.6-27B）。持久 Wiki Layer 编译了跨迭代的模式、过去提案 diff 与接受/拒绝决定的审计轨迹、以及按时间排列的历史。Iteration 0 的技能提案被拒后，Proposer 据此在 Iteration 1 合成被接受的技能更新，并在后续用新模式证据继续精炼。文件内容为清晰起见做了简化。</figcaption>
+        </figure>
+
+        <h3>案例逐步拆解</h3>
+        <p>
+            这个案例把整套机制讲得很具体，值得逐步跟一遍：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>Iteration 0：</strong>Wiki Maintainer 识别出一种基础的循环行为，记进 <code>take-examine-move-loop.md</code>（Agent 拿起物品、检查、放回、再重复）。同时 Skill Proposer 提出一个偏抽象的技能 <code>goal-directed-action</code>，但它在验证集上没能提升（val score = 0.72），<strong>被拒</strong>。关键点：<code>skill-impact.md</code> 保留了这次提案的 diff 和拒绝结果。</li>
+            <li><strong>Iteration 1：</strong>由这份审计轨迹提示（“上次太抽象被拒”），Proposer 创建了 <code>break-repetition-loop</code>，带一条 <em>具体</em> 的动作规则——「Never Return an Item to Its Origin Location（永远不要把物品放回原位）」，验证分升到 0.78，<strong>被接受</strong>。它的 <code>PURPOSE.md</code> 明确写着“前一次 goal-directed-action 因太抽象被拒，本版更精简、用具体动作模式”。</li>
+            <li><strong>Iterations 2–4：</strong>新的循环变体在 rollout 中出现（<code>multi-operation-loop.md</code>：对同一物品循环操作却不检查是否完成），Wiki Maintainer 把新证据累积进持久 wiki。</li>
+            <li><strong>Iteration 4：</strong>在这些累积的模式和新轨迹指引下，Proposer 进一步精炼技能，加入新规则「Each Operation Type ONCE Per Item（每类操作对每个物品只做一次）」，并给出反模式「Take → Operate → Move → Take（无限循环）」及其修复。</li>
+        </ul>
+        <p class="mt-3">
+            这条链完美演示了三层如何协作：不可变轨迹提供事实，持久 wiki 累积“循环”这一类反复出现的失败模式与被拒历史，而技能层在被验证确实更好时才升级。<span class="highlight">被拒的 <code>goal-directed-action</code> 没有白费——它的失败成了下一版技能“别太抽象、要给具体规则”的依据</span>。这正是持久知识“复利”的直观体现。
+        </p>
+    </div>
+
+    <div class="card" id="practice">
+        <h2>11. 工程启发与边界</h2>
+        <h3>对做本地 Agent / 技能系统的人有什么启发</h3>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>把“记忆”和“可执行技能”分开。</strong>很多自建 Agent 直接把经验烧进一个越来越臃肿的系统提示或单一 skill 文件。WikiSkill 的教训是：让 <em>知识（wiki）</em> 和 <em>可执行指令（skill）</em> 各自演化——知识只增不减、可复利，技能可回滚、要门控。</li>
+            <li><strong>失败也要沉淀。</strong>被拒的方案、反复出现的错误、踩过的坑，比“最终技能文本”更值得长期保存。<code>skill-impact.md</code> + <code>logs.md</code> 这种“审计轨迹 + 时间线”的组合，能防止优化器反复提同一个坏主意。</li>
+            <li><strong>给优化器长记性，别给执行者抄近路。</strong>消融结论很实用：让“改进技能的那个 agent”看历史知识，但别让“执行任务的那个 agent”直接读知识库，否则会稀释技能进化的信号，也会让技能本身变弱。</li>
+            <li><strong>技能可迁移，但要区分“通用流程”与“模型专属绕坑”。</strong>若目标是跨模型复用，优先沉淀高层通用流程（如检索/推理骨架），谨慎对待那些为特定小模型写的低层 workaround——它们可能对强模型是负迁移。</li>
+            <li><strong>渐进式披露不仅用于执行，也可用于优化。</strong>Proposer 先拿索引、按需 <code>read_file</code> 拉细节的模式，值得借鉴到任何“需要分析大量历史轨迹”的自动化流程里。</li>
+        </ul>
+
+        <h3>论文自陈的局限</h3>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>没有评测技能检索/触发。</strong>为隔离“技能质量”这一变量，实验采用把技能全文直接注入提示的 full-injection 设定。当可用技能数量增大时，检索与触发会变成真问题，本文没有覆盖。</li>
+            <li><strong>严格的验证门控。</strong>要求每个被接受的提案都严格提升验证分，这会排除“暂时中性但可能为后续铺路”的提案。为与先前工作公平对比才这么设，探索更灵活的接受准则是未来方向。</li>
+            <li><strong>Wiki 会持续增长。</strong>持久知识库只增不重置，长期看会带来体量与维护成本问题（原文在 Limitations 中提到 wiki 持续累积……）。如何压缩、遗忘或分层管理知识，是自然的后续课题。</li>
+            <li><strong>验证集偏小带来噪声。</strong>沿用先前设定，各基准验证集较小，会给门控决定引入噪声；论文用三次独立运行 + bootstrap 检验来缓解，但这仍是评测上的固有限制。</li>
+        </ul>
+
+        <div class="note-box text-sm mt-4">
+            <p><strong>一句话总结：</strong>WikiSkill 的贡献不是“又一个技能进化算法”，而是提出并验证了一个结构性主张——<span class="highlight">在原始经验与可执行技能之间显式维护一层持久、复利的知识，是让技能进化长期有效的关键</span>。技能可回滚，知识不回滚；执行者不看知识，优化器带着知识长记性。这套“三层 + 非对称回滚”的设计，跨五模型五基准都被数据支持。</p>
+        </div>
+    </div>
+
+    <div class="card" id="figures">
+        <h2>12. Original Figures &amp; References</h2>
+        <p>
+            这一节保留论文原图，方便快速回看。Table 1（主结果）、Table 2（跨模型迁移）、Table 3（wiki 消融）的核心数值已分别融入第 6、8、9 节的表格与讨论中。
+        </p>
+        <div class="grid grid-cols-1 gap-6 mt-6">
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/wikiskill/wikiskill-diagram.png" alt="Figure 2 WikiSkill framework overview" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 2. Overview of the WikiSkill framework：三层知识架构与四步进化循环。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/wikiskill/wiki-demo.png" alt="Figure 3 case study of wiki-guided skill evolution" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 3. Case study of Wiki-guided skill evolution on ALFWorld (Qwen-3.6-27B)：持久 Wiki 层如何引导技能从被拒到被接受再到精炼。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/wikiskill/average_scaling.svg" alt="Figure 1 average accuracy scaling" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Figure 1. WikiSkill 相对基线与现有方法的平均准确率优势，随模型能力增强而扩大。</figcaption>
+            </figure>
+        </div>
+
+        <h3 class="mt-8">参考资料</h3>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><a href="https://arxiv.org/html/2608.27454v1" class="text-[color:var(--accent)] underline">WikiSkill: Compiling Agent Experience into Persistent Knowledge for Skill Evolution — arXiv HTML (2608.27454v1)</a>：本文最主要的一手来源，用于提取摘要、问题设定、三层架构、进化循环、算法、主结果（Table 1）、迁移（Table 2）、消融（Table 3）、动态（Table 4/5）、案例研究与附录复杂度分析。</li>
+            <li><a href="https://arxiv.org/abs/2608.27454" class="text-[color:var(--accent)] underline">WikiSkill arXiv 摘要页</a>：用于核对作者、机构与版本信息。</li>
+            <li><a href="https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview" class="text-[color:var(--accent)] underline">Anthropic Agent Skills 官方文档</a>：一手资料，用于核对 SKILL.md 结构、文件系统式技能与 progressive disclosure 的准确定义（论文对“技能”的定义基础）。</li>
+            <li><a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f" class="text-[color:var(--accent)] underline">Andrej Karpathy — “LLM Wiki” gist</a>：本文核心灵感来源，解释了“把原始来源增量编译进持久 wiki”相对经典 RAG 的区别。</li>
+            <li><a href="https://karpathy.bearblog.dev/sequoia-ascent-2026/" class="text-[color:var(--accent)] underline">Karpathy — Sequoia Ascent 2026 summary</a>：补充 LLM Wiki 模式的动机与“不要只问检索、而要问如何编译知识”的观点。</li>
+            <li>先前技能进化方法（用于对比）：EvoSkill（Alzubi et al., 2026）、Trace2Skill（Ni et al., 2026）、SkillOpt（Yang et al., 2026，六阶段 ReflACT 流程）；ReAct（Yao et al., 2023）为 Skill Proposer 的交互范式基础。</li>
+        </ul>
+    </div>
+</BaseLayout>
