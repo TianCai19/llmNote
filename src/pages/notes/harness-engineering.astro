@@ -1,0 +1,760 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: 'Harness Engineering：把“模型外面那层系统”做成可优化的自我改进对象',
+    description: '系统梳理 Lilian Weng《Harness Engineering for Self-Improvement》：从 harness 设计模式、上下文/工作流/代码优化，到自我进化、进化搜索、权重联合优化与 RSI 的真实瓶颈。',
+    tags: ['Agent', 'Harness', 'Self-Improvement', 'Systems', 'RSI'],
+    readTime: '34 min',
+    createdAt: '2026-09-17'
+};
+---
+
+<BaseLayout title="Harness Engineering：把“模型外面那层系统”做成可优化的自我改进对象" description="从 recursive self-improvement 的视角，系统理解 harness 的设计模式与优化路径：context engineering、workflow design、self-improving harness、evolutionary search、joint optimization 与未来挑战。">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Agent Systems / Harness / Self-Improvement</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Harness Engineering：把“模型外面那层系统”做成可优化的自我改进对象</h1>
+        <p class="text-xl text-gray-500">从 recursive self-improvement 出发，理解 harness 为什么正在从“工程技巧”变成“优化目标”</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>1. 背景：为什么要谈 harness，而不是只谈“更强的模型”？</h2>
+        <p>
+            这篇笔记的主线来自 Lilian Weng 的博客文章 <em>Harness Engineering for Self-Improvement</em>。它想回答一个越来越现实的问题：
+            当基础模型的原始智能（比如预训练刚结束时的 eval 表现）逐渐趋同时，<span class="highlight">决定一个 AI 系统实际有多好用的，究竟是模型本身，还是模型外面那层把它接入真实世界的系统？</span>
+        </p>
+        <p>
+            文章给出的判断很明确：这层“系统”——也就是 <strong>harness</strong>——正在变得和模型的原始智能同等重要。作者对 harness 的定义值得逐字读一遍：
+            harness 是围绕基础模型的那套系统，它负责编排执行，并决定模型如何思考与规划、如何调用工具与行动、如何感知与管理上下文、如何存储工件、以及如何评估结果。
+        </p>
+        <div class="note-box mt-4 text-sm">
+            <p><strong>一句话理解 harness：</strong>它不是模型参数，也不是一句 prompt，而是“模型的运行时 + 操作系统”——负责让模型在真实任务里能观察、能行动、能记忆、能自检、能改进。Claude Code、Codex 这类成功的编码 agent 产品，本质上都是很强的 harness。</p>
+        </div>
+        <p class="mt-4">
+            为什么把 harness 放到“自我改进”的框架里谈？这要回到 <strong>recursive self-improvement（RSI，递归自我改进）</strong> 这个古老的概念。
+            I. J. Good 在 1965 年就设想过一台“超智能机器”：它在一切智力活动上超过人类，并能设计出更好的机器来改进自己。
+            Yudkowsky（2008）把“recursive self-improvement”用来专指一个具体的反馈回路：AI 用它当前的智能，去改进那套“生产它智能的认知机器”。
+        </p>
+        <p>
+            在现代 AI 语境下，这个回路可以是模型直接改写自己的权重，但更现实、更宽泛的版本是：<strong>模型改进它的训练流水线和部署系统，从而催生一个性能更好的继任模型</strong>。
+            文章特意点出“部署系统”这个词，因为“原始模型”和“真实世界上下文”之间那一层，看起来和模型的原始智能一样关键。这篇文章正是围绕 harness 工程如何服务于 RSI 展开的。
+        </p>
+        <div class="quote-block mt-6">
+            <p>与 2023 年那种“agent = LLM + memory + tools + planning + action”的早期框架相比，harness 工程额外包含了 workflow 设计（例如 loop engineering）、评估、权限控制和持久状态管理。它已经不再只是 prompt 模板，而更接近运行时与软件系统设计。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>2. 一个贯穿全文的心智模型：harness 就像操作系统</h2>
+        <p>
+            在真正拆解各种模式和算法之前，先建立一个统一的心智模型会很有帮助。文章反复强调一个类比：<strong>harness 之于 agent，就像操作系统之于应用程序</strong>。
+            OS 的价值在于：它把复杂逻辑封装起来，同时对上层暴露一个简单、稳定、通用的接口（文件、进程、系统调用）。一个好的 harness 也应该如此——
+            把上下文管理、工具编排、权限判断、子进程调度这些复杂机制封装好，对模型只暴露一组干净、通用、可泛化的接口。
+        </p>
+        <p>
+            这个类比背后其实有一条重要的设计原则：<strong>harness 的设计应当刻意保持简单和通用，以便获得泛化能力</strong>。
+            如果 harness 里塞满了针对某个任务的启发式规则，它就很难迁移，也很难被自动优化；反过来，如果它尽量贴近既有软件工程实践（bash、文件系统、git、diff、patch），它就能直接吃到模型预训练里已有的知识红利。
+            文章也预测：随着行业发展，配置格式、工具接口、协议会逐渐标准化——这同样是 OS 生态演化过的路。
+        </p>
+        <p>
+            带着“harness = agent 的操作系统”这个视角，后面所有内容就有了一条清晰主线：先看 harness 有哪些通用的<strong>设计模式</strong>（相当于 OS 的核心机制），再看这些机制如何一步步变成可以被<strong>自动优化甚至自我进化</strong>的对象（相当于让系统自己写自己的 OS）。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>3. Harness 设计模式（一）：Workflow Automation——让模型能操作、测试、迭代</h2>
+        <p>
+            第一个也是最基础的设计模式是<strong>工作流自动化</strong>。它的核心不是“给模型一个更花哨的 prompt”，而是<strong>定义一个模型可以在其中操作、测试并迭代的工作流</strong>。
+            一个常见的工作流遵循目标导向的循环：规划（plan）→ 执行（execute）→ 观察/测试（observe/test）→ 改进（improve）→ 再执行，直到达成目标为止。
+            这个过程中，模型还可以主动向用户发起请求，澄清任务规格或执行偏好。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/openai-agent-loop.png" alt="Simplified Codex agent loop" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 1. 一个简化的 Codex agent loop：agent 调用工具，工具的返回会影响模型的下一次生成。（图片来源：OpenAI codex agent post）</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            这里有个容易被忽略的细节：workflow 图强调的不是“把步骤画出来”，而是<strong>让模型能分析自己的轨迹（trajectory）和失败案例，然后基于这些反馈迭代自己的进展</strong>。
+            换句话说，进步发生在一个“agent runtime”里，而不是发生在一个静态的 prompt 模板里。
+            Karpathy 的 autoresearch 仓库就是这种工作流的一个干净示例：它展示了如何把“计划—执行—测试—改进”这条循环搭建成一个真正可运行的系统。
+        </p>
+        <p>
+            为什么这一点关键？因为“循环”本身就是把智能放大成结果的机制。一次生成可能出错，但一个能观察反馈、能重试、能自我修正的循环，能把“单次成功率不高的模型”变成“多次迭代后成功率很高的系统”。
+            harness 在这里的职责，就是把这个循环做得可靠、可观察、可恢复。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>4. Harness 设计模式（二）：File System as Persistent Memory——把状态写进文件</h2>
+        <p>
+            第二个模式针对长程任务里最棘手的问题：状态和工件会膨胀到远超上下文窗口。文章的建议非常朴素但重要——<strong>harness 不应该把整个工作流和所有日志都扛在上下文里，而应该把持久状态保存在文件中</strong>。
+        </p>
+        <p>
+            在长程 agentic rollout 中，实验日志、代码 diff、论文摘要、错误堆栈、历史 rollout 轨迹这些工件，往往会比模型训练时见过的上下文窗口长得多。
+            如果这些东西全塞进 prompt，不仅塞不下，而且会稀释真正重要的信息。把它们落到文件系统里，模型就可以按需读取、写入、编辑，而不是被迫一次性吞下所有内容。
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>为什么“文件”是特别好的载体？</strong>因为学会用 <code>bash</code> 命令读、写、编辑文件系统，本身就是 LLM 的一项基础技能。用最朴素的“文件”形式来管理持久记忆，能天然吃到核心模型能力的进步红利——模型越会用 shell，这套记忆机制就越好用，而不需要额外发明一套私有的记忆协议。</p>
+        </div>
+        <p class="mt-4">
+            这条设计模式和后面会讲到的 ACE、MCE、Meta-Harness 其实一脉相承：它们把上下文函数、skill、甚至整个 harness 的源码，都实例化成“某个目录下的一组文件”。
+            一旦状态是文件，模型就能用 <code>grep</code>、<code>cat</code> 去检索历史，而不是把一切都倒进单一 prompt；也能在中断后恢复，并对自己的执行历史进行推理。文件系统在这里既是记忆，也是可审计的证据链。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>5. Harness 设计模式（三）：Sub-agent 与 Backend Jobs——把并行做成显式、可检查的</h2>
+        <p>
+            第三个模式是<strong>子智能体与后台任务</strong>。harness 可以派生多个 subagent 并行执行，并监控后台任务。
+            这在主 agent 需要同时探索多个假设、并发跑实验、或者把隔离子任务外包出去（而又不想污染主上下文）时特别有用。
+            此时父 agent 需要的其实是一个小型进程管理器：启动任务、检查日志、取消失败的运行、把结果合并回主线程。
+        </p>
+        <p>
+            文章点出了这里最关键的设计选择：<strong>让并行显式化、可检查（explicit and inspectable）</strong>。
+            如果 subagent 的输出只活在一个短暂的 chat 上下文里，它们很快就会过期、被隐藏，主 agent 无从追溯。
+            但如果它们被存成文件、日志和状态记录，模型就能在中断后恢复，并对自己的执行历史进行推理。这又回到了“文件即记忆”的思想：并行不是“开几个线程就完事”，而是要让每条并行分支都留下可查询的痕迹。
+        </p>
+        <div class="quote-block mt-6">
+            <p>前三个模式其实指向同一个内核：把“临时的、藏在上下文里的东西”，尽量变成“持久的、显式的、可检查的系统状态”。循环让迭代可靠，文件让记忆持久，子进程让并行可控——这三者合起来，才撑得起真正的长程 agent。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>6. 案例研究：编码 Agent 的 Harness 已经趋同</h2>
+        <p>
+            这些抽象模式落到最成熟的场景，就是<strong>编码 agent</strong>。文章指出一个有意思的事实：主流编码 agent 的核心接口已经在 Claude Code、Codex、OpenCode、Cursor 风格的 agent 之间趋于稳定。
+            它们普遍使用一个类似的循环：给模型一组工具，让它像人类开发者用 IDE 一样，在给定仓库里开发和调试问题。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/coding-harness-loop.png" alt="Coding agent harness loop" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 2. 编码 agent harness 的通用循环：agent 借助一组工具，在真实仓库中开发、运行测试、观察反馈并迭代。（图片来源：Lil'Log harness post）</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            工具集本身很能说明 harness 到底封装了什么。下面这张表整理了文章给出的（非穷尽）分组，读的时候可以把它当成“一个编码 agent 的 syscall 列表”：
+        </p>
+
+        <div class="overflow-x-auto mt-6">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">分组</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">代表性工具</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">文件系统</td>
+                        <td class="px-4 py-3">发现：<code>glob</code>、<code>grep</code>、<code>ls</code>；读取：<code>read</code>、<code>read_many</code>；修改：<code>write</code>、<code>edit</code>（精确字符串替换）、<code>multi_edit</code>、<code>apply_patch</code>（应用结构化 diff）</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Shell 执行</td>
+                        <td class="px-4 py-3"><code>bash</code>、<code>PowerShell</code></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">IO / 版本控制</td>
+                        <td class="px-4 py-3"><code>lsp</code>，以及 <code>git_status</code>、<code>git_diff</code>、<code>git_commit</code> 等 git 工具</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">外部上下文</td>
+                        <td class="px-4 py-3">MCP 工具、Skills</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Web 搜索</td>
+                        <td class="px-4 py-3"><code>web_search</code>、<code>web_fetch</code>、浏览器工具</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">工件</td>
+                        <td class="px-4 py-3">读取文档、图片；生成 HTML、图片</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">后台进程</td>
+                        <td class="px-4 py-3"><code>CronCreate</code>、<code>CronDelete</code>、<code>CronList</code></td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Agent 委派</td>
+                        <td class="px-4 py-3"><code>spawn_agent</code>、<code>resume_agent</code>、<code>wait_agent</code>、<code>list_agents</code>、<code>close_agent</code>、<code>interrupt_agent</code> 等</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p class="mt-6">
+            把这张表和前面三个模式对照看，就能发现它们严丝合缝：文件系统工具对应“文件即记忆”，后台进程与 agent 委派对应“子进程与并行”，而整套工具被组织进“计划—执行—验证”循环，对应“工作流自动化”。
+            编码 agent 之所以是 harness 研究的最佳案例，正是因为它把这三个模式全都落地成了可运行、可评测的真实产品。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>7. Harness 层 vs 核心智能：近期 RSI 的现实路径</h2>
+        <p>
+            一个自然的疑问是：未来的 RSI 到底有多依赖 harness 工程？会不会最终模型强到可以直接改写自己的权重，把 harness 这层给“吃掉”？
+            文章的判断偏向务实：<strong>近期的 RSI 路径不太可能一上来就是“模型直接改权重”</strong>。它给出的现实预测分两步：
+        </p>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-2 mt-3">
+            <li><strong>harness 工程会朝“元方法论”方向演化</strong>——也就是去改进“获得更好答案的机器”，而不只是改进答案本身。harness 系统自身会变成一个优化目标，启发式规则越来越少，通用机制越来越多。</li>
+            <li><strong>成熟的 harness 反过来使能模型自我改进的 auto-research 回路</strong>；而更聪明的模型又能防止 harness 过度工程化，让整个系统保持可持续。</li>
+        </ol>
+        <p class="mt-4">
+            最终，许多 harness 改进可能会被<strong>内化（internalized）</strong>进核心模型的行为里，但与外部上下文和工具交互的那个接口应该会保留下来。
+            文章拿 prompt engineering 的历史做了一个很好的类比：随着 instruction tuning 和模型推理能力提升，手工 prompt 技巧变得不那么核心了，但<strong>指定目标、约束、上下文和评估标准的需求，从来没有消失</strong>。
+            harness 很可能也是这样：具体技巧会被模型能力稀释，但“如何组织执行、如何管理状态、如何评估”这层结构性需求会长期存在。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>8. Harness 优化的主线：被优化对象在不断上移</h2>
+        <p>
+            从设计模式转向优化，文章给出了一条极其重要的主线——<strong>harness 系统里“被优化的对象”是逐级上移的</strong>：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\text{instruction prompts} \;\rightarrow\; \text{structured context} \;\rightarrow\; \text{workflow} \;\rightarrow\; \text{harness code} \;\rightarrow\; \text{optimizer code}
+$$`}></div>
+        <p class="text-sm text-gray-600 mt-3">
+            也就是：一开始我们优化的是“指令 prompt”；然后是“结构化上下文”；再往上是“工作流”；再往上是“harness 的源码”；最上层甚至是“优化器本身的代码”。
+        </p>
+        <p class="mt-4">
+            这条链条背后的逻辑是：<strong>模型越智能、越强大，我们就越敢把优化目标换成更复杂、更通用的东西</strong>。
+            弱模型只能优化 prompt 这种低维、易评估的对象；强模型才能安全地去优化整个 harness 的代码，甚至去优化“怎么优化 harness”的代码。
+            接下来的几节，正是沿着这条链条从下往上走：先是 context engineering（结构化上下文），再是 workflow design（工作流），再是 self-improving harness（harness 代码 / 优化器代码），最后是 evolutionary search 和 joint optimization。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>9. Context Engineering：把上下文当成会演化的 playbook</h2>
+        <p>
+            随着 agentic 任务的时间跨度显著变长，简单地把所有工具返回和模型生成都追加进上下文，会迅速失控。
+            上下文工程就是在模型和持久状态之间加一层，构造出更结构化、更精炼的上下文。文章也坦率地承认：长上下文研究会持续进步，但当下，长上下文智能和上下文工程有时是交织在一起的——不是非此即彼。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">9.1 ACE：把上下文写成带 ID 的条目化 playbook</h3>
+        <p>
+            <strong>Agentic Context Engineering（ACE, Zhang et al. 2025）</strong> 的核心思想是：把上下文当成一本<strong>会不断演化的 playbook</strong>，而不是一段越来越长的 prompt。它用三个组件来维护一本由 bullet point 组成的上下文 playbook，每个 bullet 都带一个标识符和一段描述：
+        </p>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-2">
+            <li><strong>Generator（生成器）：</strong>参考 bullet points，产生任务轨迹。</li>
+            <li><strong>Reflector（反思器）：</strong>从成功和失败的轨迹中提炼洞见。</li>
+            <li><strong>Curator（策展器）：</strong>用增量、条目化的方式更新结构化上下文。</li>
+        </ol>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/ace.png" alt="Agentic Context Engineering framework" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 3. Agentic Context Engineering（ACE）框架：Generator → Reflector → Curator 组成一个自我维护的上下文演化回路。（图片来源：Zhang et al. 2025）</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            这里有一个很关键的设计，用来防止“上下文坍缩（context collapse）”和“简洁性偏置（brevity bias）”——也就是反复重写时上下文越写越短、越写越空：
+            <strong>curator 不会去重写一整个 prompt blob，而是输出一组结构化、条目化的 bullet，形如 (identifier, description)</strong>；
+            这些 bullet 再用确定性逻辑合并进一本结构化的上下文日志，并周期性地精炼、去重。
+            这一步之所以重要，是因为它把“更新上下文”这个动作从“自由重写”变成了“对条目集合做增量编辑”，从而保住了积累下来的知识不被一次糟糕的重写抹掉。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">9.2 MCE：把“怎么管上下文”和“上下文里放什么”分开</h3>
+        <p>
+            ACE 已经能从 rollout 里学到洞见，朝“自管理记忆”迈了一步，但它的更新规则和整体工作流仍然是手工设计的。
+            <strong>Meta Context Engineering（MCE, Ye et al. 2026）</strong> 更进一步：它把<strong>机制（如何管理上下文）</strong>和<strong>工件内容（上下文里放什么）</strong>分离开——在元优化层跑“skill 进化”，在基础层跑“上下文优化”。
+        </p>
+        <p>
+            形式化地讲，一个 MCE 的 skill <span set:html={String.raw`$s \in \mathcal{S}$`}></span> 定义了一个上下文函数 <span set:html={String.raw`$c_s=(\rho_s, F_s)$`}></span>，把输入 <span set:html={String.raw`$x$`}></span> 映射成上下文 <span set:html={String.raw`$c = F_s(x; \rho_s)$`}></span>，其中：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><span set:html={String.raw`$\rho_s = \{\rho_1,\dots,\rho_m\}$`}></span> 是<strong>静态组件</strong>（prompt、知识库、代码库）。</li>
+            <li><span set:html={String.raw`$F_s = \{F_1,\dots,F_k\}$`}></span> 是<strong>动态算子</strong>（搜索、选择、过滤、格式化）。</li>
+        </ul>
+        <p class="mt-4">
+            它把优化写成一个双层（bi-level）问题：内层在给定 skill <span set:html={String.raw`$s$`}></span> 下、在训练数据上找最优上下文；外层在验证集上找能带来最佳性能的最优 skill：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\text{Inner: } c_s^{*}=\arg\max_{c_s} J_\text{train}(c_s; s) \qquad
+\text{Outer: } s^{*}=\arg\max_{s\in\mathcal{S}} J_\text{val}(c_s^{*})
+$$`}></div>
+        <p>
+            skill 数据库会记录历史上的 skill、上下文函数和评测指标 <span set:html={String.raw`$\mathcal{H}_{k-1} = \{(s_i, c_i, J_i^\text{train}, J_i^\text{val})\}_{i=1}^{k-1}$`}></span>。
+            一个元层 agent 会在历史 skill 上做<strong>agentic crossover</strong>（借鉴进化算法里的“交叉”），针对任务 <span set:html={String.raw`$\tau$`}></span> 生成新 skill：<span set:html={String.raw`$s_k = \text{crossover}(\tau, \mathcal{H}_{k-1})$`}></span>。
+            然后一个基础层的 context engineer 执行这个 skill，并从 rollout 反馈 <span set:html={String.raw`$\mathcal{R}_k$`}></span> 中学习上下文函数：<span set:html={String.raw`$c_k = \text{engineer}(\tau, s_k; c_{k-1}^{*}, \mathcal{R}_k)$`}></span>。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/mce.png" alt="Meta Context Engineering framework" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 4. Meta Context Engineering（MCE）：元层 skill 进化在“上下文管理机制”上搜索，基础层则优化具体任务上下文。（图片来源：Ye et al. 2026）</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            与 ACE 强制一套“如何组织上下文”的启发式规则不同，MCE 用<strong>自由形式的 skill</strong>来存放某个任务最重要的知识，并让 skill 和 skill 条件下的上下文一起迭代进化。
+            实现上，一个上下文函数 <span set:html={String.raw`$c$`}></span> 被实例化为某个专属目录下的一组文件，既包含静态部分（<code>skill.md</code>），也包含动态部分（上下文和数据 rollout）。
+            元层和基础层的优化都在标准工具集的 agentic coding 环境里执行：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{T}=\{\texttt{Read},\texttt{Write},\texttt{Edit},\texttt{Bash},\texttt{Glob},\texttt{Grep},\texttt{TodoWrite}\}
+$$`}></div>
+        <p class="mt-2">
+            这个细节非常呼应前面“文件即记忆”的模式：上下文函数不是抽象对象，而就是一堆能被 <code>Read/Write/Edit/Grep</code> 操作的文件。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">9.3 Meta-Harness：直接优化“决定存/取/呈现什么”的那段代码</h3>
+        <p>
+            <strong>Meta-Harness（Lee et al. 2026）</strong> 再深入一层：它优化的对象是<strong>那段决定并优化“该存什么、该取什么、该向模型呈现什么”的代码本身</strong>。名字里的“Meta-”就是指——它是一个用来优化 harness 的 harness。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/meta-harness-outer-loop.png" alt="Meta-Harness outer loop" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 5. Meta-Harness 的外层优化算法：一个 coding agent 充当提议者，不断生成新的 harness 候选。（图片来源：Lee et al. 2026）</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            它的几个设计选择很有代表性：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li>创建新 harness 的<strong>提议者本身就是一个 coding agent</strong>，最终输出是一批位于 Pareto 前沿上的 harness 候选。</li>
+            <li>整个执行历史通过文件系统访问，coding agent 用 <code>grep</code>、<code>cat</code> 这类命令去读，而不是把一切都铲进单一 prompt。</li>
+            <li>被提议的 harness 是文件系统里的一个字典，里面装着它自己的源码、分数、rollout 轨迹和状态更新。</li>
+            <li>meta-harness 循环不断创建新 harness，只有合格的才被保留。</li>
+        </ul>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/meta-harness.png" alt="Meta-Harness performance" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 6. Meta-Harness 的性能：（左）文本分类任务上少量迭代即见效；（右）TerminalBench-2。注意 TerminalBench-2 实验是从 Terminus-KIRA、Terminus-2 两个很强的 harness 初始化的。（图片来源：Lee et al. 2026）</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            这里的关键教训很清楚：<strong>一旦 harness 设计变成一个可执行的搜索空间，一个强大的 coding agent 就能利用人类工程师用的那套设计空间来自我改进</strong>。
+            这也正是第 8 节那条“被优化对象上移”主线的兑现——从 prompt 一路走到了“harness 代码”甚至“优化器代码”。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>10. Workflow Design：从专家手工设计到把工作流当搜索问题</h2>
+        <p>
+            工作流是 harness 的另一大组成部分。它可以由领域专家手工设计，也可以被自动搜索。文章先给了几个手工设计的代表，再过渡到“把工作流设计本身当成优化问题”。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">10.1 手工设计的 auto-research 工作流</h3>
+        <p>
+            以 auto-research 为例，<strong>AI Scientist（Lu et al. 2026）</strong> 搭了一条完整流水线：提出研究想法 → 写代码 → 跑实验 → 分析结果 → 撰写论文 → 做同行评审。
+            <strong>ScientistOne（Meng et al. 2026）</strong> 则把“可验证性”当成中心设计约束：每一个断言（引用、数值、方法论、结论）都必须能追溯到一个证据来源，并由 Chain-of-Evidence 检查来审计。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/ai-scientist.png" alt="AI Scientist pipeline" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 7. AI Scientist 流水线：想法生成、实验、论文撰写与评审。（图片来源：Lu et al. 2026）</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            <strong>Autodata（Kulikov et al. 2026）</strong> 则被设计成一个“数据科学家”，用来生成训练和评估数据。主 agent 管理一个 <em>challenger</em>（出题者）、一个 <em>weak solver</em>（弱解答者）、一个 <em>strong solver</em>（强解答者）和一个 <em>verifier/judge</em>（验证/裁判），
+            目标是合成“难度刚刚好”的数据——刚好让强解答者做对、弱解答者做错。challenger 的 prompt 会根据 solver 和 verifier 的反馈迭代更新。
+        </p>
+        <p>
+            文章也点出了 Autodata 的局限：合成任务只用来微调弱解答者，而不用来提升强解答者。如果这个回路不能迭代地改进强模型，那它更像是“在生成出来的 prompt 分布上做间接蒸馏”，RSI 的味道就淡了。
+            这个批评很有价值——它提醒我们判断一个自我改进系统时，要看它到底改进的是不是“最强的那个组件”。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/autodata.png" alt="Autodata workflow" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 8. Autodata 的 agentic 工作流：围绕 challenger、solver、verifier 三类角色生成合成训练/评估数据。（图片来源：Kulikov et al. 2026）</figcaption>
+        </figure>
+
+        <h3 class="text-teal-700 mt-8">10.2 ADAS：让 meta-agent 用代码去编写新工作流</h3>
+        <p>
+            工作流的设计空间是<strong>巨大的</strong>，所以自然可以把工作流设计看成一个搜索问题，用算法而不是纯手工去找好方案。
+            <strong>Automated Design of Agentic Systems（ADAS, Hu et al. 2025）</strong> 把 agent 设计本身表述成一个优化问题，即“meta-agent search”，由一个 meta-agent 去提议新的 agentic 工作流设计：
+        </p>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-2">
+            <li>用简单 agent（如 CoT、self-refine）初始化一个 agentic 工作流的归档库（archive）。</li>
+            <li>让 meta-agent 借鉴归档库中已有的方案，用<strong>代码</strong>编写新 agent：先生成新工作流的高层描述，再实现成代码；草稿程序再经过两轮 self-refine（先让模型给反馈，再让同一个模型据此改进）来检查新颖性。</li>
+            <li>评估每个新候选，把成功的加回归档库。</li>
+            <li>重复第 2–3 步，直到达到最大迭代次数。</li>
+        </ol>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/adas.png" alt="ADAS illustration" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 9. Automated Design of Agentic Systems（ADAS）示意：meta-agent 用代码提议新的 agentic 工作流。（图片来源：Hu et al. 2025）</figcaption>
+        </figure>
+
+        <h3 class="text-teal-700 mt-8">10.3 AFlow：把工作流表示成图，用 MCTS 搜索</h3>
+        <p>
+            <strong>AFlow（Zhang et al. 2025）</strong> 把 agentic 工作流表示成一张图：节点是调用 LLM 的动作，边用代码实现逻辑操作。工作流优化依赖 <strong>MCTS（蒙特卡洛树搜索）</strong>：
+        </p>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-2">
+            <li>用一个模板初始化起始工作流 <span set:html={String.raw`$W_0$`}></span>，放进树里。</li>
+            <li>用“分数 + 均匀探索”的软混合策略选择一个工作流节点。</li>
+            <li>让 LLM 根据该节点的评测表现，产出一个修改后的工作流来扩展它。</li>
+            <li>执行并评估新工作流。</li>
+            <li>如果新工作流在 <span set:html={String.raw`$N$`}></span> 轮预算内显示出改进，就把它加回树中。</li>
+            <li>重复第 2–5 步，当 top-<span set:html={String.raw`$k$`}></span> 平均分数趋于平台或耗尽预算时停止。</li>
+        </ol>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/aflow.png" alt="AFlow optimization" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 10. AFlow 在一棵工作流候选树上进行优化的过程。（图片来源：Zhang et al. 2025）</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            AFlow 在 QA、代码、数学任务上的实验表明，它相比手工设计的工作流和 ADAS 都有不错的提升。这印证了一个方向性判断：<strong>工作流是可以被搜索的，而不只是被手写的</strong>。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/aflow-exp.png" alt="AFlow experiments" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 11. AFlow 与手工方法及 ADAS 的对比实验。（图片来源：Zhang et al. 2025）</figcaption>
+        </figure>
+    </div>
+
+    <div class="card">
+        <h2>11. Self-Improving Harness：代码是定义系统的通用语言</h2>
+        <p>
+            无论是上下文工程还是工作流设计，都只是 harness 的一部分。真正的目标是<strong>把整个设计空间一起搜索、一起优化</strong>——上下文管理逻辑、工作流、权限，以及许多其他 harness 组件。
+            正如 Meta-Harness、ADAS、AFlow 所展示的，<strong>✨代码✨是定义程序和系统的通用语言</strong>。
+            说白了，harness 就是一段代码，它把 prompt、工具调用、subagent、控制流、记忆和工作流逻辑编排在一起。
+            如果一个 LLM 能优化“执行 agent 的那段代码”，它能触及的设计空间就<strong>远大于</strong>手写 prompt 所能触及的。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">11.1 STOP：不改进解，而是改进“改进器”</h3>
+        <p>
+            <strong>Self-Taught Optimizer（STOP, Zelikman et al. 2023）</strong> 是“递归 scaffolding 改进”的早期例子之一。
+            在第 <span set:html={String.raw`$t=0$`}></span> 步有一个种子改进器 <span set:html={String.raw`$I_0$`}></span>，它接收一个初始解 <span set:html={String.raw`$s$`}></span>、一个效用函数 <span set:html={String.raw`$u$`}></span> 和一个黑盒语言模型 <span set:html={String.raw`$M$`}></span>，返回一个改进后的解 <span set:html={String.raw`$s'$`}></span>，即 <span set:html={String.raw`$s' = I(u, s; M)$`}></span>。
+            STOP 的目标不是直接改进 <span set:html={String.raw`$s$`}></span>，而是<strong>改进改进器 <span set:html={String.raw`$I$`}></span> 本身</strong>。
+        </p>
+        <p>
+            首先，把<strong>元效用（meta-utility）</strong>定义为给定改进器 <span set:html={String.raw`$I$`}></span> 在一组下游任务 <span set:html={String.raw`$\mathcal{D}$`}></span> 上的平均效用：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\hat{u}(I) \triangleq \frac{1}{\vert\mathcal{D}\vert}\,\mathbb{E}_{(u,s)\sim \mathcal{D}}\big[u(I(u,s; M))\big]
+$$`}></div>
+        <p>
+            由于“改进改进器”本身也是一个优化问题，我们就能通过一次自我改进更新，基于 <span set:html={String.raw`$I_{t-1}$`}></span> 用元效用衡量的表现，递归地得到新版本 <span set:html={String.raw`$I_t$`}></span>：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+I_t = I_{t-1}(\hat{u}, I_{t-1}; M)
+$$`}></div>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/STOP-algo.png" alt="STOP algorithm" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 12. Self-Taught Optimizer（STOP）的算法。（图片来源：Zelikman et al. 2023）</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            实验里，被改进的改进器自发地发现了各种策略：遗传算法、分解并改进各部分、多臂 prompt 老虎机、模拟退火、变温度、beam/tree search 等。
+            这非常类似于“一个 harness 工作流本身可以作为优化对象”。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/STOP-patterns.png" alt="STOP discovered strategies" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 13. STOP 自发发现的若干自我改进策略。（图片来源：Zelikman et al. 2023）</figcaption>
+        </figure>
+
+        <div class="note-box text-sm mt-6">
+            <p><strong>一个必须记住的“警示性结论”：</strong>STOP 用 GPT-4 能逐轮提升下游平均表现，但换成更弱的模型（GPT-3.5、Mixtral）反而会退化。这说明<strong>光有递归结构还不够——基础模型必须足够强，才能真正改进这套机制</strong>。harness 改进能让模型被更好地部署，但智能本身仍是核心。</p>
+        </div>
+
+        <h3 class="text-teal-700 mt-8">11.2 harness-updating ≠ harness-benefit</h3>
+        <p>
+            <strong>Lin et al. (2026)</strong> 更细致地研究了 harness 进化对模型能力的依赖，把它拆成两个正交的轴：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>harness-updating：</strong>产出有用的 harness 编辑的能力。</li>
+            <li><strong>harness-benefit：</strong>利用被更新后的 harness、从而更好地解决任务的能力。</li>
+        </ul>
+        <p class="mt-3">
+            这个区分之所以重要，是因为它解释了为什么“会改 harness”和“能从改后的 harness 获益”并不是同一件事——一个模型可能擅长其中一个而不擅长另一个。
+            这为如何评估自我进化 agent 提供了更清晰的分析框架。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">11.3 AHE：可观察性驱动、证据驱动的自动进化</h3>
+        <p>
+            <strong>Agentic Harness Engineering（AHE, Lin et al. 2026）</strong> 关注编码 agent harness 的“可观察性驱动的自动进化”。它有两个很值得注意的设计约束：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>只做 harness-only 编辑：</strong>禁用一整类奖励作弊手段（例如禁用验证器、替换模型、抬高推理预算），从而让每一份记录到的收益都能归因到 harness 编辑本身。</li>
+            <li><strong>编辑必须证据驱动：</strong>每条编辑都要有一个 manifesto 条目——失败证据的名字、推断出的根因、针对性的修复，以及一个包含“预期修好项”和“有回归风险项”的影响预测。</li>
+        </ul>
+        <p class="mt-3">
+            在 Terminal-Bench-2 上，AHE 除了 Hard 档以及少数几个自我进化基线（ACE、TF-GRPO）之外，表现优于人类设计的 harness（OpenCode、Terminus-2、Codex）。
+            更重要的是，同一个被冻结的 harness（不再继续进化）能迁移到 SWE-bench-verified，说明进化出来的 harness 是把工程经验编码进了 harness 组件里，而不是在做针对某个 benchmark 的过拟合。
+            这一点正好回应了 harness 优化的初衷：我们要的是可泛化的机制，不是刷榜技巧。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>12. Evolutionary Search：当搜索空间巨大、评估容易而梯度困难</h2>
+        <p>
+            进化搜索是一种受自然选择启发的优化方法：维护一个解的种群，通过变异（mutation）产生后代，只保留“适应度（fitness）”高的个体。
+            文章总结了它的适用条件：<strong>（1）搜索空间巨大或形状奇怪；（2）难以用梯度直接优化，但容易评估解的好坏</strong>。harness 搜索恰好非常契合这两点。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">12.1 从 Promptbreeder、GEPA 到 AlphaEvolve</h3>
+        <p>
+            进化搜索早已被用于 prompt 工程。<strong>Promptbreeder（Fernando et al. 2023）</strong> 通过一组丰富的变异操作来优化任务 prompt，有趣的是连“变异 prompt”（指导 LLM 去变异任务 prompt 的指令）本身也在被进化。
+            <strong>GEPA（Agrawal et al. 2025）</strong> 把基于反思的 prompting 和进化搜索结合，用对试错轨迹的自然语言反思来提议 prompt 更新。
+        </p>
+        <p>
+            <strong>AlphaEvolve（Novikov et al. 2025）</strong> 把它做成一个 coding-agent 的进化搜索系统：维护一个候选程序池，提示冻结的 LLM 生成用于改进的 diff。系统不断评估子程序、保留成功的，随时间发现更好的解。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/alphaevolve.png" alt="How AlphaEvolve works" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 14. AlphaEvolve 的工作方式。（图片来源：Novikov et al. 2025）</figcaption>
+        </figure>
+
+        <p class="mt-4">AlphaEvolve 有几个关键设计细节：</p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li>prompt 里包含父程序、结果、指令，有时还有元信息。</li>
+            <li>coding agent 可以访问整个仓库，但需要改进的代码区域会用 <code># EVOLVE-BLOCK-START</code> 和 <code># EVOLVE-BLOCK-END</code> 显式标出。</li>
+            <li>meta-prompt 会像进化解程序一样，和指令、上下文一起协同进化（由 LLM 提议）。</li>
+        </ul>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/alphaevolve-plot.png" alt="AlphaEvolve ablations" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 15. 消融实验展示了 AlphaEvolve 中若干设计（进化过程、prompt 中的上下文、meta-prompt、整文件进化、更强 LLM）的价值。（图片来源：Novikov et al. 2025）</figcaption>
+        </figure>
+
+        <h3 class="text-teal-700 mt-8">12.2 ShinkaEvolve / ThetaEvolve / DemoEvolve 的改进方向</h3>
+        <p>
+            近期变体各有侧重。<strong>ThetaEvolve（Wang et al. 2025）</strong> 把进化搜索与 RL、in-context learning 结合；
+            <strong>DemoEvolve（Che et al. 2026）</strong> 在自我 rollout 归档里加入人类专家演示，作为 harness 级别诊断与编辑的参考经验；
+            <strong>ShinkaEvolve（Lange et al. 2025）</strong> 则引入三个新组件来提升 LLM 采样效率：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li>更省样本的探索：设计父代采样，在“性能排名”和“后代数量”之间取得平衡。</li>
+            <li>代码新颖性拒绝采样：基于 embedding 余弦相似度，丢弃与现有种群过于相似的候选。</li>
+            <li>在 meta-scratchpad 中识别成功解里的好模式，用来指导未来的变异。</li>
+        </ul>
+
+        <h3 class="text-teal-700 mt-8">12.3 Darwin Gödel Machine：让 agent 修改自己的 harness 代码库</h3>
+        <p>
+            与上面“聚焦解改进”的方法不同，<strong>Darwin Gödel Machine（DGM, Zhang et al. 2025）</strong> 明确地把目标对准“可编辑 harness 代码库的进化”：一个基于 LLM 的 coding agent 被允许<strong>修改自己的 harness</strong>。
+            后续工作 Hyperagents（Zhang et al. 2026）还引入一个 meta-agent，来控制如何修改现有任务 agent 以创建新 agent。DGM 的流程是：
+        </p>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-2">
+            <li>池子里先放一个 coding agent。</li>
+            <li>每轮按“与表现成正比、与已有子代数量成反比”的概率挑一个父代，去修改并分叉出新 agent。</li>
+            <li>被选中的父代检查自己的 benchmark 评测日志，然后对自己的 harness 代码库提出改进，生成新版本 coding agent。代码编辑用两个基本工具实现：（1）bash（参数 <code>&lt;bash_command&gt;</code>）；（2）editor（参数 <code>view/create/edit &lt;file_path&gt;</code>）。</li>
+            <li>评估新 agent，只有表现足够高的才被加回池子。</li>
+            <li>重复第 2–4 步，直到触发某个停止条件。</li>
+        </ol>
+        <p class="mt-3">
+            DGM 是<strong>固定模型下的 harness 进化</strong>。在以 <code>Claude 3.5 Sonnet</code> 为基础模型、初始 harness 配置很简单的实验里，DGM 发现的 agent 在 SWE-bench Verified（20% → 50%）和 Polyglot（14.2% → 30.7%）上，与手工 agent 相当甚至更优。
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>这类方法的边界在哪里？</strong>它在“候选解能自动评估、适应度容易量化”时表现好——矩阵乘法、GPU kernel 优化、算法竞赛、数据中心调度。而在评估缓慢、模糊、或主要靠启发式判断的领域，它会很吃力。此外，进化的计算效率和有效性本身也是要担心的问题。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>13. Joint Optimization with Model Weights：让 harness 和权重一起更新</h2>
+        <p>
+            harness 进化改变的是模型周围那套<strong>非参数系统</strong>。要实现完整的自我改进，完全可以让模型在同一时间也更新自己的权重——通过改进训练流水线，或在测试时做持续学习（continual learning）。文章把 continual learning 留给未来专门写一篇。
+        </p>
+        <p>
+            <strong>SIA（Hebbar et al. 2026）</strong> 是把“harness 改进”和“模型参数更新”放进同一个优化回路的早期尝试，设计上有三个组件：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>Meta-Agent：</strong>提出初始 harness。</li>
+            <li><strong>Task-Specific Agent：</strong>执行任务。</li>
+            <li><strong>Feedback-Agent：</strong>根据近期轨迹，决定这一轮该更新 harness 还是更新模型权重。</li>
+        </ul>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/harness/SIA.png" alt="SIA framework" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">图 16. SIA 中的 Feedback-Agent 决定下一次迭代的类型（改 harness 还是改权重）。（图片来源：Hebbar et al. 2026）</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            文章对 SIA 的评价很克制：实验里存在一些混淆因素，让结果不好解读。比如 task-specific agent 用的模型（<code>gpt-oss-120b</code>）比 Meta-Agent 和 Feedback-Agent 用的（<code>Claude Sonnet 4.6</code>）弱得多，而且 baseline 太弱，难以和相关方法干净地交叉对照。
+            作者的态度是：<strong>方向有意思，但证据还是初步的</strong>；训练稳定性、Goodhart 效应等很多挑战仍然开放。
+            另外，<strong>Continual Harness（Karten et al. 2026）</strong> 在长程游戏场景里做了 harness 更新 + 协同学习策略模型的实验——用强教师模型在低回报轨迹上的标签做蒸馏。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>14. Future Challenges：为什么“写出论文”不等于“做出科学”</h2>
+        <p>
+            AI Scientist 这条线证明了：一个专家设计的 harness 能协调 auto-research 回路的相当大一部分（以写研究论文为实验形式）。
+            但文章提醒：<strong>论文产出不等于科学发现</strong>。一个系统可以写出看起来合理的手稿，却仍然带着虚构的引用、实现漂移或站不住脚的实验结果。
+        </p>
+        <p>
+            <strong>Trehan & Chopra（2026）</strong> 测试了“LLM 能否在最少 scaffolding 和基础工具（<code>read_file</code>、<code>write_file</code>、<code>llm_search</code>、<code>list_files</code>）下，从一个研究想法走到一篇论文”。
+            他们在三个领域（world models、multi-agent RL、AI safety & alignment）实验，每个领域有 45–50 篇高质量种子文档来启发想法；最终只有四个想法被人类专家选中跑完整流水线，只有一个被完整执行成论文。他们观察到六种反复出现的失败模式：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>偏向训练数据默认值：</strong>用旧库、过时命令、标准格式，或不基于实际仓库/数据集的假设。</li>
+            <li><strong>执行压力下的实现漂移：</strong>当实现变得技术复杂时，模型可能转向一个更常见、更简单的方案，而不是所提出的方法。</li>
+            <li><strong>记忆与上下文退化：</strong>长程项目会丢失关键细节，除非日志被写成持久工件。</li>
+            <li><strong>过度乐观：</strong>即便实验噪声大或失败，模型也宣称成功；这与 Bubeck et al.（2025）观察到的“p-hacking 和 eureka-ing”模式一致——模型会打上“数值胶带”，在信号还是噪声时就宣布胜利。</li>
+            <li><strong>领域智能不足：</strong>模型缺少隐性的手艺知识，比如预判实现复杂度、判断实验结果是否合理、知道哪些 baseline 才重要。</li>
+            <li><strong>科学品味薄弱：</strong>实验可能能跑，却没在回答正确的问题。</li>
+        </ul>
+        <p class="mt-4">
+            在这些具体失败模式之上，文章进一步列出了通往完整 RSI 的<strong>七个瓶颈</strong>，我把它们整理成一张表，方便对照记忆：
+        </p>
+
+        <div class="overflow-x-auto mt-6">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">瓶颈</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">核心问题</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">1. 弱而模糊的评估器</td>
+                        <td class="px-4 py-3">很多研究断言没有快速精确的验证器；自我改进回路在“指标可测量、客观”时才最有效，而研究品味、新颖性、长期科学价值极难度量。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">2. 上下文与记忆生命周期</td>
+                        <td class="px-4 py-3">agent 越自主，记忆越膨胀。harness 要管理上下文与记忆，弥补长上下文生成的局限。作者认为 context engineering 应成为智能的核心部分，而不只停在软件层。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">3. 负面结果</td>
+                        <td class="px-4 py-3">文献偏向成功，导致 LLM 不擅长决定何时放弃假设、报告负面结果或承认失败。好的 research harness 应让失败的尝试易于保存——从失败中学习是修剪搜索空间最好的方式。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">4. 多样性坍缩</td>
+                        <td class="px-4 py-3">进化和 RL 回路倾向于利用已知高回报模式。需要机制防止种群坍缩成同一解的变体——对开放式研究尤其关键，因为最好的路径起初往往在当前评估器下看起来更差。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">5. 奖励作弊（Reward hacking）</td>
+                        <td class="px-4 py-3">回路会优化任何给它的信号：来自单测就过拟合测试，来自 judge 就学会针对该 judge 的作弊，来自 benchmark 分数就利用 benchmark 工件。评估器和权限控制应尽量置于进化回路之外。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">6. 长期成功</td>
+                        <td class="px-4 py-3">很多优化目标仍然太短期。以编码 agent 为例：它能完成手头任务，却不清楚如何守护一个由成百上千工程师共同维护的仓库的长期健康——可维护性、所有权边界、迁移成本、向后兼容、未来调试负担，标准沙箱 RLVR 训练很少捕捉这些。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">7. 人的角色</td>
+                        <td class="px-4 py-3">人应该“往上移动”，而不是被移出回路：在正确的时间、正确的抽象层级提供监督，系统设计要考虑何时、如何设置这些接触点。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p class="mt-6">
+            文章结尾的立场值得抄下来：<strong>“毕竟，我们是在为了人类更好的未来而构建这项技术，而不是反过来。”</strong>
+            这也把整篇文章拉回到一个平衡点：harness 让我们能更好地部署模型、逼近 RSI，但评估、权限、多样性和人类监督，才是让这条回路“可持续、可信”的护栏。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>15. 附录：几个有用的 benchmark</h2>
+        <p>
+            文章附录列了一批评估“AI 做研究/工程”能力的 benchmark，对判断 harness 优化的真实效果很有参考价值：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>PaperBench：</strong>从零复现 20 篇 ICML 2024 Spotlight/Oral 论文，含理解贡献、开发代码库、成功跑实验；共 8,316 条与作者共同开发的评分细则；当时最好模型（Claude 3.5 Sonnet，约 21%）仍不及 ML 博士。</li>
+            <li><strong>CORE-Bench：</strong>评估已发表研究的计算可复现性；基于 90 篇论文的 270 个任务，跨计算机、社科、医学；当时最佳 agent 在最难任务上仅 21% 准确率。</li>
+            <li><strong>ScienceAgentBench：</strong>评估数据驱动科学发现，从 44 篇同行评审论文抽取 102 个任务，覆盖数据处理、模型开发、数据分析、信息可视化。</li>
+            <li><strong>RE-Bench：</strong>在真实 ML 研究工程环境里对比前沿 agent 与人类专家；7 个开放式环境，每个可在 ≤8 张 H100 上运行；人类专家 82% 的 8 小时尝试拿到非零分；AI 在 2 小时预算下比人类高 4 倍，但人类在更长预算（8/32 小时）下反超。</li>
+            <li><strong>MLE-bench：</strong>在 75 个 Kaggle 竞赛上评估 ML 工程 agent；最佳配置（o1-preview + AIDE scaffolding）在 16.9% 的竞赛中达到至少 Kaggle 铜牌水平。</li>
+            <li><strong>KernelBench：</strong>评估生成 GPU kernel 的正确性与速度；250 个 PyTorch 任务，指标 fast_p = 生成 kernel 中“正确且比 baseline 快”的比例。</li>
+        </ul>
+        <div class="note-box text-sm mt-4">
+            <p><strong>为什么把 benchmark 单独拎出来看？</strong>因为它直接呼应“瓶颈 1：弱而模糊的评估器”。这些环境之所以有用，是它们把 agent 表现绑定到<strong>可执行、可复现的结果</strong>上，而不是纯文本 judge——这正是 harness 优化能否真正被验证的前提。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>16. 一句话回顾：从 prompt 技巧到“会自我改进的系统层”</h2>
+        <p>
+            如果要把整篇文章压缩成一条主线，那就是：<strong>harness 正在从“工程技巧”变成“优化目标”，再进一步变成“会自我改进的系统层”</strong>。
+            设计模式（工作流循环、文件即记忆、子进程并行）先把 harness 做成一个像操作系统一样的可靠运行时；
+            然后优化的对象沿着“prompt → 结构化上下文 → 工作流 → harness 代码 → 优化器代码”一路上移；
+            当 harness 变成可执行的搜索空间后，coding agent、进化搜索、乃至与权重的联合优化，就能在这个空间里自我改进。
+        </p>
+        <p>
+            但文章始终没有把“智能”从核心位置挪走：STOP 在弱模型上退化、SIA 证据初步、AI Scientist 会“写出论文却没做出科学”——这些都说明，<strong>harness 改进能放大智能、更好地部署智能，但它替代不了智能本身</strong>。
+            真正通往 RSI 的路，需要在“更强的 harness”和“更强的模型”之间形成正向循环，同时用可靠的评估、权限和人类监督守住护栏。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>17. 参考资料（Primary Sources &amp; Supplementary Sources）</h2>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><a class="text-teal-700 underline" href="https://lilianweng.github.io/posts/2026-07-04-harness/" target="_blank" rel="noopener noreferrer">Lilian Weng, “Harness Engineering for Self-Improvement” (Lil'Log, 2026)</a> —— 本文的主来源与结构骨架，全部图示与公式均来自这里。</li>
+            <li><a class="text-teal-700 underline" href="https://philpapers.org/rec/GOOSCT" target="_blank" rel="noopener noreferrer">I. J. Good (1965), “Speculations Concerning the First Ultraintelligent Machine”</a> —— “超智能机器”与 RSI 概念的历史源头。</li>
+            <li><a class="text-teal-700 underline" href="https://www.lesswrong.com/posts/JBadX7rwdcRFzGuju/recursive-self-improvement" target="_blank" rel="noopener noreferrer">Yudkowsky (2008), “Recursive Self-Improvement”</a> —— RSI 反馈回路的经典表述。</li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2510.04618" target="_blank" rel="noopener noreferrer">Zhang et al. (2025), Agentic Context Engineering (ACE)</a> —— 上下文即演化 playbook 的一手来源。</li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2601.21557" target="_blank" rel="noopener noreferrer">Ye et al. (2026), Meta Context Engineering (MCE)</a> —— 机制/内容分离与双层优化。</li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2603.28052" target="_blank" rel="noopener noreferrer">Lee et al. (2026), Meta-Harness</a> —— “优化 harness 的 harness”。</li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2310.02304" target="_blank" rel="noopener noreferrer">Zelikman et al. (2023), Self-Taught Optimizer (STOP)</a> —— 递归 scaffolding 改进的早期代表。</li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2408.08435" target="_blank" rel="noopener noreferrer">Hu et al. (2025), Automated Design of Agentic Systems (ADAS)</a></li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2410.10762" target="_blank" rel="noopener noreferrer">Zhang et al. (2025), AFlow</a></li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2506.13131" target="_blank" rel="noopener noreferrer">Novikov et al. (2025), AlphaEvolve</a></li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2505.22954" target="_blank" rel="noopener noreferrer">Zhang et al. (2025), Darwin Gödel Machine (DGM)</a></li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2605.30621" target="_blank" rel="noopener noreferrer">Lin et al. (2026), Harness Updating Is Not Harness Benefit</a></li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2601.03315" target="_blank" rel="noopener noreferrer">Trehan & Chopra (2026), Why LLMs Aren't Scientists Yet</a> —— 六种失败模式的一手来源。</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h2>18. Original Figures</h2>
+        <p>以下为原文图示的本地收录，便于快速回看整体结构与各节对应关系。</p>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2 mt-6">
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/openai-agent-loop.png" alt="Codex agent loop" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 1. 简化的 Codex agent loop。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/coding-harness-loop.png" alt="Coding harness loop" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 2. 编码 agent harness 循环。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/ace.png" alt="ACE" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 3. ACE 框架。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/mce.png" alt="MCE" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 4. MCE 框架。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/meta-harness-outer-loop.png" alt="Meta-Harness outer loop" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 5. Meta-Harness 外层算法。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/meta-harness.png" alt="Meta-Harness performance" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 6. Meta-Harness 性能。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/ai-scientist.png" alt="AI Scientist" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 7. AI Scientist 流水线。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/autodata.png" alt="Autodata" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 8. Autodata 工作流。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/adas.png" alt="ADAS" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 9. ADAS 示意。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/aflow.png" alt="AFlow" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 10. AFlow 优化过程。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/aflow-exp.png" alt="AFlow experiments" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 11. AFlow 实验对比。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/STOP-algo.png" alt="STOP algorithm" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 12. STOP 算法。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/STOP-patterns.png" alt="STOP patterns" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 13. STOP 发现的策略。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/alphaevolve.png" alt="AlphaEvolve" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 14. AlphaEvolve 工作方式。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/alphaevolve-plot.png" alt="AlphaEvolve ablations" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 15. AlphaEvolve 消融。</figcaption>
+            </figure>
+            <figure class="rounded-2xl border border-white/70 bg-white/80 p-4">
+                <img src="/notes/harness/SIA.png" alt="SIA" class="w-full rounded-xl" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">图 16. SIA 的 Feedback-Agent。</figcaption>
+            </figure>
+        </div>
+    </div>
+</BaseLayout>
