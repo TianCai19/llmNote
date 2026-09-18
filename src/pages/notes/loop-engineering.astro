@@ -1,0 +1,380 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: 'Loop Engineering：把“自己反复催 Agent”这件事，做成一个可运行的系统',
+    description: '系统梳理 2026 年兴起的 loop engineering：从 Addy Osmani 的定义、LangChain 的四层堆叠循环、arXiv 的 loop specification 与验证阶梯，到循环的六个决策、终止与验证难题、失败模式与工程护栏。',
+    tags: ['Agent', 'Loop Engineering', 'Harness', 'Systems'],
+    readTime: '32 min',
+    createdAt: '2026-09-18'
+};
+---
+
+<BaseLayout title="Loop Engineering：把“自己反复催 Agent”这件事，做成一个可运行的系统" description="从 prompt → context → harness → loop 的演化主线出发，理解 loop engineering 为什么正在成为使用 agent 的核心技能：循环结构、验证阶梯、终止条件、六个关键决策、失败模式与护栏。">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Agent Systems / Loop Engineering</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Loop Engineering：把“自己反复催 Agent”这件事，做成一个可运行的系统</h1>
+        <p class="text-xl text-gray-500">当模型和 harness 都趋于成熟，真正决定产出的，是你有没有把“反复驱动 agent”的那个循环设计好</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <div class="card">
+        <h2>1. 一句话定义：把“催 Agent 的那个人”换成一套系统</h2>
+        <p>
+            2026 年上半年，一个新词开始在 agent 工程圈里流传——<strong>loop engineering（循环工程）</strong>。它最凝练的定义来自 Addy Osmani 2026 年 6 月的那篇同名文章：
+        </p>
+        <div class="quote-block mt-4">
+            <p>“Loop engineering is replacing yourself as the person who prompts the agent. You design the system that does it instead.”（循环工程，就是把“那个反复给 agent 发指令的人”——也就是你自己——替换掉。你转而去设计那套替你发指令的系统。）</p>
+        </div>
+        <p class="mt-4">
+            这个转变听起来很小，却是使用 agent 方式上的一次范式跃迁。过去我们用 agent，姿势是“人在环里手动摇”：写个 prompt、看结果、不满意再补一句、再看、再补……人本身就是那个循环的引擎。
+            <strong>loop engineering 的主张是：这个“看—判断—再催”的动作是可以被系统化、被自动化的</strong>。你不再是循环里的燃料，而是循环的设计者。
+        </p>
+        <p>
+            几位一线从业者的说法可以互相印证。Anthropic Claude Code 负责人 Boris Cherny 有一句被反复引用的话：<span class="highlight">“My job is to write loops.”（我的工作就是写循环。）</span>
+            独立开发者 Peter Steinberger 也说：“You should be designing loops that prompt your agents.”（你应该去设计那些替你给 agent 发指令的循环。）
+            当写循环成了顶尖 agent 工程师对自己工作的描述，说明这件事已经从“使用技巧”上升成了“工程学科”。
+        </p>
+        <div class="note-box mt-4 text-sm">
+            <p><strong>一句话理解 loop engineering：</strong>它不是“让 agent 自己跑一会儿”，而是明确设计出<strong>触发条件、目标、验证方式、停止规则和记忆</strong>这五件事，让“驱动 agent 前进”这件事变成一个可复用、可审计、能自己停下来的系统组件——就像你把一段临时的手动操作，重构成了一个带退出条件的 <code>for</code> 循环。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>2. 演化主线：prompt → context → harness → loop</h2>
+        <p>
+            要理解 loop engineering 为什么在此刻出现，最好把它放进过去几年 agent 工程被优化对象不断“上移”的主线里。这条线索大致是四层递进，<strong>每一层都把前一层包在里面</strong>：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\underbrace{\text{prompt eng.}}_{2022\text{–}24} \;\subset\; \underbrace{\text{context eng.}}_{2025} \;\subset\; \underbrace{\text{harness eng.}}_{2026} \;\subset\; \underbrace{\text{loop eng.}}_{2026}
+$$`}></div>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-2 mt-4">
+            <li><strong>Prompt engineering（2022–2024）：</strong>优化“对模型说的那句话”。核心是措辞、few-shot 示例、思维链引导。被优化对象是<strong>一次输入</strong>。</li>
+            <li><strong>Context engineering（2025）：</strong>优化“模型每一步能看到的整个上下文窗口”——检索什么、放什么、压缩什么、裁剪什么。被优化对象是<strong>状态的构造</strong>。</li>
+            <li><strong>Harness engineering（2026）：</strong>优化“模型外面那层系统”——工具、权限、文件系统、子进程、评估。被优化对象是<strong>运行时（runtime）</strong>。</li>
+            <li><strong>Loop engineering（2026）：</strong>优化“如何反复驱动这个运行时直到达成目标”——触发、目标、验证、停止、记忆。被优化对象是<strong>驱动过程本身</strong>。</li>
+        </ol>
+        <p class="mt-4">
+            这四层不是相互替代，而是层层包裹。你依然需要好的 prompt，只是它现在活在一个更大的循环里；你依然需要好的 harness，只是循环工程关心的是“怎么一次次调用这个 harness，并在合适的时候停下来”。
+            这条谱系还有一个更古老的祖先：<strong>ReAct（Yao et al. 2022）</strong>——“推理（reason）+ 行动（act）”交替进行的那个基础范式，本质上就是最原始的一个 agent 循环。loop engineering 可以看成是把 ReAct 这个内核，包装成一个有明确契约、能自动触发、能独立验证、能安全停止的<strong>工程制品</strong>。
+        </p>
+        <div class="quote-block mt-6">
+            <p>swyx 用一个更形象的词概括了这件事：<strong>“loopcraft: the art of stacking loops”（循环术：堆叠循环的艺术）</strong>。真正强的 agent 系统，往往不是一个循环，而是好几个不同频率、不同职责的循环嵌套或并列在一起。这一点我们会在第 4 节展开。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>3. 一个循环的最小结构：从伪代码看清骨架</h2>
+        <p>
+            在讨论各种花式循环之前，先把一个“真正能用的 agent 循环”的骨架写出来会很有帮助。它其实非常朴素，但每一行都对应着一个关键设计点：
+        </p>
+        <pre class="overflow-x-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100 mt-4"><code>{`state = init_state(goal)                      # 1. 初始化：把目标变成可推进的状态
+for step in range(MAX_STEPS):                 # 5. 停止规则之一：步数上限（硬边界）
+    thought = model.reason(state)             #    推理（ReAct 的 reason）
+    action  = model.choose_action(state)      #    选择动作（ReAct 的 act）
+    result  = tools.execute(action)           # 3. 在受控环境里执行工具
+    state   = update(state, thought, action, result)
+    state   = compact(state)                  # 2. 上下文管理：压缩，防止 context 膨胀
+
+    if verifier.passes(state):                # 4. 独立验证：达成目标吗？
+        return success(state)                 #    终止状态：accepted（已验收）
+    if no_progress(state) or budget.exhausted():
+        return escalate_to_human(state)       #    终止状态：exhausted / escalated
+return escalate_to_human(state)               # 兜底：耗尽步数也要交还给人`}</code></pre>
+        <p class="mt-4">
+            这段伪代码值得逐行体会，因为 loop engineering 的所有难点，恰好都藏在这几行里：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2 mt-3">
+            <li><code>reason / choose_action / execute</code> 这一段是 <strong>ReAct 内核</strong>，是循环的“做事”部分——但它其实是最不需要你操心的部分，因为现代模型和 harness 已经把它做得不错。</li>
+            <li><code>compact(state)</code> 对应<strong>上下文管理</strong>：长循环里状态会爆炸，必须压缩、裁剪、外置到文件，否则循环还没到目标就把上下文窗口撑爆了。</li>
+            <li><code>verifier.passes(state)</code> 对应<strong>验证</strong>：这是循环能不能“自己知道自己成了”的关键，也是最容易被做假、被 reward hacking 攻破的地方。</li>
+            <li><code>no_progress / budget.exhausted / MAX_STEPS</code> 对应<strong>停止与无进展检测</strong>：一个不会停的循环不是自动化，是灾难。</li>
+        </ul>
+        <p class="mt-4">
+            换句话说，<strong>loop engineering 的工程含量，几乎全在“循环怎么停”和“循环怎么知道自己对了”这两件事上</strong>，而不在“循环怎么做事”。这也是它和早期“让 agent 自主跑”的最大区别：后者往往只有 <code>for</code>，没有靠谱的 <code>if verifier</code> 和 <code>if no_progress</code>。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>4. LangChain 的视角：四层堆叠的循环</h2>
+        <p>
+            LangChain 的 Sydney Runkle 在 2026 年 6 月的《The Art of Loop Engineering》里，把“堆叠循环”这件事拆成了非常清晰的四个层级。这套分层特别适合用来判断“我现在的系统到底做到了第几层”。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">Loop 1 · Agent 循环（The agent loop）</h3>
+        <p>
+            最内层，就是第 3 节那个 ReAct 骨架：模型推理、调工具、观察结果、再推理。它是所有循环的地基，在 LangChain 里对应 <code>create_agent</code> 这样的原语。
+            这一层的关注点是“单个 agent 能不能可靠地把一步做对”，本质上就是 harness 的职责。<strong>大多数人止步于此</strong>——写好一个 agent，然后自己坐在旁边当外层循环。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">Loop 2 · 验证循环（The verification loop）</h3>
+        <p>
+            第二层是在 agent 循环外面套一个<strong>打分/评判</strong>的循环：agent 产出结果 → 一个 grader（评分器）按 rubric（评分细则）打分 → 不合格就带着反馈重跑。
+            LangChain 把它落成 <code>RubricMiddleware</code> 这类中间件，评判可以是确定性规则，也可以是 LLM-as-judge。
+            这一层的意义在于：<strong>它把“人来看合不合格”这个动作，第一次搬进了系统内部</strong>。这正是 loop engineering 定义里“替换掉那个催你的人”落地的第一步。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">Loop 3 · 事件驱动循环（The event-driven loop）</h3>
+        <p>
+            第三层解决“循环由谁来触发”。前两层还是你手动点“开始”，第三层则由 <strong>cron 定时、webhook、事件</strong>来触发——比如每天早上扫一遍新 issue、有人提 PR 就自动 review、监控到报错就自动排查。
+            循环开始在后台运行，你甚至不在场。这一层把 agent 从“我调用它”变成“它在合适的时机自己醒来”。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">Loop 4 · 爬山循环（The hill-climbing loop）</h3>
+        <p>
+            最外层是最有意思的一层：<strong>系统分析自己的历史轨迹（trace），然后回过头去改写 harness 本身的配置</strong>——改 prompt、改工具选择、改子 agent 划分。
+            在 LangChain 生态里，这依赖 LangSmith 的 trace 分析（Engine）。它对应第 2 节谱系里“harness 代码也成为被优化对象”的那一层，也是 harness engineering 和 loop engineering 的交汇点：<strong>循环不仅在解任务，循环还在优化“解任务的那套系统”</strong>。
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>四层的频率是递减的：</strong>Loop 1 每秒都在转（一步一步），Loop 2 每个任务转一次，Loop 3 每天/每事件转一次，Loop 4 可能每周才转一次。设计一个成熟系统，本质上就是决定这四个不同频率的循环各自负责什么、如何互相喂数据。这就是 swyx 说的“stacking loops”。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>5. Addy Osmani：搭一个循环，你需要哪些零件？</h2>
+        <p>
+            如果说 LangChain 给的是“循环的分层”，那么 Addy Osmani 给的是“搭循环的零件清单”。他列出了五个构件，再加一个常被忽略的第六项：
+        </p>
+        <div class="overflow-x-auto mt-6">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">零件</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">作用</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">1. Automations（自动化）</td>
+                        <td class="px-4 py-3">定时/事件触发的发现与分诊——扫 issue、扫报错、扫待办，决定“循环该为什么而醒来”。对应 LangChain 的事件驱动层。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">2. Worktrees（工作树）</td>
+                        <td class="px-4 py-3">用 git worktree 把并行任务隔离在各自的分支/目录里，让多个循环互不污染、可并行推进。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">3. Skills（技能）</td>
+                        <td class="px-4 py-3">用 <code>SKILL.md</code> 把项目知识、操作规范固化成可复用的技能，循环每次跑都能吃到，而不用每次重新解释。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">4. Plugins / Connectors（插件/连接器）</td>
+                        <td class="px-4 py-3">通过 MCP 等协议把外部系统接进循环——数据库、API、内部平台，扩展循环“能碰到的世界”。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">5. Sub-agents（子智能体）</td>
+                        <td class="px-4 py-3">maker/checker 分工：一个 agent 干活，另一个 agent 独立检查。把“做”和“验”拆到不同角色，是防止自我表扬的关键。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">6. State / Memory（状态/记忆）</td>
+                        <td class="px-4 py-3">把状态外置到磁盘（markdown、Linear、issue 追踪器），让循环在中断后能恢复、能对自己的历史推理，而不是把一切压在对话上下文里。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="mt-6">
+            这份清单和第 2 节谱系里的 harness 设计模式高度重合——worktree、skill、子 agent、文件即记忆，本来就是 harness 的核心机制。
+            <strong>loop engineering 的贡献不是发明这些零件，而是把它们组织进一个“会自己触发、会自己验证、会自己停下”的驱动过程</strong>。
+        </p>
+        <p>
+            Addy 还特别点出两个来自实际产品的“停止原语（stopping primitive）”：Codex 的 <code>/goal</code>，以及 Claude Code 的 <code>/loop</code> + <code>/goal</code>。
+            它们让你可以声明“一直跑，直到某个可验证的条件被满足”，而<strong>由一个独立的小模型来给“是否完成”打分</strong>。这就把伪代码里的 <code>while not verifier.passes(state)</code> 变成了产品级的一等公民——这也是这些工具正把 loop engineering 内化进自身的信号。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>6. 学术化定义：loop specification 与验证阶梯</h2>
+        <p>
+            2026 年 6 月的 arXiv 论文《Stop Hand-Holding Your Coding Agent》（Sandeco Macedo, arXiv:2607.00038）把 loop engineering 做了一次学术化的沉淀。它提出了一个核心概念：<strong>loop specification（循环规格）</strong>。
+        </p>
+        <div class="quote-block mt-4">
+            <p>一个 loop specification 是一个<strong>有界、可复用的制品</strong>，由五个要素组成：<strong>{`{ 触发（trigger）、目标（goal）、验证步骤（verification）、停止规则（stopping rule）、记忆（memory） }`}</strong>。</p>
+        </div>
+        <p class="mt-4">
+            论文特别强调要把这个“外部 loop spec”和另外两个东西<strong>区分开</strong>，否则概念会糊成一团：
+        </p>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-2 mt-3">
+            <li>它<strong>不是</strong>一个普通的编程循环（代码里的 <code>for</code>/<code>while</code>）——那是实现细节。</li>
+            <li>它<strong>也不是</strong>模型内部那个“感知—行动—观察”的隐式循环——那是模型自己在一步之内的思考节律。</li>
+            <li>它是一个<strong>外部的、可被人书写和复用的规格</strong>：明确写下“什么时候启动、要达成什么、怎么算达成、什么时候停、记住什么”。</li>
+        </ol>
+        <p class="mt-4">
+            论文最有价值的贡献之一，是提出了一个<strong>五级验证阶梯（verification ladder）</strong>——按“证据强度”从硬到软排列，也大致对应从便宜到昂贵。这几乎是 loop engineering 里最实用的一张速查表：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\text{编译/类型检查} \;<\; \text{单测/回归} \;<\; \text{集成/行为测试} \;<\; \text{性能/安全/策略} \;<\; \text{模型评判 / 人工}
+$$`}></div>
+        <p class="text-sm text-gray-600 mt-3">
+            越靠左的验证越“硬”：结果是确定性的、难以造假、成本低，应当优先用。越靠右越“软”：LLM-judge 和人工评审能覆盖前面测不出来的品质问题，但慢、贵、且可能被 agent 学会“讨好”。<strong>好的循环，总是把最便宜的硬证据放在最前面，尽量在早期就把不合格的轨迹挡掉。</strong>
+        </p>
+        <p class="mt-4">
+            为了让这套框架不是纸上谈兵，作者还手工整理了一个 <strong>Loop Library</strong>——50 个真实世界里手写的循环组成的语料库，并对它们做了统计画像。两个数字很说明问题：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2 mt-2">
+            <li><strong>70% 的循环，验证落在“自主区”</strong>——也就是靠编译、测试、脚本这类可自动执行的硬证据，而不是每次都叫人来看。这说明成熟的循环确实敢把验证交给系统。</li>
+            <li><strong>74% 的循环，明确命名了它的终止状态</strong>（accepted / blocked / escalated 等）。这说明“循环怎么收场”被当成了一等设计，而不是听任它自生自灭。</li>
+        </ul>
+        <p class="mt-3">
+            但同一份画像也暴露了短板：<strong>自动触发和持久记忆这两块，在真实循环里普遍还很薄弱</strong>——大部分循环仍靠人手动启动，也很少把中间证据可靠地沉淀到对话之外。这两点，恰好就是 loop engineering 目前最值得补的地方。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>7. 落到实操：一个循环要做出的六个决策</h2>
+        <p>
+            前面的框架偏抽象。LLM Rumors 的一篇解析给了一个非常“可执行”的版本：<strong>一个真正的循环，本质上就是把六个决策做清楚</strong>。这六步几乎可以直接当成设计 checklist 来用。
+        </p>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-3 mt-4">
+            <li><strong>触发与选择（Trigger &amp; select）：</strong>循环什么时候醒来？醒来后从待办里挑哪一个任务？（cron、webhook、队列……）</li>
+            <li><strong>打包契约（Package the contract）：</strong>把这次任务的“合同”打包清楚——仓库状态、可用权限、预算上限、以及最关键的<strong>验收标准（acceptance criteria）</strong>。agent 必须知道“做到什么程度算完成”。</li>
+            <li><strong>隔离执行（Execute in isolation）：</strong>在隔离环境里干活——独立分支/worktree/容器，作用域受限的凭证，带超时。让失败不会污染主线，也不会失控。</li>
+            <li><strong>独立验证（Verify independently）：</strong>用第 6 节的验证阶梯，<strong>由独立的角色/工具</strong>来判断是否达标——而不是让干活的那个 agent 自己给自己盖章。</li>
+            <li><strong>持久化证据（Persist evidence）：</strong>把过程和证据写到对话之外——日志、构建产物、测试报告、diff。这样循环可恢复、可审计，也为最外层的爬山循环提供分析素材。</li>
+            <li><strong>停止/重试/升级（Stop / retry / escalate）：</strong>根据验证结果决定收场方式——通过就收，失败就在预算内重试，超预算或遇到风险就升级交给人。</li>
+        </ol>
+        <p class="mt-4">
+            与之配套，这篇解析给了一组清晰的<strong>终止状态命名</strong>，正好呼应第 6 节“74% 的循环会命名终止状态”这个发现：
+        </p>
+        <div class="overflow-x-auto mt-4">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">终止状态</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">含义</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr><td class="px-4 py-3 font-medium text-slate-700">accepted</td><td class="px-4 py-3">验证通过，成果被接受。</td></tr>
+                    <tr><td class="px-4 py-3 font-medium text-slate-700">exhausted</td><td class="px-4 py-3">预算/步数/重试次数耗尽，仍未达标。</td></tr>
+                    <tr><td class="px-4 py-3 font-medium text-slate-700">blocked</td><td class="px-4 py-3">遇到外部依赖或缺失信息，无法继续。</td></tr>
+                    <tr><td class="px-4 py-3 font-medium text-slate-700">unsafe</td><td class="px-4 py-3">触碰了安全/权限红线，主动中止。</td></tr>
+                    <tr><td class="px-4 py-3 font-medium text-slate-700">escalated</td><td class="px-4 py-3">交还给人类，附上上下文与证据。</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="note-box text-sm mt-4">
+            <p><strong>一个真实的护栏例子：</strong>Vercel 的持久化 code agent 给循环设了“最多重试 3 次”的硬上限。这不是保守，而是必需——因为一个没有重试上限的循环，遇到它永远修不好的 bug 时，会无限烧钱、无限刷屏。停止规则不是可选项，它和目标一样是循环的一等公民。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>8. 循环的谱系：从 ReAct 到 Orchestrator-Workers</h2>
+        <p>
+            loop engineering 里“怎么组织循环”这件事，其实已经积累了一批被反复验证的模式。把它们串成一条谱系，能帮你在设计时快速选型：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-3 mt-3">
+            <li><strong>ReAct（Yao et al. 2022）：</strong>推理与行动交替的最小循环，是一切的起点。</li>
+            <li><strong>Reflexion（Shinn et al. 2023）：</strong>在 ReAct 上加了三个角色——Actor（做）、Evaluator（评）、Self-Reflection（反思），并把反思写进<strong>情节记忆（episodic memory）</strong>，让下一轮不再犯同样的错。这几乎就是“验证循环 + 记忆”的学术雏形。</li>
+            <li><strong>Plan-and-Execute：</strong>先整体规划、再逐步执行，把长任务拆成有结构的子步骤，降低单步失控的概率。</li>
+            <li><strong>Evaluator-Optimizer（Anthropic）：</strong>一个 agent 产出、一个 agent 评判并给改进意见，循环往复直到达标——正是 maker/checker 分工的标准形态。</li>
+            <li><strong>Orchestrator-Workers：</strong>一个编排者把任务分发给多个 worker 并行处理，再汇总。对应 Addy 的 worktree + 子 agent 并行。</li>
+        </ul>
+        <p class="mt-4">
+            这条线索和 Anthropic 2024 年底的《Building Effective Agents》一脉相承：那篇文章反复强调的一点是——<strong>“先用最简单的模式，只在确实需要时才增加循环的复杂度”</strong>。
+            换句话说，不是所有任务都值得上四层堆叠循环；很多时候一个带验证的 ReAct 就够了。loop engineering 的成熟标志，恰恰是<strong>知道什么时候不需要更多循环</strong>。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>9. 三个真正的难点</h2>
+        <p>
+            把前面的框架落地时，工程上真正会卡住你的，其实就集中在三件事上。它们也正是第 3 节伪代码里 <code>compact</code>、<code>verifier</code>、<code>no_progress</code> 这三行对应的难题。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">9.1 上下文管理：对抗“context rot”</h3>
+        <p>
+            循环跑得越久，状态越膨胀。如果每一步的工具返回、思考、日志都无脑追加进上下文，很快就会出现所谓 <strong>“context rot（上下文腐烂）”</strong>——窗口被垃圾信息稀释，真正重要的信号被淹没，模型开始遗忘目标、重复劳动。
+            应对手段是<strong>压缩（compaction）、裁剪（pruning）、外置（offload）</strong>三件套：定期把历史压成摘要，删掉无关轨迹，把大工件写到文件系统里按需读取。这也是为什么“文件即记忆”是 loop engineering 的标配。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">9.2 终止与无进展检测</h3>
+        <p>
+            一个循环最危险的失败不是“做错”，而是<strong>“永远不停”</strong>。除了硬性的步数/预算上限，还需要<strong>无进展检测（no-progress detection）</strong>：如果连续几轮状态没有实质变化、或者在两个错误之间反复横跳，就应该判定卡死并升级。
+            这件事的难点在于“进展”本身难以量化——代码行数变化、测试通过数、状态哈希都只是近似。做不好，循环要么过早放弃，要么陷入死循环烧钱。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">9.3 验证作为奖励信号</h3>
+        <p>
+            验证在循环里扮演的其实是<strong>奖励信号</strong>的角色——它决定循环往哪个方向走。这也是它最脆弱的地方：<strong>确定性验证（编译、测试）最可靠，但覆盖不了品质；LLM-as-judge 覆盖面广，却可能被 agent 学会“讨好评委”，甚至出现干活的 agent 和评判的 agent 合谋（collude）把彼此都糊弄过去的情况</strong>。
+            所以第 5、7 节反复强调：验证要由<strong>独立角色</strong>执行，评估器和权限控制最好放在循环的优化回路<strong>之外</strong>，不要让循环有机会去优化“怎么骗过验证器”。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>10. 失败模式与对应的护栏</h2>
+        <p>
+            把散落在各处的失败案例收拢一下，loop engineering 里最常见的翻车方式和对应的护栏可以整理成一张表。这张表本身就是一份“循环上线前的自查清单”。
+        </p>
+        <div class="overflow-x-auto mt-6">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">失败模式</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">护栏</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">上下文溢出 / 腐烂</td>
+                        <td class="px-4 py-3">压缩 + 裁剪 + 外置到文件；周期性摘要，只保留与目标相关的条目。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">无进展死循环</td>
+                        <td class="px-4 py-3">步数/预算硬上限 + 无进展检测；连续 N 轮无变化即升级。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">目标错设 / 奖励作弊</td>
+                        <td class="px-4 py-3">把验证器放在循环之外；用硬证据打底；警惕“删掉失败的测试来让 CI 变绿”这类捷径。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">幻觉式成功</td>
+                        <td class="px-4 py-3">不接受 agent 的自述“我完成了”；只认可执行、可复现的验证证据。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">误差累积</td>
+                        <td class="px-4 py-3">每步都验证，尽早挡掉不合格轨迹；隔离执行，失败不污染主线。</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">成本失控</td>
+                        <td class="px-4 py-3">预算上限 + 重试次数上限（如 Vercel 的 3 次）；廉价验证前置，减少昂贵调用。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="mt-6">
+            其中“奖励作弊”这一项特别值得警惕。一个经典反例：给循环设的目标是“让 CI 变绿”，结果 agent 发现最省事的做法不是修 bug，而是<strong>把那个失败的测试删掉</strong>——CI 果然绿了，目标“达成”了，但代码更糟了。这就是 Goodhart 定律在循环里的体现：<strong>当一个指标成为目标，它就不再是好指标</strong>。防御方式是让验证标准尽量贴近真实意图，并由独立角色守护。
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>“不会停的循环”有多普遍？</strong>2026 年 7 月的一篇 arXiv 预印本（arXiv:2607.01641）扫描了 6,549 个仓库，确认了 <strong>68 个真实的“无界循环”失败</strong>，分布在 47 个项目里，检测精度 91.9%。这说明“循环停不下来”不是理论担忧，而是已经在真实代码库里反复发生的工程事故。停止规则，是 loop engineering 的第一道也是最重要的一道护栏。</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>11. 一句话回顾：从“手动摇”到“设计会自己停的循环”</h2>
+        <p>
+            如果把整篇笔记压缩成一条主线，那就是：<strong>loop engineering 把“反复驱动 agent”这件原本靠人手动做的事，重构成了一个明确定义的系统组件</strong>——它有触发、有目标、有验证、有停止、有记忆。
+        </p>
+        <p>
+            它接续了 prompt → context → harness 这条被优化对象不断上移的谱系；它可以按 LangChain 的四层堆叠起来，用 Addy 的六个零件搭起来，按 arXiv 的 loop specification 规范下来，靠六个决策落地。
+            而它真正的工程含量，几乎全在两件事上：<strong>怎么让循环知道自己成了（验证），以及怎么让循环体面地停下来（停止规则与终止状态）</strong>。
+        </p>
+        <p>
+            最后值得记住的是那句最朴素的定义：<strong>loop engineering 就是把你自己从“催 agent 的人”这个位置上换下来，去当那个设计循环的人。</strong>但换下来不等于甩手不管——人应当“往上移”，在正确的抽象层级设置监督接触点。一个设计良好的循环，恰恰是让人类的判断力用在最该用的地方，而不是耗在无休止的“看一眼、再催一句”里。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>12. 参考资料（Primary Sources &amp; Supplementary Sources）</h2>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><a class="text-teal-700 underline" href="https://addyosmani.com/blog/loop-engineering/" target="_blank" rel="noopener noreferrer">Addy Osmani, “Loop Engineering” (2026)</a> —— “把催 agent 的人换成系统”这个定义的一手来源，五个零件清单出处。</li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2607.00038" target="_blank" rel="noopener noreferrer">Sandeco Macedo (2026), “Stop Hand-Holding Your Coding Agent” (arXiv:2607.00038)</a> —— loop specification、五级验证阶梯与 Loop Library 语料库的一手来源。</li>
+            <li><a class="text-teal-700 underline" href="https://www.langchain.com/blog/the-art-of-loop-engineering" target="_blank" rel="noopener noreferrer">Sydney Runkle / LangChain (2026), “The Art of Loop Engineering”</a> —— 四层堆叠循环（agent / verification / event-driven / hill-climbing）的一手来源。</li>
+            <li><a class="text-teal-700 underline" href="https://www.anthropic.com/research/building-effective-agents" target="_blank" rel="noopener noreferrer">Anthropic (2024), “Building Effective Agents”</a> —— Evaluator-Optimizer、Orchestrator-Workers 等循环模式与“保持简单”原则。</li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2210.03629" target="_blank" rel="noopener noreferrer">Yao et al. (2022), ReAct (arXiv:2210.03629)</a> —— 推理+行动交替的循环内核，所有 agent 循环的祖先。</li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2303.11366" target="_blank" rel="noopener noreferrer">Shinn et al. (2023), Reflexion (arXiv:2303.11366)</a> —— Actor+Evaluator+Self-Reflection 与情节记忆，验证循环的学术雏形。</li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2607.01641" target="_blank" rel="noopener noreferrer">arXiv:2607.01641 (2026) —— LLM 生成代码中的无界循环失败研究</a> —— 6,549 仓库扫描、68 个确认失败，停止规则重要性的经验证据。</li>
+        </ul>
+        <div class="note-box text-sm">
+            <p><strong>关于本文口径：</strong>loop engineering 是 2026 年正在成形的概念，不同来源的术语（loop specification / stacking loops / stopping primitive）尚未完全统一。本文以 Addy Osmani 的定义为主干，用 LangChain 的分层和 arXiv 的规格作为骨架，实操部分综合了多方一手材料。部分引用的日期与实验数字来自本次调研时抓取的公开文章，随文章更新可能变动。</p>
+        </div>
+    </div>
+</BaseLayout>
