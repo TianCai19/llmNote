@@ -1,0 +1,414 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: 'LTX-Video：把 VAE 和 DiT 揉成一个整体的实时视频扩散模型',
+    description: '深入解读 LTX-Video 论文：1:192 高压缩 Video-VAE、把 patchify 搬进 VAE、承担末步去噪的 VAE 解码器、Reconstruction GAN、多层噪声注入、DWT 损失、归一化分数坐标 RoPE、Rectified-Flow 训练，以及从 LTXV 到 LTX-2.5 的版本脉络。',
+    tags: ['LTX-Video', 'Video Generation', 'Diffusion'],
+    readTime: '46 min',
+    createdAt: '2026-09-18'
+};
+---
+
+<BaseLayout title="LTX-Video：把 VAE 和 DiT 揉成一个整体的实时视频扩散模型" description="从组件独立到系统协同：系统理解 LTX-Video 的 Video-VAE 设计、去噪解码器、损失组合、位置编码与实时生成背后的工程取舍。">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Video Diffusion / Latent VAE / Realtime Generation</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">LTX-Video：把 VAE 和 DiT 揉成一个整体的实时视频扩散模型</h1>
+        <p class="text-xl text-gray-500">从“VAE 负责压缩、Transformer 负责生成”的分工，走向“压缩与去噪协同设计”的系统</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <div class="note-box text-sm">
+        <p><strong>论文信息：</strong><em>LTX-Video: Realtime Video Latent Diffusion</em>，arXiv:2501.00103v1，2024-12-30，作者 Yoav HaCohen 等（Lightricks）。</p>
+        <p class="mt-2"><strong>核心定位：</strong>LTX-Video 不是又一个把 diffusion transformer 加大的视频模型，而是一次结构上的重排：它把决定压缩比的 Video-VAE 和负责生成的 denoising transformer 当成一个整体来设计，通过 <span class="highlight">1:192 的高压缩潜空间</span>、<span class="highlight">把 patchify 从 transformer 输入搬进 VAE 输入</span>、以及<span class="highlight">让 VAE 解码器承担最后一步去噪</span>，在 2B 参数规模上做到了“生成比观看还快”——在单张 H100 上用约 2 秒生成 5 秒、24fps、768×512、121 帧的视频。</p>
+    </div>
+
+    <nav class="toc mt-8" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#intro">1. Introduction：为什么视频扩散需要“系统级”重排</a></li>
+            <li><a href="#background">2. Background：潜空间扩散与视频模型的效率瓶颈</a></li>
+            <li><a href="#vae">3. Video-VAE：把压缩比推到 1:192 的核心引擎</a></li>
+            <li><a href="#losses">4. VAE 训练：rGAN、多层噪声注入、DWT 与统一 log-variance</a></li>
+            <li><a href="#decoder">5. 去噪解码器：让 VAE 承担最后一步扩散</a></li>
+            <li><a href="#transformer">6. Video Transformer：归一化分数坐标 RoPE 与 QK 归一化</a></li>
+            <li><a href="#training">7. Rectified-Flow 训练与条件注入</a></li>
+            <li><a href="#experiments">8. Experiments：实时性、质量与消融</a></li>
+            <li><a href="#lineage">9. 版本脉络：从 LTXV 到 LTX-2.5</a></li>
+            <li><a href="#practice">10. Practice：怎么用、什么时候不该用</a></li>
+            <li><a href="#limits">11. Discussion：局限与边界</a></li>
+            <li><a href="#figures">12. Original Figures &amp; References</a></li>
+        </ul>
+    </nav>
+
+    <div class="card" id="intro">
+        <h2>1. Introduction：为什么视频扩散需要“系统级”重排</h2>
+        <p>
+            现代文本到视频、图像到视频的主流做法是<strong>潜空间扩散（latent diffusion）</strong>：先用一个变分自编码器（VAE）把高分辨率视频压缩成一个小得多的潜张量，再让一个扩散 transformer 在这个潜空间里学习去噪，最后把生成的潜张量解码回像素。
+            这套范式已经被 Stable Diffusion、Sora 类模型反复验证，但在视频上它有一个绕不开的矛盾：<span class="highlight">视频的时空数据量极大，而扩散 transformer 的计算量随 token 数量近似平方级增长</span>。
+            要想又快又清晰，就必须让潜空间足够小，同时又不能把画面细节压没。
+        </p>
+        <p>
+            LTX-Video 的出发点，是对“VAE 和 transformer 各管一段”的传统分工提出质疑。论文摘要里用了 <em>holistic</em>（整体的）这个词：
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>原文摘录：</strong></p>
+            <p class="text-sm text-gray-600 italic">“We introduce LTX-Video, a transformer-based latent diffusion model that adopts a holistic approach to video generation by seamlessly integrating the responsibilities of the Video-VAE and the denoising transformer. Unlike existing methods, which treat these components as independent, LTX-Video aims to optimize their interaction for improved efficiency and quality.”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/html/2501.00103v1" class="text-[color:var(--accent)] underline">LTX-Video arXiv HTML</a> Abstract</p>
+        </div>
+        <p class="mt-4">
+            这句话点明了整篇论文的立场：在别的框架里，VAE 只负责把像素压成潜变量、再解码回去，去噪则完全交给 transformer；而 LTX-Video 把这两个组件的职责重新切分——让 VAE 承担一部分本该属于 transformer 的工作（patchify 与最后一步去噪），从而让 transformer 在一个更紧凑的潜空间里高效地完成全时空自注意力。
+            换句话说，它优化的不是单个模块，而是<strong>模块之间的接口</strong>。
+        </p>
+        <p>
+            这种重排带来的直接结果，是论文标题里的 <em>Realtime</em>：它是第一个能“生成比观看还快”的视频扩散模型——在 20 个扩散步、单张 H100 上，用约 2 秒生成 121 帧、768×512 的视频，同时在 2B 参数（蒸馏前）规模上超过同量级的其他模型。
+            下面几节会逐层拆开这套设计：先看它压缩比为什么能到 1:192，再看 VAE 的损失组合，然后是去噪解码器、transformer 的位置编码，以及整个 rectified-flow 训练流程。
+        </p>
+    </div>
+
+    <div class="card" id="background">
+        <h2>2. Background：潜空间扩散与视频模型的效率瓶颈</h2>
+        <p>
+            要理解 LTX-Video 的取舍，先要把“潜空间扩散生成一段视频”拆成三步来看。第一步是<strong>编码</strong>：VAE 编码器 <span set:html={"$\\mathcal{E}$"}></span> 把原始视频 <span set:html={"$x$"}></span> 压成潜张量 <span set:html={"$z_0 = \\mathcal{E}(x)$"}></span>；第二步是<strong>扩散生成</strong>：从噪声 <span set:html={"$z_T$"}></span> 出发，transformer 反复去噪得到干净潜张量 <span set:html={"$z_0$"}></span>；第三步是<strong>解码</strong>：VAE 解码器 <span set:html={"$\\mathcal{D}$"}></span> 把 <span set:html={"$z_0$"}></span> 还原回像素 <span set:html={"$\\hat{x} = \\mathcal{D}(z_0)$"}></span>。
+        </p>
+        <p>
+            这里的关键量是<strong>压缩比</strong>和<strong>每个 token 覆盖多少像素</strong>。传统图像 VAE 常用 8×8 的空间下采样，视频模型再叠一层时间下采样，然后 transformer 还会在输入端做一次 patchify（例如把 2×2 潜像素拼成一个 token）。这几层叠加下来，token 数依然很多，导致注意力计算昂贵。
+        </p>
+        <p>
+            LTX-Video 观察到一个常被忽视的冗余来源：<span class="highlight">当 VAE 把图像压得已经很小时，再让 transformer 在输入端做 patchify，相当于把相邻潜像素直接线性拼接</span>——这一步没有非线性、没有可学习的时空建模，只是把维度换个形状。论文用 PCA 分析指出，这种“patchify 出来的 token”内部存在大量可压缩的冗余（见下图对潜表示自相关性的分析）。
+        </p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <div class="grid grid-cols-2 gap-4">
+                <img src="/notes/ltx-video/auto-correlation-init.png" alt="Autocorrelation before" class="w-full rounded-xl bg-white" loading="lazy" />
+                <img src="/notes/ltx-video/auto-correlation-final.png" alt="Autocorrelation after" class="w-full rounded-xl bg-white" loading="lazy" />
+            </div>
+            <figcaption class="text-sm text-gray-500 mt-3">潜空间自相关性分析：patchify 产生的 token 内部相邻位置高度相关，说明“把 patchify 交给 transformer 输入层”存在结构冗余。LTX-Video 的应对是把 patchify 整合进 VAE，让压缩由带非线性和时空卷积的编码器统一完成。</figcaption>
+        </figure>
+        <p class="mt-4">
+            因此 LTX-Video 的第一个核心决定就是：<strong>取消 transformer 输入端的 patchifier，把这层压缩合并进 VAE 编码器</strong>。这样 VAE 直接输出可以进入 transformer 的 token 序列，压缩由一个统一的、带非线性的模块承担，而不是被拆成“VAE 卷积 + transformer 线性拼接”两段。
+        </p>
+    </div>
+
+    <div class="card" id="vae">
+        <h2>3. Video-VAE：把压缩比推到 1:192 的核心引擎</h2>
+        <p>
+            LTX-Video 的 Video-VAE 是整套系统的引擎。它实现了 <strong>1:192 的整体压缩比</strong>，具体做法是<strong>每个 token 覆盖 32×32×8 的时空区域</strong>（32×32 空间像素、8 帧），并把潜通道数提到 <strong>128</strong> 以补偿高压缩带来的信息损失。
+        </p>
+        <div class="math-block">
+            <p set:html={"$$\\underbrace{32 \\times 32}_{\\text{空间}} \\times \\underbrace{8}_{\\text{时间}} \\times \\underbrace{3}_{\\text{RGB}} \\Big/ \\underbrace{128}_{\\text{潜通道}} = \\frac{24576}{128} = 192$$"}></p>
+        </div>
+        <p>
+            也就是说，原始像素里 <span set:html={"$32\\times32\\times8\\times3 = 24576$"}></span> 个数值，被压成 128 维的一个 token，压缩比正好是 1:192。论文进一步指出，如果把“把 patchify 也交给 VAE”这层考虑进去，等效的像素-到-token 比例可以达到约 1:8192——相比传统方案，进入 transformer 的 token 少得多，这正是实时生成的算力前提。
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>原文摘录：</strong></p>
+            <p class="text-sm text-gray-600 italic">“At its core is a carefully designed Video-VAE that achieves a high compression ratio of 1:192, with spatiotemporal downscaling of 32×32×8 pixels per token, enabled by relocating the patchifying operation from the transformer's input to the VAE's input.”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/html/2501.00103v1" class="text-[color:var(--accent)] underline">LTX-Video arXiv HTML</a> Abstract</p>
+        </div>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/ltx-video/vae_encoder.png" alt="VAE encoder architecture" class="w-full rounded-xl bg-white max-w-md mx-auto" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure：Video-VAE 编码器结构。它用 3D 卷积逐级做时空下采样，直接输出可送入 transformer 的高维（128 通道）潜 token，编码器内部已经吸收了原本在 transformer 输入端的 patchify 操作。</figcaption>
+        </figure>
+        <p class="mt-4">
+            实现细节上，论文对比了两个维度的选择。第一个是 <strong>causal 与 non-causal</strong>：非因果 VAE 更容易训练、重建质量更好，但因果 VAE 能让“图像和视频统一处理”更自然（把单帧图像看成长度为 1 的视频），也更利于后续的时间外推，所以 LTX-Video 采用因果结构。第二个是 <strong>3D 卷积与可分离（separable）卷积</strong>：完整 3D 卷积在质量上略优于把时间、空间拆开的可分离卷积，代价是更高的计算，论文选择了 3D 卷积以保住高压缩下的画面质量。
+        </p>
+        <p>
+            把这两点放在一起看，Video-VAE 的设计逻辑就很清楚：<span class="highlight">用更强的（因果 3D 卷积）编码器换取更激进的压缩比，把省下来的算力预算让给 transformer 去做全时空注意力</span>。这也是“系统级重排”的第一处体现——不是单独把 VAE 或 transformer 做大，而是重新分配两者之间的压缩职责。
+        </p>
+    </div>
+
+    <div class="card" id="losses">
+        <h2>4. VAE 训练：rGAN、多层噪声注入、DWT 与统一 log-variance</h2>
+        <p>
+            压缩比越高，重建越难。LTX-Video 的 VAE 最终使用了一组损失的组合：<strong>像素重建（MSE）、Video-DWT（L1）、感知损失（LPIPS）和 Reconstruction-GAN</strong>。这一节逐个拆开，重点讲清楚每个损失在“高压缩”这个前提下解决什么问题。
+        </p>
+        <div class="note-box text-sm mt-2">
+            <p><strong>原文摘录：</strong></p>
+            <p class="text-sm text-gray-600 italic">“The final set of losses used for training our VAE is: pixel reconstruction (MSE), Video-DWT (L1), Perceptual (LPIPS) and Reconstruction-GAN.”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/html/2501.00103v1" class="text-[color:var(--accent)] underline">LTX-Video arXiv HTML</a> §2.1.6</p>
+        </div>
+
+        <h3 class="mt-6">4.1 为什么单靠 L2 + LPIPS + 普通 GAN 不够</h3>
+        <p>
+            论文明确指出了传统组合的问题：<span class="highlight">高压缩率下，L2 损失倾向于产生模糊输出</span>；加上感知损失能减少模糊，但会在高速运动场景引入纹理伪影；普通 GAN 判别器虽然能提升锐度，但在高压缩下容易与真实数据分布对不齐，产生不稳定与伪纹理。所以 LTX-Video 引入了一个改造版的对抗训练：Reconstruction GAN。
+        </p>
+
+        <h3 class="mt-6">4.2 Reconstruction GAN（rGAN）</h3>
+        <p>
+            普通 GAN 判别器看到的是“一张图，判断真假”。rGAN 的关键改动是：<strong>判别器同时看到原始视频和重建视频（把两者拼接后一起输入）</strong>。这样判别器的任务从“这段视频真不真实”变成“这段重建相对于原图是不是够接近、够真实”，它天然地把重建目标和对抗目标绑在一起，避免判别器生成与输入无关的“看起来真但内容对不上”的纹理。
+        </p>
+        <figure class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <figure class="m-0">
+                    <img src="/notes/ltx-video/default-gan.png" alt="Default GAN" class="w-full rounded-xl bg-white" loading="lazy" />
+                    <figcaption class="text-xs text-gray-500 mt-2 text-center">传统 GAN：判别器只看重建结果判断真假。</figcaption>
+                </figure>
+                <figure class="m-0">
+                    <img src="/notes/ltx-video/rel-gan.png" alt="Reconstruction GAN" class="w-full rounded-xl bg-white" loading="lazy" />
+                    <figcaption class="text-xs text-gray-500 mt-2 text-center">Reconstruction GAN：判别器看到原图 + 重建拼接，把对抗目标与重建目标耦合。</figcaption>
+                </figure>
+            </div>
+            <figcaption class="text-sm text-gray-500 mt-3">rGAN 让判别器基于“原图与重建的关系”做判断，而不是孤立评估重建结果，从而在高压缩下抑制伪纹理、保留真实细节。</figcaption>
+        </figure>
+
+        <h3 class="mt-6">4.3 多层噪声注入（Multi-layer Noise Injection）</h3>
+        <p>
+            借鉴 StyleGAN 的思路，LTX-Video 在解码器的多个层级注入噪声，并为每个通道学习一个缩放系数。它的作用是给解码器提供“合成高频细节”的随机源：在高压缩下，很多细节信息在潜空间里本就不可能被完整保留，与其让网络硬猜出确定性的模糊结果，不如给它一个受控的随机通道，让它生成统计上合理、视觉上真实的纹理。这一步和 rGAN 是互补的——rGAN 提供“往真实方向走”的梯度，噪声注入提供“可以往哪些方向走”的自由度。
+        </p>
+
+        <h3 class="mt-6">4.4 Video-DWT 损失</h3>
+        <p>
+            DWT（离散小波变换）损失把视频分解到多个频带上再算 L1。相比纯像素 MSE 只在原始空间比较，DWT 损失能显式地约束不同频率成分：低频保证整体结构，高频保证边缘和纹理。对高压缩视频 VAE 来说，这有助于同时兼顾“整体不失真”和“细节不糊”，是对 MSE 只惩罚平均误差、偏向模糊的一个补偿。
+        </p>
+
+        <h3 class="mt-6">4.5 统一 log-variance（Uniform log-variance）</h3>
+        <p>
+            标准 VAE 会为每个潜变量位置预测一个方差（log-variance）。LTX-Video 改成<strong>共享一个统一的 log-variance</strong>，即整个潜张量用同一个标量方差，而不是逐位置预测。这简化了潜空间的统计结构，让后续扩散 transformer 面对的潜分布更规整、更容易建模，也减少了 VAE 输出方差不均带来的训练噪声。
+        </p>
+        <p>
+            把这五点合起来看，LTX-Video 的 VAE 训练本质上是在回答一个问题：<span class="highlight">当压缩比高到必然丢信息时，怎样让“补回来的细节”既真实又稳定</span>。MSE 管整体、DWT 管频带、LPIPS 管感知、rGAN 管对抗真实性、噪声注入管高频合成，统一 log-variance 则让潜分布对下游扩散更友好。
+        </p>
+    </div>
+
+    <div class="card" id="decoder">
+        <h2>5. 去噪解码器：让 VAE 承担最后一步扩散</h2>
+        <p>
+            这是 LTX-Video 最有辨识度的设计。传统流程里，transformer 把潜张量去噪干净后交给 VAE 解码器，解码器只做“潜→像素”的确定性映射；如果要更高分辨率，还得再挂一个独立的上采样模块。LTX-Video 反其道而行：<strong>让 VAE 解码器同时完成“潜→像素”的解码和“最后一步去噪”，并且这一步去噪发生在像素空间</strong>。
+        </p>
+        <figure class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/ltx-video/denoising.png" alt="Denoising VAE decoder pipeline" class="w-full rounded-xl bg-white" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure：去噪解码流程。transformer 在潜空间去噪到接近干净后，VAE 解码器把它映射回像素，并在像素空间执行最后一步去噪，直接产出细节丰富的高分辨率画面，无需额外的上采样网络。</figcaption>
+        </figure>
+        <p class="mt-4">
+            具体做法是把 VAE 解码器本身<strong>训练成一个扩散模型</strong>：它在一个较小的噪声范围（论文取 <span set:html={"$[0, 0.2]$"}></span>）内学习去噪，并使用像素空间的损失。这样一来，transformer 不需要把潜张量去噪到绝对干净——它把大部分噪声去掉，剩下最后一点残余噪声和高频细节的合成，交给解码器在像素空间完成。
+        </p>
+        <p>
+            这个设计有两个直接好处。其一，<span class="highlight">省掉了独立的上采样模块</span>：细节生成被吸收进解码器的去噪能力里，既保留了产出精细细节的能力，又避免了额外网络的运行时开销。其二，<strong>它把去噪职责在 transformer 和 VAE 之间重新分配</strong>：潜空间去噪负责结构和语义，像素空间去噪负责纹理和锐度，各自在最合适的空间里工作。这正是标题里 <em>holistic</em> 的又一次体现——VAE 不再只是压缩工具，而是生成管线的最后一环。
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>原文摘录：</strong></p>
+            <p class="text-sm text-gray-600 italic">“This approach preserves the ability to generate fine details without incurring the runtime cost of a separate upsampling module.”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/html/2501.00103v1" class="text-[color:var(--accent)] underline">LTX-Video arXiv HTML</a> Abstract / §4.4</p>
+        </div>
+    </div>
+
+    <div class="card" id="transformer">
+        <h2>6. Video Transformer：归一化分数坐标 RoPE 与 QK 归一化</h2>
+        <p>
+            LTX-Video 的去噪 transformer 以 <strong>PixArt-α</strong> 类的 diffusion transformer 为基础。由于 VAE 已经把序列压得很短，transformer 可以对整段视频做完整的时空自注意力，而不必像很多方案那样把时间和空间拆成两次注意力来省算力。这一节聚焦它在位置编码和注意力稳定性上的两个改动。
+        </p>
+        <figure class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/ltx-video/transformer_architecture.png" alt="Transformer block architecture" class="w-full rounded-xl bg-white max-w-md mx-auto" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure：LTX-Video transformer block。基于 PixArt-α，加入归一化分数坐标 RoPE、QK 归一化，并通过时间步与文本条件做 adaLN 类调制。</figcaption>
+        </figure>
+
+        <h3 class="mt-6">6.1 归一化分数坐标 RoPE</h3>
+        <p>
+            视频 token 有三维位置：两个空间维、一个时间维。LTX-Video 用旋转位置编码（RoPE），但坐标不是简单的整数索引，而是<strong>归一化的分数坐标</strong>：空间坐标以像素度量、时间坐标以秒度量，并注入 fps 信息，然后按预定义的最大坐标做归一化。论文比较了三种方案——绝对位置编码、分数坐标 RoPE、以及归一化分数坐标 RoPE——发现最后一种表现最好。
+        </p>
+        <figure class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/ltx-video/norm_fractional_coordinates.jpeg" alt="Normalized fractional coordinates" class="w-full rounded-xl bg-white max-w-lg mx-auto" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure：归一化分数坐标示意。用物理量（像素、秒、fps）而非离散索引来定义位置，让模型在不同分辨率、帧率、时长之间保持时空一致性，也让多分辨率训练更自然。</figcaption>
+        </figure>
+        <p class="mt-4">
+            用物理坐标而非离散索引的好处，是让位置编码对分辨率、帧率、时长的变化更鲁棒：同一个真实位置在不同采样设置下有一致的编码，从而支持多分辨率训练与推理时的时空外推。论文还发现 RoPE 的频率间隔以指数方式增长（而非线性）时效果更好，下面的频率热力图对比了两种方案。
+        </p>
+        <figure class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/ltx-video/exp_vs_inv_exp_shared_y_axis_heatmap.png" alt="RoPE frequency spacing" class="w-full rounded-xl bg-white" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure：RoPE 频率间隔的消融（指数增长 vs 反向）。合适的频率分布让不同尺度的时空关系都能被注意力捕捉。</figcaption>
+        </figure>
+
+        <h3 class="mt-6">6.2 QK 归一化</h3>
+        <p>
+            LTX-Video 对注意力里的 query 和 key 张量做归一化（QK normalization）。它的作用是稳定注意力计算：归一化后点积的尺度更可控，能提升训练鲁棒性，并增加注意力分布的熵（不容易塌缩到少数几个 token 上）。对于要做完整时空注意力、序列又长的视频模型来说，这类稳定性技巧对能否顺利训练很关键。
+        </p>
+    </div>
+
+    <div class="card" id="training">
+        <h2>7. Rectified-Flow 训练与条件注入</h2>
+        <p>
+            LTX-Video 的生成目标采用 <strong>Rectified Flow</strong>。它不像 DDPM 那样定义一条复杂的加噪马尔可夫链，而是在干净数据 <span set:html={"$z_0$"}></span> 和噪声 <span set:html={"$\\varepsilon$"}></span> 之间取一条直线路径：
+        </p>
+        <div class="math-block">
+            <p set:html={"$$z_t = (1 - t)\\, z_0 + t\\, \\varepsilon, \\qquad t \\in [0, 1]$$"}></p>
+        </div>
+        <p>
+            模型学习预测这条路径的速度场（即 <span set:html={"$\\varepsilon - z_0$"}></span> 方向），采样时沿速度场从噪声一步步走回数据。相比传统扩散，rectified flow 的路径更直，允许用更少的步数得到高质量结果——这也是 LTX-Video 只用约 20 步就能实时生成的原因之一。训练目标可以写成对速度场的回归：
+        </p>
+        <div class="math-block">
+            <p set:html={"$$\\mathcal{L} = \\mathbb{E}_{z_0, \\varepsilon, t}\\left[\\; \\big\\| v_\\theta(z_t, t, c) - (\\varepsilon - z_0) \\big\\|^2 \\;\\right]$$"}></p>
+        </div>
+        <p>
+            其中 <span set:html={"$c$"}></span> 是条件。论文在训练里还包含几个工程要点：<strong>timestep 调度</strong>（如何在 <span set:html={"$[0,1]$"}></span> 上采样 <span set:html={"$t$"}></span> 以平衡不同噪声水平的学习）、<strong>多分辨率训练</strong>（配合归一化分数坐标，让同一模型覆盖不同分辨率与时长）、以及<strong>把图像当作单帧视频一起训练</strong>（因果 VAE 让这一点自然成立）。
+        </p>
+
+        <h3 class="mt-6">7.1 文本与图像条件</h3>
+        <p>
+            文本条件由 <strong>T5-XXL</strong> 文本编码器提供 embedding，注入到 transformer。图像到视频（image-to-video）则通过一个简单的<strong>基于时间步的条件机制</strong>实现：把参考图像作为“已经干净”的首帧约束进去，模型据此续写后续帧。这意味着 text-to-video 和 image-to-video 是<strong>同时训练</strong>的两种能力，而不是两个独立模型。
+        </p>
+        <figure class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/ltx-video/image-to-video.png" alt="Image to video conditioning" class="w-full rounded-xl bg-white" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure：图像到视频的条件注入。参考图像作为低噪声（近似干净）的首帧约束，模型在其基础上生成时间上连贯的后续帧。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card" id="experiments">
+        <h2>8. Experiments：实时性、质量与消融</h2>
+        <p>
+            论文最醒目的结果是<strong>速度</strong>：在单张 Nvidia H100 上，用 20 个扩散步生成 121 帧、768×512 的视频只需约 2 秒，也就是生成 5 秒、24fps 的视频比观看这段视频还快。在这个速度下，它在 2B 参数（蒸馏前）规模上超过了同量级的其他文本到视频模型。
+        </p>
+        <div class="note-box text-sm mt-2">
+            <p><strong>原文摘录：</strong></p>
+            <p class="text-sm text-gray-600 italic">“...capable of generating videos faster than the time it takes to watch them (2 seconds to generate 121 frames at 768×512 pixels and 20 diffusion steps on an Nvidia H100 GPU), while outperforming all available models of similar scale (2B parameters, before distillation).”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/html/2501.00103v1" class="text-[color:var(--accent)] underline">LTX-Video arXiv HTML</a> §1</p>
+        </div>
+        <p class="mt-4">
+            消融实验主要围绕前面几处设计。<strong>rGAN vs 传统 GAN</strong>：rGAN 在高压缩下重建更真实、伪纹理更少，下面的对比图直观展示了差异。<strong>RoPE 频率间隔</strong>：指数增长的频率分布优于其他方案。<strong>去噪 VAE 解码器</strong>：把最后一步去噪放进像素空间，比“transformer 去噪到底 + 纯确定性解码 + 独立上采样”在细节和效率上都更好。
+        </p>
+        <figure class="mt-4 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/ltx-video/compare_gan_results.png" alt="GAN comparison results" class="w-full rounded-xl bg-white" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure：Reconstruction GAN 与传统 GAN 的重建结果对比。rGAN 在保留真实细节的同时更少产生与内容无关的伪纹理。</figcaption>
+        </figure>
+        <p class="mt-4">
+            把这些消融合起来读，会发现它们都在支撑同一个论点：<span class="highlight">LTX-Video 的收益不来自单一“大招”，而来自一组彼此配合的结构决定</span>——高压缩 VAE 让 token 变少，去噪解码器把细节生成放到最合适的空间，rGAN 和 DWT 保证高压缩下重建不崩，归一化坐标和 QK 归一化让长序列 transformer 稳定可训。
+        </p>
+    </div>
+
+    <div class="card" id="lineage">
+        <h2>9. 版本脉络：从 LTXV 到 LTX-2.5</h2>
+        <p>
+            arXiv:2501.00103 描述的是 LTX-Video 的第一代设计。此后 Lightricks 把它发展成一条持续演进的产品线，理解这条脉络有助于判断“论文里的哪些设计被保留、哪些被替换”。以下版本信息来自官方仓库与后续论文，属于对一手论文的补充说明，可能随发布节奏更新。
+        </p>
+        <div class="overflow-x-auto mt-4">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr>
+                        <th>版本</th>
+                        <th>规模 / 形态</th>
+                        <th>关键变化</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>LTXV（本文）</strong></td>
+                        <td>2B（后有 13B、dev/distilled）</td>
+                        <td>1:192 Video-VAE、去噪解码器、rGAN、归一化分数坐标 RoPE、rectified flow；video-only；多尺度渲染。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>LTX-2</strong></td>
+                        <td>非对称双流 DiT，14B 视频 + 5B 音频</td>
+                        <td>联合音视频生成、双向音视频交叉注意力、解耦的音/视频 VAE、支持 4K@50fps。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>LTX-2.3</strong></td>
+                        <td>迭代版本</td>
+                        <td>在 LTX-2 双流架构上继续提质与提速。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>LTX-2.5</strong></td>
+                        <td>约 22B</td>
+                        <td>自定义 Gemma-4 12B 文本编码器、Diffusion Video Decoder、多镜头（multi-shot）、Fast/Pro 两档流程。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="mt-4">
+            值得注意的是，<span class="highlight">论文里“把职责在 VAE 与 transformer 之间重新分配”的核心思路被一路保留了下来</span>：从第一代的去噪解码器，到 LTX-2 的解耦 VAE 与双流 DiT，再到 LTX-2.5 的 Diffusion Video Decoder，Lightricks 始终在“压缩、去噪、解码怎么切分”这个问题上做文章，而不是单纯堆参数。这也印证了本文的判断——LTX 系列的竞争力更多来自系统设计，而非规模。
+        </p>
+    </div>
+
+    <div class="card" id="practice">
+        <h2>10. Practice：怎么用、什么时候不该用</h2>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2 mt-4">
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-5">
+                <h3 class="text-lg font-semibold text-slate-800">适合的场景</h3>
+                <ul class="list-disc pl-6 text-sm text-gray-600 space-y-2 mt-3">
+                    <li>需要快速迭代的文本到视频、图像到视频原型：实时生成让“改 prompt 立刻看结果”的循环成立。</li>
+                    <li>算力受限但想跑视频扩散：高压缩 VAE 让同样显存能处理更长、更高分辨率的序列。</li>
+                    <li>开源可自建的视频生成管线：代码和权重公开，便于二次开发、蒸馏和微调。</li>
+                    <li>需要同一模型同时支持 T2V 和 I2V 的产品：两种能力共享一套权重。</li>
+                </ul>
+            </div>
+            <div class="rounded-2xl border border-white/70 bg-white/80 p-5">
+                <h3 class="text-lg font-semibold text-slate-800">需要谨慎的场景</h3>
+                <ul class="list-disc pl-6 text-sm text-gray-600 space-y-2 mt-3">
+                    <li>对极致画质、长时长一致性要求极高的电影级制作，早期版本仍有限制（见下一节）。</li>
+                    <li>需要精确文字渲染、复杂物理因果推理的场景，扩散视频模型普遍偏弱。</li>
+                    <li>如果目标是音视频联合生成，应直接考虑 LTX-2 系列而非第一代。</li>
+                    <li>把高压缩 VAE 直接迁移到与训练分布差异很大的领域时，需重新评估重建质量。</li>
+                </ul>
+            </div>
+        </div>
+        <p class="mt-4">
+            一个实用的心智模型：<span class="highlight">LTX-Video 用“压缩换速度”，再用“损失组合 + 去噪解码器”把压缩丢掉的质量补回来</span>。当你的任务对速度和可迭代性敏感、对绝对画质不是零容忍时，它的性价比很高；当你需要顶级画质或特殊能力（音频、超长镜头）时，应该看它的更高版本或其他专用模型。
+        </p>
+    </div>
+
+    <div class="card" id="limits">
+        <h2>11. Discussion：局限与边界</h2>
+        <p>
+            论文自己在 Limitations 一节里保持了克制。第一类局限来自<strong>高压缩的物理上限</strong>：1:192 的压缩必然丢弃部分信息，rGAN、DWT 和噪声注入能“合成”出统计上合理的细节，但这些细节是生成出来的，不等于真实还原。在对细节保真度要求极端的场景，这种“补回来”的策略有天花板。
+        </p>
+        <p>
+            第二类局限来自<strong>规模</strong>。本文的模型是 2B（蒸馏前），它在同量级里领先，但与更大的闭源视频模型相比，在复杂场景理解、长时序一致性、罕见概念组合上仍有差距。论文的主张是“在这个规模和速度下最优”，而不是“绝对最强”。
+        </p>
+        <p>
+            第三类是<strong>评测解释</strong>的普遍问题：视频生成缺乏统一、无争议的自动指标，很多结论依赖人工偏好比较，不同 prompt 集和评审设置会影响结论。因此更稳妥的读法是——LTX-Video 证明了“系统级重排 + 高压缩 VAE + 去噪解码器”是一条能同时拿到速度和可用质量的路径，而具体名次会随对比对象和评测方式变化。
+        </p>
+        <p>
+            最后，论文也讨论了<strong>社会影响</strong>：高质量、低成本、实时的视频生成会放大深伪与误导内容的风险，这类能力越强，越需要配套的溯源、水印和使用规范。这与其说是模型的技术局限，不如说是它成功之后必须面对的责任边界。
+        </p>
+    </div>
+
+    <div class="card" id="figures">
+        <h2>12. Original Figures &amp; References</h2>
+        <p>
+            这一节保留论文原图，方便快速回看。图片均下载自 arXiv HTML 版本并在本站本地引用。
+        </p>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2 mt-6">
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/ltx-video/vae_encoder.png" alt="VAE encoder" class="w-full rounded-xl bg-white" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Video-VAE Encoder。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/ltx-video/vae_decoder.png" alt="VAE decoder" class="w-full rounded-xl bg-white" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Video-VAE Decoder（承担像素空间末步去噪）。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/ltx-video/denoising.png" alt="Denoising decoder" class="w-full rounded-xl bg-white" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">去噪解码流程。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/ltx-video/transformer_architecture.png" alt="Transformer" class="w-full rounded-xl bg-white" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Video Transformer block。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/ltx-video/default-gan.png" alt="Default GAN" class="w-full rounded-xl bg-white" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">传统 GAN 判别器结构。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/ltx-video/rel-gan.png" alt="Reconstruction GAN" class="w-full rounded-xl bg-white" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">Reconstruction GAN 判别器结构。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/ltx-video/norm_fractional_coordinates.jpeg" alt="Normalized fractional coordinates" class="w-full rounded-xl bg-white" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">归一化分数坐标。</figcaption>
+            </figure>
+            <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                <img src="/notes/ltx-video/compare_gan_results.png" alt="GAN comparison" class="w-full rounded-xl bg-white" loading="lazy" />
+                <figcaption class="text-sm text-gray-500 mt-3">rGAN 与传统 GAN 重建对比。</figcaption>
+            </figure>
+        </div>
+
+        <h3 class="mt-8">参考资料</h3>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><a href="https://arxiv.org/html/2501.00103v1" class="text-[color:var(--accent)] underline">LTX-Video: Realtime Video Latent Diffusion — arXiv HTML</a>：本文最主要的一手来源，用于提取摘要、Video-VAE 设计、损失组合、去噪解码器、位置编码、rectified flow 与实验结论。</li>
+            <li><a href="https://arxiv.org/pdf/2501.00103" class="text-[color:var(--accent)] underline">LTX-Video paper PDF</a>：用于核对 1:192 压缩比、32×32×8 每 token、128 潜通道、H100 上 2 秒 121 帧等关键数值与图号。</li>
+            <li><a href="https://github.com/Lightricks/LTX-Video" class="text-[color:var(--accent)] underline">Lightricks/LTX-Video GitHub</a>：官方代码与预训练权重，用于补充实现细节、版本形态（dev/distilled、13B）与运行方式。</li>
+            <li><a href="https://www.lightricks.com/ltxv" class="text-[color:var(--accent)] underline">LTXV / LTX Studio 官方页面</a>：用于补充产品化后的版本脉络（LTX-2、LTX-2.5）与公开能力说明。</li>
+        </ul>
+        <p class="mt-4 text-sm text-gray-500">
+            说明：第 9 节的版本脉络（LTX-2 / LTX-2.3 / LTX-2.5 参数与能力）来自后续官方发布与二手整理，用于补充语境，可能随版本更新而变化；本文第 1–8 节的技术细节均以 arXiv:2501.00103v1 一手论文为准。
+        </p>
+    </div>
+</BaseLayout>
