@@ -1,0 +1,634 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: '把 Agent 经验编译成知识库：从 Voyager 到 WikiSkill 的谱系与可落地设计',
+    description: '系统梳理“如何把 agent 的一次次执行经验沉淀成可复用知识/技能”这条脉络：一个统一的 Capture→Reflect→Compile→Index→Retrieve→Govern 框架，三条技术主线（记忆流 / 技能即代码 / 工作流与洞察归纳），接口漂移与长程难题，以及一份针对“记住接口怎么调”的可运行知识库设计蓝图。',
+    tags: ['Agent', 'Memory', 'Skill Evolution', 'Knowledge Base', 'Systems'],
+    readTime: '40 min',
+    createdAt: '2026-09-20'
+};
+---
+
+<BaseLayout title="把 Agent 经验编译成知识库：从 Voyager 到 WikiSkill 的谱系与可落地设计" description="经验沉淀的统一框架、三条技术主线、接口漂移难题，以及一份可直接套用的知识库设计蓝图。">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Agent Systems / Experience → Knowledge / Skill Evolution</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">把 Agent 经验编译成知识库：从 Voyager 到 WikiSkill 的谱系与可落地设计</h1>
+        <p class="text-xl text-gray-500">当模型、harness、loop 都趋于成熟，下一个瓶颈是：agent 每次做完事，能不能把“这次学到的东西”留下来复利</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <div class="note-box text-sm">
+        <p><strong>这篇写给谁：</strong>如果你在做需要反复调同一批接口、跑同一类流程的 agent，最烦的往往不是“模型不够聪明”，而是“它昨天摸清楚的接口调用方式，今天又忘了，得从头试一遍”。这篇笔记不聚焦某一篇论文，而是把 2023–2026 年间“<strong>把执行经验编译成可复用知识 / 技能</strong>”这条研究脉络拉直，给出一个能套在任何一篇工作上的统一框架，并在最后落到一份<strong>可直接实现的知识库设计蓝图</strong>——尤其针对“记住接口怎么调”这个最实际的痛点。</p>
+        <p class="mt-2"><strong>阅读建议：</strong>第 2 节的统一框架是全篇的“坐标系”，后面每一条主线、每一篇论文都会挂到这个坐标系上。如果你想直接抄作业，跳到第 9 节的落地蓝图，再回头看它依据了哪些论文的结论。</p>
+    </div>
+
+    <nav class="toc mt-8" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#why">1. 为什么“经验沉淀”正在成为 agent 的核心命题</a></li>
+            <li><a href="#framework">2. 一个统一框架：经验沉淀的六个环节</a></li>
+            <li><a href="#lineage">3. 谱系全景：三条主线如何汇流到“Wiki 层”</a></li>
+            <li><a href="#memory">4. 主线一：经验作为记忆（Reflexion → Generative Agents → MUSE → DeepAgent）</a></li>
+            <li><a href="#skill">5. 主线二：经验作为可执行技能（Voyager → SkillWiki → WikiSkill）</a></li>
+            <li><a href="#workflow">6. 主线三：经验作为工作流与洞察（AWM → ExpeL → Agent-S → LEGOMem）</a></li>
+            <li><a href="#tool">7. 最贴痛点的分支：接口 / 工具怎么调，怎么被记住</a></li>
+            <li><a href="#drift">8. 长程与接口漂移：知识会过期，也要会更新</a></li>
+            <li><a href="#tensions">9. 五个关键设计张力：读懂了它们才算读懂这条线</a></li>
+            <li><a href="#blueprint">10. 落地蓝图：给“记住接口怎么调”造一个可运行的知识库</a></li>
+            <li><a href="#pitfalls">11. 常见误区与边界</a></li>
+            <li><a href="#refs">12. 参考资料</a></li>
+        </ul>
+    </nav>
+
+    <!-- 1 -->
+    <div class="card" id="why">
+        <h2>1. 为什么“经验沉淀”正在成为 agent 的核心命题</h2>
+        <p>
+            过去两年，用 agent 的姿势经历了一条清晰的演化线：先是 <strong>prompt engineering</strong>（把指令写好），再是 <strong>context engineering</strong>（管理进入窗口的每个 token），再是 <strong>harness engineering</strong>（把工具、循环、状态封装成脚手架），最后是 <strong>loop engineering</strong>（把“反复催 agent”这件事做成系统）。这四步解决的是同一个问题：<strong>在一次任务内，怎么让 agent 尽可能把事做对。</strong>
+        </p>
+        <p>
+            但当模型足够强、harness 足够顺、loop 足够稳之后，一个更尖锐的瓶颈浮出水面：<span class="highlight">一次任务内做对，不等于下一次还能做对。</span>今天 agent 花了 30 步、试错了 5 次才摸清楚某个内部接口的鉴权顺序、参数格式、翻页游标怎么传；明天开一个新会话，这 5 次试错要原样再来一遍。它<strong>没有把经验留下来</strong>。
+        </p>
+        <p>
+            这正是 MUSE（Learning on the Job）一针见血指出的问题：现有 LLM agent 是 <em>“test-time static and cannot learn from experience, lacking the ability to accumulate knowledge and continuously improve on the job”</em>（测试时是静态的，无法从经验中学习，缺乏在实际工作中持续积累知识、不断改进的能力）。ExpeL 则从另一角度点破约束：GPT-4、Claude 这类模型 <em>“are primarily accessible through API calls, with their parametric weights remaining proprietary”</em>——你根本改不动它的权重，所以只能<strong>在权重之外</strong>想办法让它变强。
+        </p>
+
+        <div class="my-6">
+            <svg viewBox="0 0 760 210" class="w-full" role="img" aria-label="从 prompt 到经验沉淀的演化：前四步解决单次任务，第五步解决跨任务复利">
+                <defs>
+                    <marker id="arrow1" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#6366f1"/></marker>
+                </defs>
+                <g font-family="ui-sans-serif, system-ui" font-size="13">
+                    <rect x="10" y="70" width="120" height="52" rx="10" fill="#eef2ff" stroke="#c7d2fe"/>
+                    <text x="70" y="92" text-anchor="middle" fill="#3730a3" font-weight="700">Prompt</text>
+                    <text x="70" y="110" text-anchor="middle" fill="#6366f1" font-size="11">写好指令</text>
+
+                    <rect x="150" y="70" width="120" height="52" rx="10" fill="#eef2ff" stroke="#c7d2fe"/>
+                    <text x="210" y="92" text-anchor="middle" fill="#3730a3" font-weight="700">Context</text>
+                    <text x="210" y="110" text-anchor="middle" fill="#6366f1" font-size="11">管理窗口</text>
+
+                    <rect x="290" y="70" width="120" height="52" rx="10" fill="#eef2ff" stroke="#c7d2fe"/>
+                    <text x="350" y="92" text-anchor="middle" fill="#3730a3" font-weight="700">Harness</text>
+                    <text x="350" y="110" text-anchor="middle" fill="#6366f1" font-size="11">封装脚手架</text>
+
+                    <rect x="430" y="70" width="120" height="52" rx="10" fill="#eef2ff" stroke="#c7d2fe"/>
+                    <text x="490" y="92" text-anchor="middle" fill="#3730a3" font-weight="700">Loop</text>
+                    <text x="490" y="110" text-anchor="middle" fill="#6366f1" font-size="11">自动化循环</text>
+
+                    <rect x="580" y="58" width="168" height="76" rx="12" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+                    <text x="664" y="84" text-anchor="middle" fill="#92400e" font-weight="800">Experience</text>
+                    <text x="664" y="104" text-anchor="middle" fill="#b45309" font-size="11">把经验编译成</text>
+                    <text x="664" y="120" text-anchor="middle" fill="#b45309" font-size="11">可复用知识/技能</text>
+
+                    <line x1="130" y1="96" x2="148" y2="96" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow1)"/>
+                    <line x1="270" y1="96" x2="288" y2="96" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow1)"/>
+                    <line x1="410" y1="96" x2="428" y2="96" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow1)"/>
+                    <line x1="550" y1="96" x2="578" y2="96" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow1)"/>
+
+                    <text x="290" y="170" text-anchor="middle" fill="#64748b" font-size="12">← 这四步解决“单次任务内做对” →</text>
+                    <text x="664" y="170" text-anchor="middle" fill="#b45309" font-size="12">解决“跨任务复利”</text>
+                </g>
+            </svg>
+        </div>
+
+        <p>
+            所以这条脉络的共同母题可以浓缩成一句话：<strong>在不改模型权重的前提下，用一层“外部知识”让 agent 把过去的经验变成未来的能力。</strong>不同工作的差别，只在于<strong>这层外部知识长什么样、怎么产生、怎么被调回来用</strong>。这就引出了下一节的统一框架。
+        </p>
+    </div>
+
+    <!-- 2 -->
+    <div class="card" id="framework">
+        <h2>2. 一个统一框架：经验沉淀的六个环节</h2>
+        <p>
+            读了十几篇相关工作后，你会发现它们其实在同一条流水线上各自补一块。我把这条流水线抽象成<strong>六个环节</strong>，后面每一篇论文都会告诉你“它主要在哪个环节发力”。这是全篇的坐标系，值得先记住。
+        </p>
+
+        <div class="my-6">
+            <svg viewBox="0 0 780 300" class="w-full" role="img" aria-label="经验沉淀六环节流水线：捕获、反思、编译、存储索引、检索应用、治理进化">
+                <defs>
+                    <marker id="arrow2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#0ea5e9"/></marker>
+                </defs>
+                <g font-family="ui-sans-serif, system-ui" font-size="13">
+                    <!-- top row nodes -->
+                    <rect x="20" y="40" width="128" height="66" rx="12" fill="#e0f2fe" stroke="#38bdf8"/>
+                    <text x="84" y="66" text-anchor="middle" fill="#075985" font-weight="700">① Capture</text>
+                    <text x="84" y="84" text-anchor="middle" fill="#0369a1" font-size="11">记录原始轨迹</text>
+                    <text x="84" y="99" text-anchor="middle" fill="#0369a1" font-size="11">动作/观察/反馈</text>
+
+                    <rect x="180" y="40" width="128" height="66" rx="12" fill="#e0f2fe" stroke="#38bdf8"/>
+                    <text x="244" y="66" text-anchor="middle" fill="#075985" font-weight="700">② Reflect</text>
+                    <text x="244" y="84" text-anchor="middle" fill="#0369a1" font-size="11">判成败、找因果</text>
+                    <text x="244" y="99" text-anchor="middle" fill="#0369a1" font-size="11">自我批评</text>
+
+                    <rect x="340" y="40" width="128" height="66" rx="12" fill="#dcfce7" stroke="#22c55e"/>
+                    <text x="404" y="66" text-anchor="middle" fill="#166534" font-weight="700">③ Compile</text>
+                    <text x="404" y="84" text-anchor="middle" fill="#15803d" font-size="11">归纳成可复用件</text>
+                    <text x="404" y="99" text-anchor="middle" fill="#15803d" font-size="11">规则/技能/wiki</text>
+
+                    <rect x="500" y="40" width="128" height="66" rx="12" fill="#dcfce7" stroke="#22c55e"/>
+                    <text x="564" y="66" text-anchor="middle" fill="#166534" font-weight="700">④ Store/Index</text>
+                    <text x="564" y="84" text-anchor="middle" fill="#15803d" font-size="11">结构化落库</text>
+                    <text x="564" y="99" text-anchor="middle" fill="#15803d" font-size="11">建可检索索引</text>
+
+                    <rect x="632" y="130" width="128" height="66" rx="12" fill="#fee2e2" stroke="#ef4444"/>
+                    <text x="696" y="156" text-anchor="middle" fill="#991b1b" font-weight="700">⑤ Retrieve</text>
+                    <text x="696" y="174" text-anchor="middle" fill="#b91c1c" font-size="11">按需召回并</text>
+                    <text x="696" y="189" text-anchor="middle" fill="#b91c1c" font-size="11">注入上下文</text>
+
+                    <rect x="340" y="220" width="128" height="66" rx="12" fill="#f3e8ff" stroke="#a855f7"/>
+                    <text x="404" y="246" text-anchor="middle" fill="#6b21a8" font-weight="700">⑥ Govern</text>
+                    <text x="404" y="264" text-anchor="middle" fill="#7e22ce" font-size="11">门控/回滚/更新</text>
+                    <text x="404" y="279" text-anchor="middle" fill="#7e22ce" font-size="11">抗漂移与遗忘</text>
+
+                    <!-- arrows -->
+                    <line x1="148" y1="73" x2="178" y2="73" stroke="#0ea5e9" stroke-width="2" marker-end="url(#arrow2)"/>
+                    <line x1="308" y1="73" x2="338" y2="73" stroke="#0ea5e9" stroke-width="2" marker-end="url(#arrow2)"/>
+                    <line x1="468" y1="73" x2="498" y2="73" stroke="#0ea5e9" stroke-width="2" marker-end="url(#arrow2)"/>
+                    <path d="M628,90 C680,100 696,110 696,128" fill="none" stroke="#0ea5e9" stroke-width="2" marker-end="url(#arrow2)"/>
+                    <!-- retrieve feeds back to capture (agent acts again) -->
+                    <path d="M632,175 C420,205 200,150 148,100" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrow2)"/>
+                    <text x="360" y="150" fill="#64748b" font-size="11">应用 → 产生新轨迹（闭环）</text>
+                    <!-- govern watches compile/store -->
+                    <path d="M404,220 L404,108" fill="none" stroke="#a855f7" stroke-width="2" stroke-dasharray="4 4" marker-end="url(#arrow2)"/>
+                    <text x="470" y="200" fill="#7e22ce" font-size="11">治理贯穿 ③④</text>
+                </g>
+            </svg>
+        </div>
+
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>① Capture（捕获）</strong>：把一次执行的原始轨迹（动作、工具调用、环境观察、报错、最终结果）记录下来。这是最“笨”但必需的一步——没有原始记录，后面全是空中楼阁。</li>
+            <li><strong>② Reflect（反思）</strong>：对轨迹做判断——成功还是失败？哪一步是关键？错在哪？这一步把“流水账”变成“带评价的经验”。Reflexion 是这一环节的奠基。</li>
+            <li><strong>③ Compile（编译/归纳）</strong>：把一条或多条经验<strong>归纳</strong>成一个可复用的“件”。这个“件”可以是一条自然语言规则（ExpeL）、一段可执行代码（Voyager）、一个工作流模板（AWM）、或一页 wiki（WikiSkill）。这是整条线的“价值创造”环节。</li>
+            <li><strong>④ Store / Index（存储与索引）</strong>：把编译出的件结构化落库，并建立可检索的索引（向量、标签、图谱），否则规模一大就找不回来。</li>
+            <li><strong>⑤ Retrieve / Apply（检索与应用）</strong>：面对新任务时，按相关性把最有用的少数几件召回、注入上下文，指导本次生成。<strong>召回质量决定了前面所有努力有没有兑现。</strong></li>
+            <li><strong>⑥ Govern / Evolve（治理与进化）</strong>：随着经验累积，要处理冲突、过时、错误传播；要能门控（好的才纳入）、回滚（坏的能撤销）、更新（旧知识随环境漂移而刷新）。这是让知识库“长期不劣化”的关键。</li>
+        </ul>
+
+        <div class="note-box text-sm">
+            <p><strong>一句话记住这个框架：</strong>捕获原料 → 反思评价 → 编译成件 → 落库建索引 → 检索来用 → 治理防腐。<strong>绝大多数“看起来很像”的论文，差别就在于它们把重心押在了哪一环，以及“件”长什么样。</strong></p>
+        </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="card" id="lineage">
+        <h2>3. 谱系全景：三条主线如何汇流到“Wiki 层”</h2>
+        <p>
+            用第 2 节的框架去看，2023 年以来的工作大致沿三条主线展开，它们对“编译出的件长什么样”给出了三种不同答案；而 2026 年的一批工作开始把它们<strong>合流</strong>到一个共同结构——中间那层“会持续演化的知识库（wiki）”。
+        </p>
+
+        <div class="my-6">
+            <svg viewBox="0 0 780 360" class="w-full" role="img" aria-label="三条主线：记忆流、技能即代码、工作流与洞察，汇流到 Wiki 层">
+                <defs>
+                    <marker id="arrow3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#64748b"/></marker>
+                </defs>
+                <g font-family="ui-sans-serif, system-ui" font-size="12.5">
+                    <!-- 主线1 记忆 -->
+                    <rect x="10" y="20" width="230" height="26" rx="8" fill="#dbeafe" stroke="#3b82f6"/>
+                    <text x="125" y="38" text-anchor="middle" fill="#1e40af" font-weight="700">主线一 · 经验 = 记忆</text>
+                    <text x="20" y="70" fill="#334155">Reflexion（反思进 episodic buffer）</text>
+                    <text x="20" y="92" fill="#334155">Generative Agents（memory stream）</text>
+                    <text x="20" y="114" fill="#334155">MUSE（分层记忆自进化）</text>
+                    <text x="20" y="136" fill="#334155">DeepAgent（memory folding）</text>
+
+                    <!-- 主线2 技能 -->
+                    <rect x="275" y="20" width="230" height="26" rx="8" fill="#dcfce7" stroke="#22c55e"/>
+                    <text x="390" y="38" text-anchor="middle" fill="#166534" font-weight="700">主线二 · 经验 = 可执行技能</text>
+                    <text x="285" y="70" fill="#334155">Voyager（技能 = 代码 + 描述）</text>
+                    <text x="285" y="92" fill="#334155">EvolvingAgent（技能 + 世界模型）</text>
+                    <text x="285" y="114" fill="#334155">SkillWiki（技能生产/治理基建）</text>
+                    <text x="285" y="136" fill="#334155">WikiSkill（wiki→skill 三层）</text>
+
+                    <!-- 主线3 工作流 -->
+                    <rect x="540" y="20" width="230" height="26" rx="8" fill="#fef3c7" stroke="#f59e0b"/>
+                    <text x="655" y="38" text-anchor="middle" fill="#92400e" font-weight="700">主线三 · 经验 = 工作流/洞察</text>
+                    <text x="550" y="70" fill="#334155">ExpeL（跨任务 insights）</text>
+                    <text x="550" y="92" fill="#334155">AWM（归纳可复用 workflow）</text>
+                    <text x="550" y="114" fill="#334155">Agent-S（SOP + 动作库 GAR）</text>
+                    <text x="550" y="136" fill="#334155">LEGOMem（模块化过程记忆）</text>
+
+                    <!-- 汇流层 -->
+                    <rect x="180" y="200" width="420" height="70" rx="14" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="2"/>
+                    <text x="390" y="228" text-anchor="middle" fill="#5b21b6" font-weight="800" font-size="15">汇流：一层“持续演化的知识库 / Wiki”</text>
+                    <text x="390" y="250" text-anchor="middle" fill="#6d28d9" font-size="12">在原始轨迹与可执行技能之间，插入 source-grounded、可回滚/可更新的中间层</text>
+                    <text x="390" y="264" text-anchor="middle" fill="#6d28d9" font-size="11">WikiSkill · SkillWiki · TrajWiki · MAGNET · ColorBrowserAgent</text>
+
+                    <!-- 漂移分支 -->
+                    <rect x="180" y="300" width="420" height="44" rx="12" fill="#fee2e2" stroke="#ef4444"/>
+                    <text x="390" y="322" text-anchor="middle" fill="#991b1b" font-weight="700">横切难题：长程稳定 + 接口/界面漂移</text>
+                    <text x="390" y="338" text-anchor="middle" fill="#b91c1c" font-size="11">MAGNET（界面漂移）· ColorBrowserAgent（决策漂移）· Learning on the Job（100+ 步）</text>
+
+                    <line x1="125" y1="145" x2="300" y2="198" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow3)"/>
+                    <line x1="390" y1="145" x2="390" y2="198" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow3)"/>
+                    <line x1="655" y1="145" x2="480" y2="198" stroke="#64748b" stroke-width="1.8" marker-end="url(#arrow3)"/>
+                    <line x1="390" y1="270" x2="390" y2="298" stroke="#ef4444" stroke-width="1.8" marker-end="url(#arrow3)"/>
+                </g>
+            </svg>
+        </div>
+
+        <p>
+            这张图有三个值得记住的判断：
+        </p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>三条主线不是互斥，而是“件的粒度”不同。</strong>记忆流保存的是<strong>事件</strong>（发生了什么），技能保存的是<strong>能力</strong>（怎么做），工作流/洞察保存的是<strong>模式与规则</strong>（这类任务一般怎么走、要避开什么坑）。一个成熟系统往往三者都要。</li>
+            <li><strong>2026 年的关键动作是“插一层 wiki”。</strong>早期系统要么只存流水账（记忆流，量大但难复用），要么只存技能（复用性强但一旦废弃就丢失了背后的知识）。WikiSkill / SkillWiki / TrajWiki 的共同主张是：在两者之间加一层<strong>持久、可 grounding 到证据、能增量更新</strong>的知识层。</li>
+            <li><strong>接口/界面漂移是横切所有主线的“重力”。</strong>无论你的件是记忆、技能还是工作流，只要环境会变（接口升级、页面改版、流程重组），沉淀下来的知识就会过期。MAGNET、ColorBrowserAgent 专门处理这件事。</li>
+        </ul>
+    </div>
+
+    <!-- 4 -->
+    <div class="card" id="memory">
+        <h2>4. 主线一：经验作为记忆（Reflexion → Generative Agents → MUSE → DeepAgent）</h2>
+        <p>
+            第一条主线把经验当作<strong>可检索的记忆条目</strong>。它的核心贡献主要落在框架的 ①捕获、②反思、⑤检索三个环节。
+        </p>
+
+        <h3 class="text-blue-600">4.1 Reflexion：把“反思”本身变成一种强化信号</h3>
+        <p>
+            Reflexion（Shinn et al., 2023）是这条线的起点，也是整篇脉络的思想原点。它的洞察是：既然改不动权重，那就用<strong>语言反馈</strong>来“强化”agent。原文的表述非常精确：Reflexion agents <em>“verbally reflect on task feedback signals, then maintain their own reflective text in an episodic memory buffer to induce better decision-making in subsequent trials”</em>（用语言对任务反馈进行反思，把这些反思文本存进一个 episodic memory buffer，用来诱导后续尝试中更好的决策）。
+        </p>
+        <p>
+            它的结构是一个三角：<strong>Actor</strong>（产生动作）、<strong>Evaluator</strong>（判断结果好坏，可以是标量分数也可以是环境信号）、<strong>Self-Reflection</strong>（把“为什么失败”写成一段可读的反思，存进记忆）。下一轮尝试时，这段反思会被塞回上下文，agent 于是“记得”上次栽在哪。就靠这个，Reflexion 在 HumanEval 上把 pass@1 从 GPT-4 的 80% 推到了 91%。
+        </p>
+        <div class="quote-block">
+            <p>“We propose Reflexion, a novel framework to reinforce language agents not by updating weights, but instead through linguistic feedback.” —— Reflexion 摘要</p>
+            <p><span>启发：反思（环节②）是把“原始轨迹”升级成“有价值经验”的最小必要动作。任何经验沉淀系统，如果只 Capture 不 Reflect，存下来的多半是噪声。</span></p>
+        </div>
+
+        <h3 class="text-blue-600">4.2 Generative Agents：memory stream + 反思金字塔</h3>
+        <p>
+            Generative Agents（Park et al., 2023）把记忆做成了一个更完整的架构，它的三件套——<strong>memory stream、retrieval、reflection</strong>——几乎定义了后来所有“agent 记忆系统”的模板。原文描述其架构 <em>“store a complete record of the agent's experiences using natural language, synthesize those memories over time into higher-level reflections, and retrieve them dynamically to plan behavior”</em>（用自然语言存下 agent 经验的完整记录，随时间把这些记忆合成为更高层的反思，并动态检索它们来规划行为）。
+        </p>
+        <p>
+            它最被反复借用的，是<strong>检索打分公式</strong>：一条记忆被召回的分数由三项加权组成：
+        </p>
+        <div class="text-center my-4 text-lg">
+            <span set:html={"$\\text{score} = \\alpha_{\\text{recency}}\\cdot \\text{recency} + \\alpha_{\\text{importance}}\\cdot \\text{importance} + \\alpha_{\\text{relevance}}\\cdot \\text{relevance}$"}></span>
+        </div>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>recency（时效）</strong>：越近发生的记忆分越高，通常用指数衰减建模。</li>
+            <li><strong>importance（重要性）</strong>：由模型给这条记忆打一个“它有多重要”的分（吃早饭 vs 分手，显然不同权重）。</li>
+            <li><strong>relevance（相关性）</strong>：记忆 embedding 与当前查询 embedding 的余弦相似度。</li>
+        </ul>
+        <p>
+            另一个关键机制是 <strong>reflection（反思金字塔）</strong>：当近期记忆的重要性累积超过阈值，agent 会主动“停下来想一想”，把一批底层观察<strong>合成为更高层的抽象结论</strong>（例如从“多次看到 X 在图书馆学习”归纳出“X 是个用功的人”）。这就是环节③（Compile）在记忆流上的体现——<strong>反思不只是评价，还能生成新的、更抽象的知识条目。</strong>
+        </p>
+
+        <h3 class="text-blue-600">4.3 MUSE：分层记忆 + 子任务后自动反思，实现“在岗自进化”</h3>
+        <p>
+            MUSE（Learning on the Job, 2025）把这套思路推向<strong>长程生产力任务</strong>。它围绕一个<strong>分层 Memory Module</strong> 组织不同层级的经验，机制原文写得很清楚：<em>“After each sub-task execution, the agent autonomously reflects on its trajectory, converting the raw trajectory into structured experience and integrating it back into the Memory Module.”</em>（每个子任务执行后，agent 自主反思其轨迹，把原始轨迹转化为结构化经验，再整合回记忆模块。）
+        </p>
+        <p>
+            注意这里同时踩中了①②③④四个环节，而且是<strong>子任务粒度</strong>的闭环——不是等整个任务结束才复盘，而是每完成一小步就沉淀一次。结果是：仅用一个轻量的 Gemini-2.5 Flash，MUSE 就在长程办公基准 TAC 上刷到 SOTA，而且<strong>随着经验累积，完成率持续上升</strong>，累积的经验还能 zero-shot 迁移到新任务。这直接印证了“经验复利”不是口号。</p>
+
+        <h3 class="text-blue-600">4.4 DeepAgent：memory folding，把长程交互压成三种结构化记忆</h3>
+        <p>
+            当交互变得很长，记忆本身会成为负担——上下文塞不下，错误还会累积。DeepAgent（2025，WWW 2026）提出 <strong>autonomous memory folding（自主记忆折叠）</strong>：把过去的交互<strong>压缩进三类结构化记忆</strong>——<em>episodic（情节）、working（工作）、tool（工具）memory</em>，<em>“reducing error accumulation while preserving critical information”</em>（在保留关键信息的同时减少错误累积）。
+        </p>
+        <p>
+            这里第一次出现了对我们最有用的东西：<strong>tool memory（工具记忆）</strong>被单列成一类。也就是说，“这个工具/接口该怎么调、上次调它遇到过什么”被当作一等公民，独立于“发生了什么（episodic）”和“当前在干什么（working）”。这正是第 7 节要展开的“接口管理”分支的记忆侧雏形。
+        </p>
+
+        <div class="chapter-summary text-sm">
+            <strong>主线一小结：</strong>记忆流把经验做成“可打分召回的条目”，用 recency/importance/relevance 三因子检索，用 reflection 把底层观察升华为高层结论，用 memory folding 对抗长程膨胀。它的强项是<strong>信息全、灵活</strong>，弱点是<strong>件的粒度细、复用性弱</strong>——你能召回“上次发生了什么”，但不一定能直接拿来“照着做”。这就要靠主线二。
+        </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="card" id="skill">
+        <h2>5. 主线二：经验作为可执行技能（Voyager → SkillWiki → WikiSkill）</h2>
+        <p>
+            第二条主线把经验编译成<strong>能直接执行的技能</strong>。它的重心在环节③（Compile）——而且把“件”做到了复用性的极致：可执行代码。
+        </p>
+
+        <h3 class="text-blue-600">5.1 Voyager：技能 = 可执行代码 + 描述 + embedding 索引</h3>
+        <p>
+            Voyager（Wang et al., 2023）是奠基之作。它在 Minecraft 里让 GPT-4 通过 blackbox 调用不断探索，把学会的行为存进一个 <strong>ever-growing skill library</strong>。原文的定义值得逐字记住：技能库是 <em>“an ever-growing skill library of executable code for storing and retrieving complex behaviors”</em>（一个不断增长的、由可执行代码构成的技能库，用于存储和检索复杂行为）；这些技能 <em>“are temporally extended, interpretable, and compositional, which compounds the agent's abilities rapidly and alleviates catastrophic forgetting”</em>（在时间上是延展的、可解释的、可组合的，能快速复利放大 agent 的能力，并缓解灾难性遗忘）。
+        </p>
+        <p>
+            机制上有三个部件协同：<strong>automatic curriculum</strong>（自动出题、最大化探索）、<strong>skill library</strong>（存代码）、<strong>iterative prompting</strong>（结合环境反馈、执行报错、自我验证来迭代改程序，直到跑通才入库）。检索方式很朴素但有效：<strong>把每个技能的自然语言描述做 embedding 当 key，代码当 value</strong>；新任务来时用任务描述去做相似检索，召回若干技能作为可调用的“积木”。效果是硬指标级的：解锁科技树里程碑比前 SOTA 快最多 <strong>15.3×</strong>，且技能库能迁移到新世界从零解决新任务。
+        </p>
+        <div class="note-box text-sm">
+            <p><strong>为什么“技能 = 代码”这么强？</strong>因为代码是<strong>可执行、可组合、可验证</strong>的。它天然带着“入库门槛”（跑不通就不入库，这是环节⑥治理的雏形），也天然可组合（新技能可以调用旧技能）。这三点是自然语言规则很难同时具备的。</p>
+        </div>
+
+        <h3 class="text-blue-600">5.2 从“只存技能”到“先沉淀知识，再产技能”</h3>
+        <p>
+            Voyager 式技能库有个隐痛：<strong>技能一旦被判定为差、被替换掉，它背后的“为什么这样做”也一起丢了。</strong>下次遇到类似问题，还得从零重新摸索。2026 年的一批工作正是冲着这个痛点来的。
+        </p>
+        <p>
+            <strong>SkillWiki</strong>（2026）把视角拉高到<strong>基础设施</strong>层面，开宗明义：<em>“While knowledge is managed through Wikipedia and software through GitHub, agent skills still lack an infrastructure for large-scale production, governance, and evolution.”</em>（知识有维基百科来管、软件有 GitHub 来管，而 agent 技能还缺一套用于大规模生产、治理与演化的基础设施。）它的做法是<strong>把异构知识转化成绑定到原始证据（originating evidence）的可复用技能资产</strong>，覆盖从知识摄入、技能生产、到 provenance-aware 探索、治理、执行驱动进化的完整生命周期。关键词是 <strong>provenance（可追溯到出处）</strong> 和 <strong>governance（治理）</strong>——这正是环节⑥被正式提上日程。
+        </p>
+        <p>
+            <strong>WikiSkill</strong>（2026，本仓库另有一篇专门笔记）则给出了最凝练的“三层”答案：在 <strong>Raw（原始轨迹）</strong> 与 <strong>Skill（可执行技能）</strong> 之间，显式插入一层 <strong>Wiki（持久知识）</strong>。它最漂亮的设计是一个<strong>不对称的治理规则</strong>：<span class="highlight">技能可以被回滚，但 wiki 永不重置。</span>意思是——某次技能更新如果没通过门控，就回退到旧技能；但这次尝试沉淀进 wiki 的“知识”会保留下来。于是每一轮技能进化，都站在越来越厚的知识之上，实现“复利”。
+        </p>
+
+        <div class="my-6">
+            <svg viewBox="0 0 720 210" class="w-full" role="img" aria-label="三层结构：Raw 原始轨迹、Wiki 持久知识、Skill 可执行技能，wiki 不回滚而 skill 可回滚">
+                <g font-family="ui-sans-serif, system-ui" font-size="13">
+                    <rect x="60" y="20" width="600" height="46" rx="10" fill="#f1f5f9" stroke="#94a3b8"/>
+                    <text x="360" y="42" text-anchor="middle" fill="#334155" font-weight="700">Raw · 原始轨迹（大量、嘈杂、一次性）</text>
+                    <text x="360" y="58" text-anchor="middle" fill="#64748b" font-size="11">动作 / 观察 / 报错 / 结果</text>
+
+                    <rect x="60" y="86" width="600" height="46" rx="10" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="2"/>
+                    <text x="360" y="108" text-anchor="middle" fill="#5b21b6" font-weight="800">Wiki · 持久知识（复利增长，永不重置）</text>
+                    <text x="360" y="124" text-anchor="middle" fill="#6d28d9" font-size="11">被整合、被 grounding 到证据、可增量更新</text>
+
+                    <rect x="60" y="152" width="600" height="46" rx="10" fill="#dcfce7" stroke="#22c55e"/>
+                    <text x="360" y="174" text-anchor="middle" fill="#166534" font-weight="800">Skill · 可执行技能（可门控、可回滚）</text>
+                    <text x="360" y="190" text-anchor="middle" fill="#15803d" font-size="11">从 wiki 提炼；差的更新会被回退，wiki 却保留</text>
+
+                    <text x="690" y="112" fill="#8b5cf6" font-size="11" transform="rotate(90 690 112)">↑ 提炼</text>
+                </g>
+            </svg>
+        </div>
+        <p>
+            <strong>TrajWiki</strong>（2026）在对话 agent 场景把同样的“中间 wiki 层”思想做到了极致，它引入 <strong>Memory Wiki</strong> 作为 <em>“a persistent intermediate layer that incrementally compiles dialogue history into structured and interlinked wiki pages”</em>（一个持久的中间层，把对话历史增量地编译成结构化、相互链接的 wiki 页面），并把每条记忆表示为一条<strong>可追溯的演化轨迹</strong>，用 ADD / REVISE / DEPRECATE 这类 claim 级操作维护——这几乎就是给知识库配了一套“版本控制语义”。</p>
+
+        <div class="chapter-summary text-sm">
+            <strong>主线二小结：</strong>技能即代码解决了“怎么直接拿来用”，但需要治理（门控/回滚）和 grounding（可追溯出处）来防止劣化。2026 年的答案是“Raw / Wiki / Skill”三层：<strong>用中间那层持久知识，把易逝的技能锚定在不逝的知识之上。</strong></div>
+    </div>
+
+    <!-- 6 -->
+    <div class="card" id="workflow">
+        <h2>6. 主线三：经验作为工作流与洞察（AWM → ExpeL → Agent-S → LEGOMem）</h2>
+        <p>
+            第三条主线介于前两者之间：它编译出的件既不是细碎的记忆，也不是完整可执行的代码，而是<strong>可复用的“套路”</strong>——工作流模板、跨任务规则、SOP、过程记忆单元。
+        </p>
+
+        <h3 class="text-blue-600">6.1 AWM：从轨迹里归纳“常被复用的例行程序”</h3>
+        <p>
+            AWM（Agent Workflow Memory, Wang et al., 2024）的类比很人性化：人类之所以能灵活解决复杂任务，是因为 <em>“learning reusable task workflows from past experiences and using them to guide future actions”</em>（从过去经验中学习可复用的任务工作流，并用它们指导未来行动）。AWM 就是让 agent 干这件事：<em>“a method for inducing commonly reused routines, i.e., workflows, and selectively providing workflows to the agent to guide subsequent generations”</em>（一种归纳常被复用的例行程序即工作流、并有选择地把工作流提供给 agent 以指导后续生成的方法）。
+        </p>
+        <p>
+            它最实用的一点是<strong>同时支持离线与在线</strong>：离线时从训练样本预先归纳工作流；在线时<strong>直接从测试查询边做边归纳</strong>（on the fly）。在 Mind2Web 和 WebArena 上，AWM 把成功率相对提升了 <strong>24.6%</strong> 和 <strong>51.1%</strong>，同时<strong>减少了完成任务所需的步数</strong>；而且训练-测试分布差距越大，online AWM 的相对优势越明显（跨任务/网站/领域评测领先基线 8.9–14.0 个绝对点）。<strong>“归纳工作流”比“堆记忆”更抗分布漂移</strong>——这是一个重要信号。
+        </p>
+
+        <h3 class="text-blue-600">6.2 ExpeL：把成功轨迹和自然语言洞察分开存</h3>
+        <p>
+            ExpeL（Zhao et al., 2023，AAAI-24）明确区分了两类知识：<strong>成功轨迹（当作 few-shot 示例）</strong> 和 <strong>自然语言 insights（跨任务规则）</strong>。它 <em>“autonomously gathers experiences and extracts knowledge using natural language from a collection of training tasks”</em>（自主收集经验，并用自然语言从一批训练任务中提取知识），推理时 <em>“recalls its extracted insights and past experiences to make informed decisions”</em>（召回提取到的洞察与过往经验来做决策）。
+        </p>
+        <p>
+            关键在于 insight 的提取方式：它<strong>跨多条轨迹做比较</strong>——对比成功与失败、对比不同成功路径，从中蒸馏出“这类任务应该……、要避免……”的规则，并对规则做增删改（ADD/UPVOTE/DOWNVOTE 式的维护）。这与后来 TrajWiki 的 claim 级操作、WikiSkill 的门控是一脉相承的：<strong>知识不是只增不减的垃圾堆，而是要被主动编辑的。</strong></p>
+
+        <h3 class="text-blue-600">6.3 Agent-S：把 SOP 拆成“交互 or API 调用”，配一个全局动作库</h3>
+        <p>
+            Agent-S（Kulkarni, 2025）来自很接地气的客服场景，它的观察对做“接口管理”的人极有启发：<em>“any step in the SOP can be categorized as user interaction or API call, while the logical flow in the SOP defines the navigation.”</em>（SOP 里的任何一步都可以归为“与用户交互”或“API 调用”，而 SOP 的逻辑流定义了导航。）
+        </p>
+        <p>
+            它的架构由三个专用 LLM、一个 <strong>Global Action Repository（GAR，全局动作库）</strong>、一份 execution memory 和多个环境组成。SOP 被写成一段简单的逻辑文本；agent 根据当前 execution memory 和 SOP 选一个动作去执行，与相应环境（用户/API）交互、收集观察反馈，再回灌记忆决定下一步。它还特意设计成<strong>容错</strong>的——会动态决定重试某个动作，或去查外部知识源。这套“动作库 + 执行记忆 + 文本化流程”几乎就是企业内部接口自动化的现成骨架。</p>
+
+        <h3 class="text-blue-600">6.4 LEGOMem：把过程记忆拆成模块，放到多 agent 的合适位置</h3>
+        <p>
+            LEGOMem（2025）研究的是一个更微妙的问题：在<strong>多 agent</strong> 系统里，过程记忆应该放在哪、怎么检索、谁最受益？它 <em>“decomposes past task trajectories into reusable memory units and flexibly allocates them across orchestrators and task agents”</em>（把过往任务轨迹拆成可复用的记忆单元，灵活地分配给编排者与任务 agent）。
+        </p>
+        <p>
+            在 OfficeBench 上它得出两条很实用的结论：<strong>编排者（orchestrator）的记忆对“任务分解与委派”至关重要，而细粒度的 agent 记忆则提升执行准确率。</strong>更鼓舞人的是——即便由较小的模型组成的团队，也能靠过程记忆<strong>大幅缩小与更强 agent 的差距</strong>。这说明“把经验放对位置”本身就是一种能力放大器。</p>
+
+        <div class="chapter-summary text-sm">
+            <strong>主线三小结：</strong>工作流/洞察的粒度“不多不少”——比记忆更抽象、比代码更灵活。AWM 证明归纳工作流更抗漂移；ExpeL 证明要把“示例”和“规则”分开存并主动编辑；Agent-S 给出“交互 vs API”的二分与动作库骨架；LEGOMem 提醒你“记忆放在编排层还是执行层，效果差别很大”。</div>
+    </div>
+
+    <!-- 7 -->
+    <div class="card" id="tool">
+        <h2>7. 最贴痛点的分支：接口 / 工具怎么调，怎么被记住</h2>
+        <p>
+            前面反复提到你的真实痛点——<strong>“记住接口怎么调”</strong>。把它单独拎出来看，这条分支其实是“经验沉淀”框架在<strong>工具调用</strong>这个具体对象上的投影。
+        </p>
+
+        <h3 class="text-blue-600">7.1 为什么“工具记忆”值得单独一类</h3>
+        <p>
+            一次工具调用要对的东西比想象多：<strong>选对工具、拼对参数 schema、走对鉴权/前置依赖、处理好分页/游标/限流、看懂报错并纠偏。</strong>这些知识高度<strong>结构化且可复用</strong>——同一个接口，正确调用方式基本稳定。所以 DeepAgent 才把 <strong>tool memory</strong> 从 episodic/working memory 里独立出来；MemToolAgent 则整篇都在做这件事。
+        </p>
+
+        <h3 class="text-blue-600">7.2 MemToolAgent：用统一记忆条目格式 + 反思式提取改进工具使用</h3>
+        <p>
+            MemToolAgent（2026）直指一个空白：<em>“few studies have empirically examined how to improve agents' tool-using capabilities through past user-agent conversations.”</em>（很少有研究实证考察过如何通过过往的用户-agent 对话来提升工具使用能力。）它的三个贡献恰好对应我们框架里的③④⑤⑥：
+        </p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>统一记忆条目格式（③④）</strong>：一个能同时服务“通用工具使用”和“个性化工具使用”的 memory entry 格式，不需要微调 LLM。</li>
+            <li><strong>反思式记忆提取（②③）</strong>：<em>“uses environment and user feedback to distill wrong executions into critiques to store”</em>——用环境和用户反馈，把<strong>错误的执行</strong>蒸馏成“批评（critique）”存起来。注意：它专门存<strong>失败教训</strong>，而不只是成功案例。</li>
+            <li><strong>自适应检索（⑤）</strong>：根据记忆相似度的分布，<strong>动态决定这次要召回几条</strong>过往经验，而不是固定 top-k。</li>
+        </ul>
+        <p>
+            成绩单也很直接：在 WorkBench / NESTFUL / PEToolBench 上相对强基线分别提升 <strong>29% / 80% / 17%</strong>。对你来说，MemToolAgent 几乎就是“接口调用知识库”的论文级参考实现思路。</p>
+
+        <div class="note-box text-sm">
+            <p><strong>一个反直觉但重要的点：</strong>成功经验固然要存，但<strong>失败的“批评”往往信息密度更高</strong>——“这个接口不能先调 B 再调 A，会 403”这类负面知识，正是 Reflexion（反思）和 MemToolAgent（critique）都在强调的东西。做接口知识库时，别只记“怎么对”，更要记“怎么会错、错了怎么救”。</p>
+        </div>
+    </div>
+
+    <!-- 8 -->
+    <div class="card" id="drift">
+        <h2>8. 长程与接口漂移：知识会过期，也要会更新</h2>
+        <p>
+            经验沉淀最容易被忽视、也最影响长期可用性的问题是：<strong>你辛苦沉淀的知识会过期。</strong>接口升级了、页面改版了、流程重组了，昨天的“正确调用方式”今天就成了错误示范。这条分支专治环节⑥（Govern/Evolve）。
+        </p>
+
+        <h3 class="text-blue-600">8.1 MAGNET：把“会变的表象”和“不变的语义”分层存</h3>
+        <p>
+            MAGNET（2026）研究移动 GUI agent，它的核心洞察对所有做接口的人都成立：<em>“Despite surface changes, functional semantics and task intents remain fundamentally stable.”</em>（尽管表象在变，功能语义和任务意图从根本上是稳定的。）于是它用<strong>双层记忆</strong>：<strong>stationary memory</strong> 把多样的视觉/表面特征映射到<strong>稳定的功能语义</strong>（用于稳健的动作 grounding），<strong>procedural memory</strong> 捕捉跨不同工作流的<strong>稳定任务意图</strong>。再加一个<strong>动态记忆进化机制</strong>，通过优先保留高频访问的知识来持续精炼两层记忆。
+        </p>
+        <p>
+            对接口管理的翻译：<strong>把“接口的 endpoint/字段名/UI 位置”（易变表象）与“这个能力做什么、前后依赖什么”（稳定语义）分开存。</strong>表象变了只需更新映射层，语义层不动，知识就不至于整块作废。</p>
+
+        <h3 class="text-blue-600">8.2 ColorBrowserAgent：把稀疏的人类反馈变成可复用领域知识</h3>
+        <p>
+            ColorBrowserAgent（2026）面对两个现实难题：<strong>站点异质性</strong>（通用模型对各种界面缺乏领域先验）和<strong>长程不稳定</strong>（决策漂移随交互累积）。它的两个机制很值得抄：<strong>human-in-the-loop knowledge adaptation</strong>——把<strong>稀疏的人类反馈</strong>转化为可复用的领域知识；以及 <strong>knowledge-aligned progressive summarization</strong>——通过与知识对齐的渐进式摘要来压缩记忆、稳定长交互。它在 WebArena 上做到 71.2% 成功率，商用部署里用户满意度相对提升 19.3%。
+        </p>
+        <p>
+            启发：<strong>人类的每一次纠错都很贵，别浪费。</strong>把“运维/工程师一次性教给 agent 的正确调用方式”固化成领域知识，而不是让它随会话消散——这是投入产出比最高的知识来源之一。</p>
+
+        <h3 class="text-blue-600">8.3 EvolvingAgent：用持续世界模型对抗灾难性遗忘</h3>
+        <p>
+            EvolvingAgent（2025）把视角放到<strong>具身长程任务</strong>，它担心的是另一种漂移——<strong>灾难性遗忘</strong>：面对新任务时把旧知识忘了。它的解法是一个 <strong>planner-controller-reflector 闭环</strong> 加一个<strong>持续世界模型（continual World Model）</strong>，用两阶段课程学习来<strong>选择</strong>多模态经验、做任务自适应的世界模型更新。在 Minecraft 上平均成功率提升 111.74%，无效动作减少 6 倍以上。它提醒我们：<strong>“选择哪些经验用于更新”本身是个要认真设计的问题</strong>，不是照单全收。</p>
+
+        <div class="chapter-summary text-sm">
+            <strong>这条分支小结：</strong>知识库不是“只写不改”的档案馆。要设计三件事——<strong>分层</strong>（易变表象 vs 稳定语义，MAGNET）、<strong>更新来源</strong>（把稀疏人类反馈固化，ColorBrowserAgent）、<strong>选择性更新</strong>（用什么经验更新、避免遗忘，EvolvingAgent）。</div>
+    </div>
+
+    <!-- 9 -->
+    <div class="card" id="tensions">
+        <h2>9. 五个关键设计张力：读懂了它们才算读懂这条线</h2>
+        <p>
+            把十几篇工作横向对齐后，真正有启发的不是“谁刷了多少分”，而是它们在几个<strong>根本性张力</strong>上做了不同取舍。理解这些张力，你才能在自己的系统里做对权衡。
+        </p>
+
+        <div class="overflow-x-auto my-4">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr>
+                        <th class="text-left">张力</th>
+                        <th class="text-left">一端</th>
+                        <th class="text-left">另一端</th>
+                        <th class="text-left">代表性取舍</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>件的粒度</strong></td>
+                        <td>细：记忆条目（全、灵活）</td>
+                        <td>粗：可执行技能（直接可用）</td>
+                        <td>Generative Agents vs Voyager；折中是工作流/wiki（AWM/WikiSkill）</td>
+                    </tr>
+                    <tr>
+                        <td><strong>可回滚性</strong></td>
+                        <td>知识永不重置</td>
+                        <td>技能可门控回滚</td>
+                        <td>WikiSkill 的不对称设计：wiki 不回滚、skill 可回滚</td>
+                    </tr>
+                    <tr>
+                        <td><strong>是否 grounding</strong></td>
+                        <td>孤立条目（可能幻觉/失真）</td>
+                        <td>绑定原始证据（可追溯）</td>
+                        <td>SkillWiki/TrajWiki 强调 provenance；孤立记忆则难诊断</td>
+                    </tr>
+                    <tr>
+                        <td><strong>更新时机</strong></td>
+                        <td>离线预先归纳</td>
+                        <td>在线边做边学</td>
+                        <td>AWM 同时支持二者；MUSE 子任务级在线沉淀</td>
+                    </tr>
+                    <tr>
+                        <td><strong>存正例还是负例</strong></td>
+                        <td>成功轨迹当示例</td>
+                        <td>失败蒸馏成批评</td>
+                        <td>ExpeL 两者都存；MemToolAgent/Reflexion 重视负面 critique</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p>
+            其中两条最值得反复咀嚼：
+        </p>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>“知识不回滚，技能可回滚”是个精妙的复利设计。</strong>它让系统敢于大胆尝试新技能（反正差了能退回去），又不会浪费任何一次尝试产生的认知（知识都留下了）。做工程时，可以把它落成：<strong>技能表带版本、可回退；知识表 append-only、只增不删（但可标记 deprecated）。</strong></li>
+            <li><strong>grounding / provenance 决定了知识库能不能“被信任、被调试”。</strong>当 agent 给出一个调用方式，你要能追问“这是从哪条经验学来的？”。没有出处的知识库，出了错无法定位、也无法审计。这在企业内部接口场景尤其致命。</li>
+        </ul>
+    </div>
+
+    <!-- 10 -->
+    <div class="card" id="blueprint">
+        <h2>10. 落地蓝图：给“记住接口怎么调”造一个可运行的知识库</h2>
+        <p>
+            现在把上面所有结论收敛成一套<strong>可直接实现</strong>的设计。目标场景：你的 agent 反复调用一批内部/外部接口，希望它“一次摸清、永久记住、越用越熟、接口变了能更新”。下面按第 2 节的六环节给出具体做法，并标注每条依据来自哪篇工作。
+        </p>
+
+        <h3 class="text-blue-600">10.1 数据模型：三张表 + 一层索引</h3>
+        <p>借鉴 WikiSkill 的 Raw/Wiki/Skill 三层与 MAGNET 的表象/语义分层：</p>
+        <pre class="language-yaml"><code>{`# 表 1：raw_traces（原始轨迹，append-only，量大）—— 环节①
+- trace_id, task, tool_name, request(args), response, status, error, ts
+
+# 表 2：tool_wiki（接口知识页，持久、只增不删、可标 deprecated）—— 环节③④
+- tool_id                # 接口稳定标识（语义层，不随 endpoint 改）
+  aliases: [endpoint_v1, endpoint_v2]   # 易变表象层（MAGNET 思路）
+  purpose                # 这个接口做什么（稳定语义）
+  auth: {type, prerequisite_calls}      # 鉴权与前置依赖
+  params_schema          # 参数结构 + 必填/默认/取值约束
+  paging: {style, cursor_field}         # 分页/游标
+  rate_limit             # 限流与退避策略
+  gotchas:               # 负面知识（Reflexion/MemToolAgent 的 critique）
+    - "先调 A 再调 B，否则 403"
+  evidence: [trace_id...]# provenance：每条知识挂到原始轨迹（SkillWiki）
+  status: active|deprecated
+  updated_at, version
+
+# 表 3：skills（可执行调用封装，带版本、可回滚）—— 环节③
+- skill_id, tool_id, code/template, description(用于 embedding 检索), version, enabled`}</code></pre>
+
+        <h3 class="text-blue-600">10.2 六环节的具体实现</h3>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>① Capture：</strong>在工具调用层做拦截器，把每次 request/response/error 落到 <code>raw_traces</code>。零智能，但必须全量、带时间戳。</li>
+            <li><strong>② Reflect：</strong>每个子任务结束后触发一次反思（MUSE 的子任务粒度）：这次调用成功了吗？如果失败，根因是什么？产出一条结构化的成功摘要或失败 critique。</li>
+            <li><strong>③ Compile：</strong>把反思结果<strong>合并进 <code>tool_wiki</code> 对应页</strong>，而不是新建孤立条目。用 ExpeL 式的 ADD/REVISE/DEPRECATE 语义维护，每条知识必须挂 <code>evidence</code>（TrajWiki/SkillWiki 的 provenance）。稳定到一定程度，再从 wiki 提炼出 <code>skills</code>（WikiSkill 的“wiki→skill”）。</li>
+            <li><strong>④ Store/Index：</strong>对 <code>tool_wiki.purpose</code> 和 <code>skills.description</code> 做 embedding；同时保留结构化字段做过滤（按 tool_id、status=active）。</li>
+            <li><strong>⑤ Retrieve：</strong>新任务先按语义检索候选接口，再<strong>动态决定召回条数</strong>（MemToolAgent：看相似度分布，而非固定 top-k），把命中的 wiki 页 + 可用 skill 注入上下文。</li>
+            <li><strong>⑥ Govern：</strong>skills 表带版本、可一键回滚（WikiSkill）；tool_wiki 只增不删、旧知识标 deprecated 而非物理删除；接口变更时只更新 aliases/params_schema（表象层），purpose（语义层）尽量不动（MAGNET）。</li>
+        </ul>
+
+        <h3 class="text-blue-600">10.3 一个最小可跑的循环（伪代码）</h3>
+        <pre class="language-python"><code>{`def run_task(task):
+    # ⑤ 检索：语义召回 + 动态条数
+    wikis  = retrieve_tool_wiki(task, dynamic_k=True)   # MemToolAgent
+    skills = retrieve_skills(task)                       # Voyager 式 desc->code
+    ctx = build_context(task, wikis, skills)            # 只注入最相关的少数
+
+    trace = agent.execute(ctx)                           # ① 全程落 raw_traces
+
+    # ② 子任务级反思（MUSE）
+    reflection = reflect(trace)   # -> {success, critique|summary, tool_id}
+
+    # ③ 编译进 wiki（挂 evidence，ExpeL 式增改）
+    upsert_tool_wiki(reflection, evidence=[trace.id])    # 只增不删
+
+    # ⑥ 达到稳定度才提炼/更新 skill，且经门控
+    if wiki_confidence(reflection.tool_id) > TH:
+        candidate = distill_skill_from_wiki(reflection.tool_id)
+        if gate_pass(candidate):        # 通过验证才启用
+            promote_skill(candidate)    # 带版本
+        # 未通过：skill 回退，但 wiki 已保留这次认知（不对称回滚）
+    return trace.result`}</code></pre>
+
+        <div class="note-box text-sm">
+            <p><strong>为什么这套设计值得信：</strong>它不是拍脑袋，而是把五篇工作的“已验证有效”的点拼在了一起——WikiSkill 的三层与不对称回滚、MemToolAgent 的动态检索与 critique、MUSE 的子任务级在线沉淀、MAGNET 的表象/语义分层、SkillWiki/TrajWiki 的 provenance。每一块都有论文级的成绩单背书（详见前文各节的数字）。</p>
+        </div>
+
+        <h3 class="text-blue-600">10.4 怎么验证它真的在“变熟”</h3>
+        <p>
+            别只看“跑通了”，要看<strong>复利曲线</strong>。抄 MUSE 和 Voyager 的评测姿势，盯三个指标随经验累积的变化：<strong>①同类任务的平均步数是否下降</strong>（AWM 证明好工作流会减步数）；<strong>②首次成功率是否上升</strong>；<strong>③冷启动新接口到稳定调用的试错次数是否减少</strong>。如果这三条曲线随时间向好，说明经验真的在复利，而不只是在堆数据。</p>
+    </div>
+
+    <!-- 11 -->
+    <div class="card" id="pitfalls">
+        <h2>11. 常见误区与边界</h2>
+        <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
+            <li><strong>误区一：把“记全”当成“学会”。</strong>只做 Capture 不做 Reflect/Compile，等于攒了一堆日志。Reflexion 的价值恰恰在于“反思”这一步——没有评价与归纳，原始轨迹是负债不是资产。</li>
+            <li><strong>误区二：知识库只增不治理。</strong>没有 deprecate、没有冲突解决、没有回滚，知识库会随时间劣化到“召回的一半是过时信息”。SkillWiki/WikiSkill 把 governance 提到基础设施高度，正是因为这是长期可用性的生死线。</li>
+            <li><strong>误区三：只存成功、不存失败。</strong>负面 critique 的信息密度常常更高（“这样会 403”）。MemToolAgent 专门蒸馏错误执行，值得照做。</li>
+            <li><strong>误区四：固定 top-k 检索。</strong>塞太多无关知识会稀释注意力（这正是 context engineering 里“上下文腐化”的老问题）。用 MemToolAgent 的动态条数思路，按相似度分布决定召回量。</li>
+            <li><strong>误区五：不做 grounding。</strong>没有 provenance 的知识库无法调试、无法审计。企业内部接口场景尤其要能回答“这条调用规则是从哪次经验学来的”。</li>
+            <li><strong>边界与诚实：</strong>本篇多数结果来自 web 导航、Minecraft、客服 SOP、办公自动化等受控基准；<strong>“把接口知识库套到你的真实业务”这一步，本篇给的是有论文依据的设计蓝图，尚未在你的环境端到端跑过</strong>。落地时务必用 10.4 的复利曲线做真实验证，而不是默认它一定有效。此外，本篇论文的机制细节主要基于各文摘要与公开描述整理，具体实现请以原文与开源代码为准。</li>
+        </ul>
+    </div>
+
+    <!-- 12 -->
+    <div class="card" id="refs">
+        <h2>12. 参考资料</h2>
+        <p class="text-sm text-gray-500 mb-3">以下均为一手来源（arXiv 原文）。前四篇是本脉络的思想原点与骨架，中间几篇是三条主线的代表作，最后几篇是 2026 年“wiki 层合流”与“抗漂移”的新工作。</p>
+        <h3 class="text-blue-600">思想原点 / 记忆主线</h3>
+        <ul class="list-disc pl-6 mb-3 space-y-1 text-gray-600 text-sm">
+            <li>Shinn et al. <em>Reflexion: Language Agents with Verbal Reinforcement Learning.</em> <a href="https://arxiv.org/abs/2303.11366" target="_blank" rel="noopener">arXiv:2303.11366</a></li>
+            <li>Park et al. <em>Generative Agents: Interactive Simulacra of Human Behavior.</em> <a href="https://arxiv.org/abs/2304.03442" target="_blank" rel="noopener">arXiv:2304.03442</a></li>
+            <li>Yang et al. <em>Learning on the Job (MUSE): An Experience-Driven Self-Evolving Agent.</em> <a href="https://arxiv.org/abs/2510.08002" target="_blank" rel="noopener">arXiv:2510.08002</a></li>
+            <li>Li et al. <em>DeepAgent: A General Reasoning Agent with Scalable Toolsets（memory folding）.</em> <a href="https://arxiv.org/abs/2510.21618" target="_blank" rel="noopener">arXiv:2510.21618</a></li>
+        </ul>
+        <h3 class="text-blue-600">技能主线</h3>
+        <ul class="list-disc pl-6 mb-3 space-y-1 text-gray-600 text-sm">
+            <li>Wang et al. <em>Voyager: An Open-Ended Embodied Agent with Large Language Models.</em> <a href="https://arxiv.org/abs/2305.16291" target="_blank" rel="noopener">arXiv:2305.16291</a></li>
+            <li>Feng et al. <em>EvolvingAgent: Curriculum Self-evolving Agent with Continual World Model.</em> <a href="https://arxiv.org/abs/2502.05907" target="_blank" rel="noopener">arXiv:2502.05907</a></li>
+            <li>Huang et al. <em>SkillWiki: A Living Knowledge Infrastructure for Agent Skills.</em> <a href="https://arxiv.org/abs/2606.16523" target="_blank" rel="noopener">arXiv:2606.16523</a></li>
+            <li>Tang et al. <em>WikiSkill: Compiling Agent Experience into Persistent Knowledge for Skill Evolution.</em> <a href="https://arxiv.org/abs/2608.27454" target="_blank" rel="noopener">arXiv:2608.27454</a>（本仓库另有专篇）</li>
+        </ul>
+        <h3 class="text-blue-600">工作流 / 洞察主线</h3>
+        <ul class="list-disc pl-6 mb-3 space-y-1 text-gray-600 text-sm">
+            <li>Wang et al. <em>Agent Workflow Memory (AWM).</em> <a href="https://arxiv.org/abs/2409.07429" target="_blank" rel="noopener">arXiv:2409.07429</a></li>
+            <li>Zhao et al. <em>ExpeL: LLM Agents Are Experiential Learners.</em> <a href="https://arxiv.org/abs/2308.10144" target="_blank" rel="noopener">arXiv:2308.10144</a></li>
+            <li>Kulkarni. <em>Agent-S: LLM Agentic workflow to automate Standard Operating Procedures.</em> <a href="https://arxiv.org/abs/2503.15520" target="_blank" rel="noopener">arXiv:2503.15520</a></li>
+            <li>Han et al. <em>LEGOMem: Modular Procedural Memory for Multi-agent LLM Systems.</em> <a href="https://arxiv.org/abs/2510.04851" target="_blank" rel="noopener">arXiv:2510.04851</a></li>
+        </ul>
+        <h3 class="text-blue-600">工具记忆 / 抗漂移 / Wiki 合流</h3>
+        <ul class="list-disc pl-6 mb-3 space-y-1 text-gray-600 text-sm">
+            <li>Er et al. <em>MemToolAgent: Leveraging Memory for Tool Using Agents.</em> <a href="https://arxiv.org/abs/2606.07909" target="_blank" rel="noopener">arXiv:2606.07909</a></li>
+            <li>Sun et al. <em>MAGNET: Towards Adaptive GUI Agents with Memory-Driven Knowledge Evolution.</em> <a href="https://arxiv.org/abs/2601.19199" target="_blank" rel="noopener">arXiv:2601.19199</a></li>
+            <li>Wang et al. <em>ColorBrowserAgent: Complex Long-Horizon Browser Agent with Adaptive Knowledge Evolution.</em> <a href="https://arxiv.org/abs/2601.07262" target="_blank" rel="noopener">arXiv:2601.07262</a></li>
+            <li>Sun et al. <em>TrajWiki: Source-Grounded Memory Trajectories for Long-Horizon Dialogue Agents.</em> <a href="https://arxiv.org/abs/2608.00967" target="_blank" rel="noopener">arXiv:2608.00967</a></li>
+        </ul>
+        <h3 class="text-blue-600">本仓库相关笔记</h3>
+        <ul class="list-disc pl-6 mb-3 space-y-1 text-gray-600 text-sm">
+            <li><a href="/notes/wikiskill">WikiSkill：把 Agent 经验编译成持久知识库，驱动技能进化</a>（本篇脉络的“主线论文”专篇）</li>
+            <li><a href="/notes/context-engineering">上下文工程：Agent 的隐形基础设施</a>（“上下文腐化”与检索取舍的来源）</li>
+            <li><a href="/notes/loop-engineering">Loop Engineering</a> / <a href="/notes/harness-engineering">Harness Engineering</a>（第 1 节演化主线的前四步）</li>
+        </ul>
+    </div>
+</BaseLayout>
