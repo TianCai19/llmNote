@@ -3,9 +3,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
 export const meta = {
     title: 'Loop Engineering：把“自己反复催 Agent”这件事，做成一个可运行的系统',
-    description: '系统梳理 2026 年兴起的 loop engineering：从 Addy Osmani 的定义、LangChain 的四层堆叠循环、arXiv 的 loop specification 与验证阶梯，到循环的六个决策、终止与验证难题、失败模式与工程护栏。',
+    description: '系统梳理 2026 年兴起的 loop engineering：从 Addy Osmani 的定义、LangChain 的四层堆叠循环、arXiv 的 loop specification 与验证阶梯，到 36,710 仓库的采纳度实证、循环的六个决策、终止与验证难题、失败模式与工程护栏。',
     tags: ['Agent', 'Loop Engineering', 'Harness', 'Systems'],
-    readTime: '32 min',
+    readTime: '36 min',
     createdAt: '2026-09-18'
 };
 ---
@@ -349,7 +349,37 @@ $$`}></div>
     </div>
 
     <div class="card">
-        <h2>11. 一句话回顾：从“手动摇”到“设计会自己停的循环”</h2>
+        <h2>11. 采纳度实证：36,710 个仓库里，循环到底跑起来了没有</h2>
+        <p>
+            前面几节把 loop engineering “应该长什么样”讲清楚了。但 2026 年这个词更多是从从业者的博客里流传开的——<strong>它在真实开源项目里到底被采用了没有，一直缺一个实证的量。</strong>2026 年 8 月的 arXiv 论文《Loop Engineering: Building Blocks, Adoption, and Impact》（Jai Lal Lulla、Vahram Nersesyan、Seyedmoein Mohsenimofidi、Christoph Treude、Sebastian Baltes，arXiv:2608.21884，v2 2026-08-26）就是第一篇正面回答这个问题的工作。它做了两件事：先系统梳理这批“灰色文献（gray literature）”对循环的共识，再做一次大规模仓库挖掘。
+        </p>
+        <p class="mt-4">
+            <strong>第一部分：从灰色文献里提炼共识。</strong>作者发现，尽管各家说法术语不一，但对“一个工程良好的循环该包含什么”其实高度一致——这正好和前面几节交叉印证。他们把共识归纳成六个组成部分：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2 mt-3">
+            <li><strong>被触发的 agent 运行（triggered agent runs）：</strong>由计划任务（schedule）或仓库事件（repository events）启动，而不是人手动摇。</li>
+            <li><strong>机器可校验的停止条件（machine-checkable stop conditions）：</strong>循环被这个条件“框住”，满足即停。</li>
+            <li><strong>持久状态文件（persistent state files）：</strong>把中间状态写到对话之外、落到磁盘。</li>
+            <li><strong>验证者子 agent（verifier sub-agents）：</strong>由独立角色来判定是否达标，呼应第 5、7 节的“独立验证”。</li>
+            <li><strong>Token 预算（token budgets）：</strong>成本上限，防止无限烧钱。</li>
+            <li><strong>明确的升级到人的接触点（defined points of escalation to humans）：</strong>越界或卡死时交还给人。</li>
+        </ul>
+        <p class="mt-3">
+            可以看到，这六件事几乎就是 Addy 的五零件 + Sandeco 的 loop specification 的并集——<strong>不同来源殊途同归，说明 loop engineering 的“组成部分”这一层已经基本收敛。</strong>
+        </p>
+        <p class="mt-4">
+            <strong>第二部分：挖 36,710 个仓库。</strong>这也是全文最硬的经验证据。作者先推导出一份“哪些循环特征能从仓库数据里被追踪到”的研究议程，再据此设计启发式规则去扫描 <strong>36,710 个软件仓库</strong>。结果：在启发式命中的 <strong>256 个</strong>仓库里，确认了 <strong>217 个</strong>确实在运行自主 agent 循环。但更有意思的是它揭示的一个<strong>系统性缺口</strong>：
+        </p>
+        <div class="note-box mt-4 text-sm">
+            <p><strong>关键发现——“配置进了 Git，状态没进 Git”。</strong>这些仓库<strong>会把循环的配置（trigger、workflow、预算等）提交到版本控制里</strong>，但<strong>几乎没有一个</strong>把讨论里被反复强调的<strong>持久状态文件</strong>也提交进去——循环的运行时状态，仍然游离在版本控制之外。这恰好印证了第 6 节 Loop Library 的那个短板：<strong>“持久记忆”在真实世界里普遍还没落地。</strong>循环的“骨架”被沉淀了下来，但循环的“记忆”还是易失的。</p>
+        </div>
+        <p class="mt-4">
+            论文最后给出了一个<strong>后续计划</strong>：做一个关于“agent 自主程度（autonomy levels）”如何影响开发投入与产出结果的<strong>受控实验（controlled study）</strong>。换句话说，这篇是“测量现状”，下一步才是“因果验证”。对我们的启示很直接：<strong>如果你要落地一个循环，配置进 Git 只是及格线；真正拉开差距的，是你有没有把中间证据和状态也可靠地持久化下来</strong>——这既是当前行业的普遍短板，也是最容易做出差异化的地方。
+        </p>
+    </div>
+
+    <div class="card">
+        <h2>12. 一句话回顾：从“手动摇”到“设计会自己停的循环”</h2>
         <p>
             如果把整篇笔记压缩成一条主线，那就是：<strong>loop engineering 把“反复驱动 agent”这件原本靠人手动做的事，重构成了一个明确定义的系统组件</strong>——它有触发、有目标、有验证、有停止、有记忆。
         </p>
@@ -363,10 +393,11 @@ $$`}></div>
     </div>
 
     <div class="card">
-        <h2>12. 参考资料（Primary Sources &amp; Supplementary Sources）</h2>
+        <h2>13. 参考资料（Primary Sources &amp; Supplementary Sources）</h2>
         <ul class="list-disc pl-6 mb-4 space-y-2 text-gray-600">
             <li><a class="text-teal-700 underline" href="https://addyosmani.com/blog/loop-engineering/" target="_blank" rel="noopener noreferrer">Addy Osmani, “Loop Engineering” (2026)</a> —— “把催 agent 的人换成系统”这个定义的一手来源，五个零件清单出处。</li>
             <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2607.00038" target="_blank" rel="noopener noreferrer">Sandeco Macedo (2026), “Stop Hand-Holding Your Coding Agent” (arXiv:2607.00038)</a> —— loop specification、五级验证阶梯与 Loop Library 语料库的一手来源。</li>
+            <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2608.21884" target="_blank" rel="noopener noreferrer">Lulla et al. (2026), “Loop Engineering: Building Blocks, Adoption, and Impact” (arXiv:2608.21884)</a> —— 首个采纳度实证：灰色文献六要素共识 + 36,710 仓库挖掘（256 命中 / 217 确认），揭示“配置进 Git、状态没进 Git”的缺口。</li>
             <li><a class="text-teal-700 underline" href="https://www.langchain.com/blog/the-art-of-loop-engineering" target="_blank" rel="noopener noreferrer">Sydney Runkle / LangChain (2026), “The Art of Loop Engineering”</a> —— 四层堆叠循环（agent / verification / event-driven / hill-climbing）的一手来源。</li>
             <li><a class="text-teal-700 underline" href="https://www.anthropic.com/research/building-effective-agents" target="_blank" rel="noopener noreferrer">Anthropic (2024), “Building Effective Agents”</a> —— Evaluator-Optimizer、Orchestrator-Workers 等循环模式与“保持简单”原则。</li>
             <li><a class="text-teal-700 underline" href="https://arxiv.org/abs/2210.03629" target="_blank" rel="noopener noreferrer">Yao et al. (2022), ReAct (arXiv:2210.03629)</a> —— 推理+行动交替的循环内核，所有 agent 循环的祖先。</li>
