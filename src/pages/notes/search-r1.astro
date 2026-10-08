@@ -1,0 +1,513 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: 'Search-R1：用 RL 把“推理 + 搜索”直接训进 LLM',
+    description: '系统梳理 Search-R1：从 RL + 搜索的目标函数、retrieved token loss masking、<think>/<search>/<information>/<answer> 多轮 rollout 格式，到 PPO/GRPO、format reward、搜索引擎选择、七个 QA 数据集上的实验与失败模式。',
+    tags: ['Agent', 'RL', 'RAG', 'Search', 'LLM'],
+    readTime: '38 min',
+    createdAt: '2026-10-08'
+};
+---
+
+<BaseLayout title="Search-R1：用 RL 把“推理 + 搜索”直接训进 LLM" description="从 RL 目标、retrieved token masking、多轮搜索 rollout，到 PPO/GRPO、format reward、7 个 QA 数据集与经验研究，系统阅读 Search-R1。">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">RL / Tool Use / Retrieval-Augmented Reasoning</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Search-R1：用 RL 把“推理 + 搜索”直接训进 LLM</h1>
+        <p class="text-xl text-gray-500">当 agent 不再靠 prompt 临场学会调搜索，而是靠 outcome reward 把“什么时候搜、怎么写 query、怎么利用结果”写进权重里</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <div class="note-box text-sm">
+        <p><strong>论文信息：</strong></p>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+            <li><em>Search-R1: Training LLMs to Reason and Leverage Search Engines with Reinforcement Learning</em>（Jin et al., arXiv:2503.09516，2025-03，v5 2025-08）。</li>
+            <li>姊妹经验论文：<em>An Empirical Study on Reinforcement Learning for Reasoning-Search Interleaved LLM Agents</em>（Jin et al., arXiv:2505.15117，2025-05）。</li>
+            <li>代码仓：<a href="https://github.com/PeterGriffinJin/Search-R1" class="text-[color:var(--accent)] underline">PeterGriffinJin/Search-R1</a>（基于 veRL，支持 PPO/GRPO/REINFORCE、本地稀疏/稠密检索与在线搜索引擎、Llama3 / Qwen2.5 等基座模型）。</li>
+            <li>核心定位：把 search engine 当成 RL 环境的一部分，让 LLM 在 <code>&lt;search&gt;</code>/<code>&lt;information&gt;</code> 的多轮调用中，通过一个简单的 outcome reward（EM）学会“在推理里插入检索”。</li>
+        </ul>
+    </div>
+
+    <nav class="toc mt-8" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#intro">1. Introduction：从 RAG 到 search-as-tool，再到 search-RL</a></li>
+            <li><a href="#background">2. Background &amp; Motivation：为什么 prompt 和 SFT 都不够</a></li>
+            <li><a href="#objective">3. Method：RL 目标与把搜索引擎嵌进环境</a></li>
+            <li><a href="#rollout">4. Rollout：&lt;think&gt;/&lt;search&gt;/&lt;information&gt;/&lt;answer&gt; 的多轮循环</a></li>
+            <li><a href="#masking">5. Loss Masking：为什么要屏蔽 retrieved tokens</a></li>
+            <li><a href="#ppo-grpo">6. PPO 与 GRPO：两种策略梯度下的 Search-R1</a></li>
+            <li><a href="#reward">7. Reward Design：outcome / format / intermediate retrieval</a></li>
+            <li><a href="#experiments">8. Experiments：7 个 QA 数据集上的主结果</a></li>
+            <li><a href="#empirical">9. Empirical Study：base vs instruct、scale、搜索引擎</a></li>
+            <li><a href="#cases">10. Case Studies &amp; Failure Modes</a></li>
+            <li><a href="#engineering">11. Engineering：veRL、检索服务与训练脚本</a></li>
+            <li><a href="#limits">12. Limits &amp; Follow-ups：Search-R1 没解决的问题</a></li>
+            <li><a href="#practice">13. Practice：如果今天我要训一个 search agent，怎么起手</a></li>
+            <li><a href="#figures">14. Original Figures &amp; References</a></li>
+        </ul>
+    </nav>
+
+    <div class="card" id="intro">
+        <h2>1. Introduction：从 RAG 到 search-as-tool，再到 search-RL</h2>
+        <p>
+            把 LLM 和搜索引擎绑在一起这件事，过去几年大致经历了三代姿势。第一代是经典 <strong>RAG</strong>：拿到用户问题，用 embedding/BM25 检索一批文档，拼进 context，再让 LLM 一次性读完回答。它简单、工程成本低，但只有“一次检索”这把钝刀，面对多跳问题（HotpotQA、Musique、Bamboogle）常常检索到无关内容，或者在第一轮就缺少足够线索。
+        </p>
+        <p>
+            第二代是 <strong>search-as-tool</strong>：把 search 包装成一个工具，让模型在推理中间自己决定什么时候调。代表工作包括 IRCoT、ReAct、Toolformer、Search-o1。它们比 RAG 更贴近真实的“查—想—再查”过程，但有两种做法各自带限制。prompt 版（IRCoT、ReAct、Search-o1）只能告诉模型“你可以这样做”，而不能保证模型真的把这套 pipeline 用好；SFT 版（Toolformer、Self-RAG）效果更稳定，但需要大量高质量的 trajectory 标注，且搜索这一步本身不可微，端到端优化不好做。
+        </p>
+        <p>
+            Search-R1 属于第三代：<span class="highlight">用 RL 直接训练“推理 + 搜索”交替的多轮行为</span>。它把搜索引擎 ℛ 显式写进 RL 环境里，让 rollout 不是只由策略 π<sub>θ</sub> 生成，而是 π<sub>θ</sub> 与 ℛ 的交错产物；再用一个最朴素的 outcome reward（答案是否匹配）去驱动整个序列。换句话说，模型不是被“教”该怎么搜，而是被“奖励”学会什么时候搜、搜什么、搜几次才能把题答对。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/search-r1/main.png" alt="Search-R1 main figure" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 1. Search-R1 的 PPO/GRPO 训练示意：rollout 由策略 LLM 和搜索引擎共同生成，outcome reward 回传整条交错序列，但 retrieved tokens 不进 loss。</figcaption>
+        </figure>
+
+        <div class="note-box text-sm mt-4">
+            <p><strong>原文摘录：</strong></p>
+            <p class="text-sm text-gray-600 italic">“Search-R1 optimizes LLM reasoning trajectories with multi-turn search interactions, leveraging retrieved token masking for stable RL training and a simple outcome-based reward function.”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/abs/2503.09516" class="text-[color:var(--accent)] underline">arXiv:2503.09516</a> Abstract</p>
+        </div>
+
+        <p class="mt-4">
+            作者给出的核心数字是：在 7 个 QA benchmark（NQ、TriviaQA、PopQA、HotpotQA、2WikiMultiHopQA、Musique、Bamboogle）上，相比各种同条件的 RAG baseline，Qwen2.5-7B 平均提升 <strong>41%</strong>，Qwen2.5-3B 平均提升 <strong>20%</strong>（EM，相对改进）。更重要的是，它展示了 DeepSeek-R1-Zero 那一套“只给结果奖励就能学出复杂行为”的训练模式，<strong>可以直接迁移到工具使用（搜索）场景</strong>，不需要额外设计 process reward。
+        </p>
+    </div>
+
+    <div class="card" id="background">
+        <h2>2. Background &amp; Motivation：为什么 prompt 和 SFT 都不够</h2>
+        <p>
+            把 Search-R1 放在整个“LLM + 搜索”谱系里，可以把它的位置看得更清楚。prompt 版 search-as-tool（IRCoT、ReAct）在零样本或少样本设定下已经能跑，但有三个痛点：
+            第一，模型不是“被训练”去使用这套 pipeline 的，而是被“临时说服”的；一旦任务稍微偏离 prompt 示例，模型就可能跳步、不调搜索、或者把 observation 当成 reasoning 继续生成。
+            第二，模型并不知道什么时候自己需要搜。知识型简单题它会多此一举，复杂多跳题它又只搜一次就下结论。
+            第三，prompt 不能把失败案例以稳定的方式“教”回权重里，所以同样的 bug 会不断复现。
+        </p>
+        <p>
+            SFT 版路径（Toolformer、ReST-MCTS、Self-RAG）试图弥补这些缺陷：先用启发式或老师模型生成大量“带搜索调用的 trajectory”，再用 next-token prediction 去模仿。
+            问题是，<span class="highlight">高质量 trajectory 本身极其昂贵</span>——需要有人或更强的模型事先示范“正确的检索姿势”；而且搜索这一步并不是模型自己可微的输出，它是外部环境返回的 token，直接用 SFT 把这些 observation 也拟合进去，会污染模型对自己“应该生成什么”的信号。
+            这就是作者反复强调的一句：search is a non-differentiable operation，不能用端到端 gradient 一路推下来。
+        </p>
+        <p>
+            RL 恰好绕开这两个问题。只要有一个可以判断“最终答案对不对”的 reward，模型就能通过 trial-and-error 自己学会：这题该不该搜；该搜什么关键词；搜回来的东西要不要再搜一遍；什么时候停下来回答。更妙的是，DeepSeek-R1 已经证明：对足够强的基座模型，仅凭 outcome reward 就能诱发出自我验证、反复推理这类“复杂行为”。Search-R1 要回答的是：<strong>把搜索引擎也塞进环境后，这套 RL 配方还能跑得通吗？</strong>答案是：能，而且比 RAG baseline 明显好。
+        </p>
+
+        <div class="note-box text-sm mt-4">
+            <p><strong>为什么不直接用 R1-Zero + 外挂 RAG：</strong>如果只在推理时拼一次检索，模型没学过“分步问—分步答”，面对多跳问题会继续用参数化知识瞎猜（见 §10 的 R1 vs Search-R1 对比：R1 把 Britney Spears 的 Curious 误当成 Beyoncé 的作品）。真正要让“搜索”变成模型的内生动作，必须让它在 RL rollout 中<strong>真实地做出调用，并为后果负责</strong>。</p>
+        </div>
+    </div>
+
+    <div class="card" id="objective">
+        <h2>3. Method：RL 目标与把搜索引擎嵌进环境</h2>
+        <p>
+            Search-R1 的目标函数非常像标准 RLHF，但多了一个关键记号：策略不仅依赖输入 x，还依赖搜索引擎 ℛ。
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\max_{\pi_\theta}\;
+\mathbb{E}_{x \sim \mathcal{D},\; y \sim \pi_\theta(\cdot\mid x; \mathcal{R})}
+\big[\, r_\phi(x, y) \,\big]
+\;-\; \beta\, \mathbb{D}_{\mathrm{KL}}\!\big[\, \pi_\theta(y\mid x; \mathcal{R}) \,\big\|\, \pi_{\text{ref}}(y\mid x; \mathcal{R}) \,\big].
+$$`}></div>
+        <p>
+            其中 π<sub>θ</sub> 是待训练的策略 LLM，π<sub>ref</sub> 是参考模型（通常是 SFT 后或 base 模型，用来做 KL 稳定化），r<sub>φ</sub> 是奖励函数，β 控制 KL 正则强度。
+            x 来自训练分布 𝒟，y 是“推理 + 工具调用结果”的交错 token 序列。
+        </p>
+        <p>
+            这里最值得注意的一步是作者的记号 <code>π<sub>θ</sub>(·|x;ℛ) = π<sub>θ</sub>(·|x) ⨂ ℛ</code>。
+            符号 ⨂ 在论文里被定义为 <em>interleaved retrieval-and-reasoning</em>：rollout 是策略生成一段文字 → 当遇到 <code>&lt;search&gt;...&lt;/search&gt;</code> 时暂停并调用 ℛ → 把检索到的 passage 包进 <code>&lt;information&gt;...&lt;/information&gt;</code> 追加到序列 → 继续生成，直到出现 <code>&lt;answer&gt;...&lt;/answer&gt;</code> 或达到最大步数。
+            换句话说，y 这个“输出序列”本身是模型 token 和检索 token 的拼贴，不是纯粹由策略独立生成的东西。
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>和经典 RLHF 的差别：</strong>RLHF 里 y 完全由策略决定；Search-R1 的 y 中有一部分 token 是环境返回的 observation。这就引出了后面所有工程问题：这些 token 该不该参与 loss？优势估计怎么对齐？分布漂移会不会把 PPO 搞爆？</p>
+        </div>
+        <p>
+            作者选择用两种成熟的策略梯度算法作为具体实现：<strong>PPO</strong>（Schulman et al., 2017，经典 actor-critic + GAE）和 <strong>GRPO</strong>（Shao et al., 2024；DeepSeek-R1 使用的 group-relative baseline）。两者在 rollout 构造、retrieved token masking 方面完全共享，只在 advantage 估计和是否需要 critic 上不同。GitHub 仓库还提供了 reinforce 的变体。
+        </p>
+    </div>
+
+    <div class="card" id="rollout">
+        <h2>4. Rollout：&lt;think&gt;/&lt;search&gt;/&lt;information&gt;/&lt;answer&gt; 的多轮循环</h2>
+        <p>
+            Search-R1 把一次完整的推理 trajectory 拆成四种 span，每一种都用特定的 XML-like 标签包起来。这些标签既是模型的生成规范，又是训练系统解析 rollout 的边界：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><code>&lt;think&gt; ... &lt;/think&gt;</code>：模型自己的思考段，相当于 CoT，但没有特定格式限制。</li>
+            <li><code>&lt;search&gt; query &lt;/search&gt;</code>：触发器。一旦生成这段，harness 会立刻停止解码，把 <code>query</code> 送给搜索引擎 ℛ，再把结果拼回。</li>
+            <li><code>&lt;information&gt; passages &lt;/information&gt;</code>：环境写回的 observation（典型是 top-k 检索结果，每段 ~200 tokens）。这段文本不是模型生成的。</li>
+            <li><code>&lt;answer&gt; final &lt;/answer&gt;</code>：终止条件之一；出现它就意味着模型自认为准备好作答。</li>
+        </ul>
+        <p>
+            一次 rollout 的伪代码骨架大致是：
+        </p>
+        <pre class="overflow-x-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100 mt-4"><code>{`y = ""
+for turn in range(MAX_TURNS):                        # 硬上限（通常 4~8）
+    chunk = policy.generate_until(                   # 增量解码
+        prefix=prompt + y,
+        stop=["</search>", "</answer>"]
+    )
+    y += chunk
+    if chunk.endswith("</answer>"):
+        break                                        # 走到终止：产出答案
+    if chunk.endswith("</search>"):
+        query = extract(chunk, "<search>", "</search>")
+        passages = retriever(query, top_k=3)         # 调外部搜索引擎
+        y += f"<information>{passages}</information>"
+        continue                                     # 下一轮推理
+reward = EM(parse_answer(y), gold)                   # 唯一的奖励信号`}</code></pre>
+        <p>
+            系统 prompt 会显式把这套格式教给模型，并且提醒：“think inside <code>&lt;think&gt;</code>, call search by emitting <code>&lt;search&gt;query&lt;/search&gt;</code>, read result inside <code>&lt;information&gt;</code>, answer inside <code>&lt;answer&gt;</code>”。
+            这里有一点需要特别注意：<span class="highlight">模型不会生成 <code>&lt;information&gt;</code> 的内容，它是环境写回的；但模型会被训练在合适的时候“等待”这个段落的出现</span>——它学到的是“在 <code>&lt;/information&gt;</code> 之后立刻开始新一轮 <code>&lt;think&gt;</code>”这样的条件分布。
+        </p>
+        <p>
+            终止条件有两个：生成了 <code>&lt;/answer&gt;</code>，或者达到最大 action budget B（避免无限搜索）。
+            如果到达 B 还没出答案，当前的 rollout 会被视为未成功，outcome reward 为 0。
+        </p>
+    </div>
+
+    <div class="card" id="masking">
+        <h2>5. Loss Masking：为什么要屏蔽 retrieved tokens</h2>
+        <p>
+            把搜索结果拼进 y 之后，一个直接问题是：这些 retrieved tokens 要不要进 loss？直觉上既不该，也不能。
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>不该。</strong>它们不是策略自己生成的 token，用策略梯度去“奖惩”它们会把 reward 分配到完全不受策略控制的位置，污染学习信号。</li>
+            <li><strong>不能稳定。</strong>这些 token 对应的 <code>π<sub>old</sub></code> 概率并没有良定义——它们本就不来自 π<sub>old</sub>——在 PPO 的 importance ratio 分母上会产生奇怪的数值。</li>
+        </ul>
+        <p>
+            Search-R1 的做法非常直接：引入一个 token 级别的 mask <code>I(y<sub>t</sub>)</code>，当 y<sub>t</sub> 是策略 LLM 生成的 token 时 I=1，当 y<sub>t</sub> 是检索返回的 token 时 I=0。<strong>优势估计和 PPO/GRPO 的 clip objective 只在 I=1 的位置累加，并按 I=1 的位置数做归一化</strong>。KL loss 也遵循同样的规则。
+        </p>
+        <p>
+            体现在 PPO 的目标里就是：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{J}_{\text{PPO}}(\theta) = \mathbb{E}\!\left[
+\frac{1}{\sum_t I(y_t)}
+\sum_{t:\, I(y_t)=1}
+\min\!\Big(
+\rho_t(\theta)\, A_t,\;
+\mathrm{clip}\big(\rho_t(\theta),\, 1-\epsilon,\, 1+\epsilon\big)\, A_t
+\Big)
+\right],
+$$`}></div>
+        <p>
+            其中 ρ<sub>t</sub>(θ) = π<sub>θ</sub>(y<sub>t</sub>|·) / π<sub>old</sub>(y<sub>t</sub>|·) 是 importance ratio，A<sub>t</sub> 是 GAE 优势。GRPO 的目标也完全类似，只是把 critic 替换成了 group-relative baseline（见下一节）。
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>工程含义：</strong>loss masking 让 Search-R1 的训练稳定性大幅提升。作者在 ablation 里展示：不做 masking，训练初期策略会出现概率分布急剧抖动、reward 曲线崩塌。masking 之后，训练曲线光滑单调。这几乎是一个“做了才知道有多重要”的实现细节，但它决定了 RL + 工具这类方法能不能真的在实际集群上跑起来。</p>
+        </div>
+    </div>
+
+    <div class="card" id="ppo-grpo">
+        <h2>6. PPO 与 GRPO：两种策略梯度下的 Search-R1</h2>
+        <p>
+            PPO 是经典的 actor-critic 配方。它需要训一个 value head V<sub>φ</sub>，由当前 rollout 的 return 回归学习；GAE 用 V<sub>φ</sub> 的 bootstrap 估计优势 A<sub>t</sub>。好处是 bias-variance 可以调；代价是你多了一组参数要训，而且 critic 本身在搜索场景下可能学得不好——因为 observation 来自环境，V<sub>φ</sub> 很难判断“当前这段检索到底是不是好的中间状态”。
+        </p>
+        <p>
+            GRPO 回避了 critic 这件事。它的核心想法来自 DeepSeek-R1：对同一个 prompt x 采样 G 条 rollout，用这 G 条的平均 reward 做 baseline，用组内相对优势替代 V<sub>φ</sub>：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\hat{A}_{i,t} \;=\; \frac{\, r_i - \mathrm{mean}(\{r_1, \ldots, r_G\})\,}{\mathrm{std}(\{r_1, \ldots, r_G\})}.
+$$`}></div>
+        <p>
+            所有 rollout 共享这个基线。GRPO 的目标函数是：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{J}_{\text{GRPO}}(\theta) = \mathbb{E}\!\left[
+\frac{1}{G}\sum_{i=1}^{G}\frac{1}{\sum_t I(y_{i,t})}
+\!\!\sum_{t:\, I(y_{i,t})=1}\!\!
+\min\!\Big(\rho_{i,t}\, \hat A_{i,t},\; \mathrm{clip}(\rho_{i,t},\, 1\!-\!\epsilon,\, 1\!+\!\epsilon)\, \hat A_{i,t}\Big)
+\right] - \beta\,\mathbb{D}_{\mathrm{KL}}\!\left[\pi_\theta \,\big\|\, \pi_{\text{ref}}\right].
+$$`}></div>
+        <p>
+            KL 项直接写进 loss（而不是放进 reward），且 KL 的计算同样只在 I=1 的 token 上生效。
+        </p>
+        <p>
+            经验上，两者各有优劣。作者在不同基座模型上观察到：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li>在 Qwen2.5-7B 上，PPO 和 GRPO 的最终 EM 相当接近；GRPO 在 Qwen2.5-14B-Base 上整体最高（avg 0.491 vs PPO 0.459）。</li>
+            <li>GRPO 的 group size（G）越大，baseline 方差越小但训练成本越高；在 Qwen2.5-7B-Base 上 size=1 反而最高（0.410），size=3/5 要略低（0.363/0.350），说明 group baseline 不是“越多越好”。</li>
+            <li>PPO 对 critic 的学习率非常敏感：论文使用的 critic lr=1e-5，policy lr=1e-6 到 5e-7；两个 lr 的比例大致是 10×。</li>
+            <li>两者都适用 retrieved token masking，哪一种都比 base RAG 显著好。</li>
+        </ul>
+        <div class="note-box text-sm mt-4">
+            <p><strong>一个实践提示：</strong>如果你没有强大的 critic 栈，GRPO 更省心，直接用 group reward 当 baseline；但要注意，当训练集本身很小或 reward 分布极端（比如多数样本 reward=0）时，GRPO 的 advantage 可能会退化到几乎全 0，从而失去信号。这时 PPO 的 learned value function 反而更稳。</p>
+        </div>
+    </div>
+
+    <div class="card" id="reward">
+        <h2>7. Reward Design：outcome / format / intermediate retrieval</h2>
+        <p>
+            Search-R1 的第一版论文坚持“只用 outcome reward 就够了”：reward r<sub>φ</sub>(x, y) = EM(a<sub>pred</sub>, a<sub>gold</sub>)，答案和 gold 完全匹配给 1，不匹配给 0。这里不是 F1，不是软评分，就是最朴素的 string exact match。作者的理由是，这样做能把 reward hacking 的空间降到最低，让模型只能通过真的答对题来拿分；也避免了设计 process reward 时常见的 bias——比如“奖励多次搜索”往往会被模型钻空子，发无意义的 query 刷分。
+        </p>
+        <p>
+            姊妹经验论文（2505.15117）系统比较了 outcome-only 和两种常见辅助奖励：
+        </p>
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">7.1 Format reward：给“格式对”的轨迹一个小奖励</h3>
+        <p>
+            如果模型没有正确地把 query 包在 <code>&lt;search&gt;...&lt;/search&gt;</code>，harness 根本触发不了检索，整条 rollout 就变成了纯参数化推理。format reward 的做法是：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+r_\phi(x,y)=\begin{cases}
+1 & a_{\text{pred}}=a_{\text{gold}} \;\land\; f_{\text{format}}(y)=\text{True},\\[2pt]
+1-\lambda_f & a_{\text{pred}}=a_{\text{gold}} \;\land\; f_{\text{format}}(y)=\text{False},\\[2pt]
+\lambda_f & a_{\text{pred}}\neq a_{\text{gold}} \;\land\; f_{\text{format}}(y)=\text{True},\\[2pt]
+0 & a_{\text{pred}}\neq a_{\text{gold}} \;\land\; f_{\text{format}}(y)=\text{False}.
+\end{cases}
+$$`}></div>
+        <p>
+            λ<sub>f</sub> 是一个小系数（0.2~0.4）。效果非常明确：<strong>format reward 对 base 模型几乎总是正向</strong>，而对 instruct 模型效果较弱（因为 instruct 本身已经比较会守格式）。例如 Qwen2.5-3B-Base 上 PPO 的平均 EM 从 0.303 升到 0.389（约 +9 个点）；但在 Qwen2.5-3B-Instruct 上，提升只有 0.325 → 0.334。更大的 λ<sub>f</sub> 会加速收敛，但过大会让模型为了拿格式分而过度堆砌 <code>&lt;search&gt;</code>，反而拖垮最终答对率——是一个典型的 inverted-U。
+        </p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">7.2 Intermediate retrieval reward：给“查到相关 passage”的中间步奖励</h3>
+        <p>
+            一个很诱人的直觉是：既然多跳问题要靠正确的中间检索来突破，为什么不直接奖励“查到的 passage 和答案相关”？论文具体做法是：按 λ<sub>r</sub> 比例把中间检索的相关性分数拼进总 reward。结论令人意外——<strong>这个奖励不仅没显著帮助，太大还会拖垮性能</strong>。
+        </p>
+        <p>
+            作者的解释是：outcome reward 已经天然蕴含了“查对才答得对”的信号；额外的 intermediate retrieval reward 更像一种 shortcut，模型会学会生成“文字上更像相关 passage”的 query，而不是“真正能让下游答对”的 query。λ<sub>r</sub> 越大，这种漂移越明显。实验里 λ<sub>r</sub>=0.1 几乎与基线持平，λ<sub>r</sub>=0.5 已经显著掉点。
+        </p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">7.3 为什么 EM 够用（而不是 F1）</h3>
+        <p>
+            EM 是一个 0/1 稀疏奖励。它的缺点是“接近正确”的答案（Beijing 对 beijing、McComb 对 McComb Mississippi）会被判 0；但 R1 系列工作已经反复证明，<strong>强稀疏的 outcome reward + 组内相对基线</strong> 恰好是让模型诱发复杂行为（自我验证、反复推理）的那颗关键齿轮。软评分（F1、BLEU）在 RL 这个场景下容易让模型学会“输出接近 gold 的字串”而不是真的答对，所以 Search-R1 不用。
+        </p>
+
+        <div class="note-box text-sm mt-4">
+            <p><strong>一句话归纳 reward 配方：</strong>outcome reward（EM）是地基，format reward（λ<sub>f</sub>≈0.2–0.4）是对 base 模型的脚手架，intermediate retrieval reward 可以不要。</p>
+        </div>
+    </div>
+
+    <div class="card" id="experiments">
+        <h2>8. Experiments：7 个 QA 数据集上的主结果</h2>
+        <p>
+            Search-R1 的实验设定统一而干净。所有方法都在同一个检索源上评测——Wikipedia 2018 dump，向量索引用 E5 稠密检索（flat 或 HNSW64 ANN），top-k=3，每个 passage 约 200 tokens。训练集只用 NQ + HotpotQA 的训练部分，评测分 in-domain（NQ、HotpotQA）和 out-domain（TriviaQA、PopQA、2Wiki、Musique、Bamboogle）。
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>Baselines：</strong>Direct Inference、CoT、RAG（one-shot retrieval）、IRCoT、Search-o1、SFT（在 trajectory 上做监督）、R1（纯 reasoning RL，不带搜索）。</li>
+            <li><strong>Backbones：</strong>Qwen2.5-3B/7B/14B（base &amp; instruct），Llama-3.2-3B-Base，以及 R1 蒸馏版（DeepSeek-R1-Distill-Qwen-7B/14B）。</li>
+            <li><strong>Metric：</strong>Exact Match（EM），和训练奖励口径一致。</li>
+            <li><strong>训练预算：</strong>最多 600 steps，batch 512，rollout temperature=1，GRPO group size=5；8× H100 单节点。</li>
+        </ul>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/search-r1/llama32-3b.png" alt="Llama3.2-3B Search-R1 training curves" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 2. Llama-3.2-3B-Base 在 Search-R1 训练过程中逐渐学会调用搜索引擎并提升 EM：搜索调用次数（右轴）从 0 上升到稳定区间，训练 reward（左轴）同步上升。</figcaption>
+        </figure>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/search-r1/multi-turn.png" alt="Qwen2.5-7B multi-turn Search-R1" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 3. Qwen2.5-7B-Base 在 Search-R1 下学会多轮搜索与推理交替：平均搜索次数稳定在多次量级，EM 在 7 个 QA 数据集上均优于单轮 RAG。</figcaption>
+        </figure>
+
+        <p class="mt-4">
+            主结论可以浓缩成四条：
+        </p>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-2">
+            <li><strong>Search-R1 显著超过 RAG baseline。</strong>在 Qwen2.5-7B 上平均提升 24%（最新 v5 版）至 41%（v1 版口径），Qwen2.5-3B 上平均提升 20%。多跳数据集（HotpotQA、2Wiki、Musique）增幅更大，因为它们本来就靠多轮检索。</li>
+            <li><strong>out-domain 泛化很好。</strong>模型只在 NQ+HotpotQA 上训练，但在 TriviaQA、PopQA、2Wiki、Musique、Bamboogle 上同样显著提升，说明学到的不是“背某个数据集的套路”，而是“推理 + 搜索”这个通用技能。</li>
+            <li><strong>比纯推理 RL (R1) 好。</strong>把 Search 环境关掉做纯 R1，模型在 QA 任务上明显弱于带搜索版本：当问题需要事实（“Britney Spears 出生地”），不查就是不会，参数化知识补不上。</li>
+            <li><strong>比 SFT 版 search-as-tool 好。</strong>SFT 在 trajectory 上做监督，容易过拟合某种检索模式；RL 让模型根据实际答对情况自己摸索出更合理的检索节奏。</li>
+        </ol>
+    </div>
+
+    <div class="card" id="empirical">
+        <h2>9. Empirical Study：base vs instruct、scale、搜索引擎</h2>
+        <p>
+            姊妹论文（2505.15117）用大约 50% 的篇幅做纯 ablation，给出了几条非常可操作的结论。
+        </p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">9.1 General-purpose base > reasoning-specialized distill</h3>
+        <p>
+            作者比较了 Qwen2.5-7B-Base vs DeepSeek-R1-Distill-Qwen-7B（以及对应的 14B）。结果反直觉又合逻辑：<strong>通用 base 模型比“专推理”的蒸馏模型 RL 效果更好</strong>。例如 14B 上，Qwen2.5-14B-Base GRPO 平均 EM 0.491，而 R1-Distill-14B 只有 0.321。原因是 R1-Distill 为了优化长 CoT 输出，往往在 RL 早期阶段“指令遵循”变弱——它更倾向于自己生成长推理而不是严格按 <code>&lt;search&gt;</code> 格式触发工具。换句话说，<em>你需要的是一个“听话的通用模型”，而不是“已经被 CoT 过度特化的推理模型”</em>。
+        </p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">9.2 Scale：有收益但是递减</h3>
+        <p>
+            3B → 7B → 14B 的 EM（format reward + GRPO）：0.382 → 0.420 → 0.491。14B 比 7B 显著好，但 7B 比 3B 的增幅略大。更关键的是：训练稳定性和收敛速度都随规模变好，大模型在前期就能稳定触发 <code>&lt;search&gt;</code>，不需要太强的 format reward 加持。
+        </p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">9.3 Base vs Instruct</h3>
+        <p>
+            对 Qwen2.5-3B 和 7B，<strong>base 模型 + format reward 的组合是最优配置</strong>。instruct 模型因为已经经过 RLHF 对齐，在 outcome-only 下也能跑，但加 format reward 几乎没额外收益；而且某些场景下 instruct + format reward 甚至轻微回退（可能是 RLHF 已经锁定了某种输出习惯，与新的 format 冲突）。到了 14B，instruct 和 base 的差距缩小，base 仍略优。
+        </p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">9.4 搜索引擎质量决定了学到的策略</h3>
+        <p>
+            这是全文最有工程感的一节。作者在训练时分别换成三种“引擎”：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>随机噪声</strong>（返回与 query 无关的 passages）：模型最终学会 <em>不调用搜索</em>——因为检索毫无价值，调反而干扰推理。训练结果等价于一个纯推理 agent。</li>
+            <li><strong>BM25</strong>（弱稀疏检索）：模型学会多次检索，但 query 质量较差，容易在同一个 topic 上反复无效搜索（见 §10 的 Hells Angel 案例）。</li>
+            <li><strong>E5 稠密检索</strong>（强）：训练动态最稳定，调用次数不多但命中率高；下游表现也最好。</li>
+        </ul>
+        <p>
+            推理阶段还有一个有意思的现象：<span class="highlight">用 E5 训练出来的 agent，在推理时换成 Google Search / Bing / BM25 都能保持大部分性能</span>——说明学到的是“如何用搜索”的通用策略，而不是“如何用 E5 返回文本的具体格式”。但反过来，用噪声或 BM25 训练的 agent，换到强引擎后收益有限，因为它根本没学会相信搜索结果。
+        </p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">9.5 其他细节</h3>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>Response length dynamics：</strong>训练前期 rollout 长度先降（模型学会简洁调搜索），再上升（学会多轮迭代），最终稳定。</li>
+            <li><strong>Hyperparameters：</strong>policy lr 1e-6（3B/7B）或 5e-7（14B）；critic lr 1e-5；KL β≈0.001；clip ϵ 常用 0.2；max turn B 4–8；top-k=3，passage ≈200 tokens。</li>
+            <li><strong>Data scaling：</strong>1 条样本训不出搜索行为；10 条不稳定；100~1000 条已经能学到稳定搜索；10k 条进一步提升多跳表现。核心启示：这类 RL 不需要几十万条样本，但也不是“10 条就行”的小数据实验。</li>
+        </ul>
+    </div>
+
+    <div class="card" id="cases">
+        <h2>10. Case Studies &amp; Failure Modes</h2>
+        <p>
+            三个典型例子最能让人直观理解“搜索 + RL”到底在做什么：
+        </p>
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">成功 1：Curious 香水 → McComb, Mississippi（三跳搜索）</h3>
+        <p>
+            问题是“Curious 是一位出生于什么城市和州的歌手推出的女用香水？”。R1（无搜索）直接猜 Beyoncé → Houston 失败；Search-R1 的 trajectory 是：
+        </p>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-1 mt-2">
+            <li><code>&lt;search&gt;</code> Curious fragrance information → 查到 Britney Spears。</li>
+            <li><code>&lt;search&gt;</code> Britney Spears birthplace → 查到 McComb, Mississippi。</li>
+            <li><code>&lt;search&gt;</code> McComb, Mississippi location → 做了一次“过度查”的自我验证，然后给出答案。</li>
+        </ol>
+        <p class="mt-2">
+            值得注意的是第 3 步：模型已经有了答案，还追了一次搜索做验证。这是 R1 系列反复出现的“self-verification”现象，在搜索场景下同样被 outcome reward 自然诱发。
+        </p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">成功 2：Chris Jericho &amp; Gary Barlow 的共同职业 → musician</h3>
+        <p>
+            模型连续发了 4 次 query，比较两人的职业集合，最终锁定 musician。这里体现了多跳推理里一个微妙点：<strong>模型是用自然语言在心里维护两个候选集合，而不是显式结构化数据</strong>——这其实就是“把工作记忆写在 <code>&lt;think&gt;</code> 段里”这件事的实证。
+        </p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">失败：Weezer 首专 → “Weezer” 而不是 “The Blue Album”</h3>
+        <p>
+            Passage 其实已经把 “often referred to as The Blue Album” 写得很清楚了，模型却回答了专辑的字面标题 “Weezer”。这类错误揭示了一个边界：<strong>Search-R1 的失败很多时候不在“搜索”，而在“读完 passage 后的 answer extraction”</strong>——它仍然依赖最后一步的参数化判断，而 EM 对措辞过于严格，让这种“接近正确”的答案也被判 0 分。
+        </p>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">失败：Pulitzer Prize 作品 → 空答</h3>
+        <p>
+            问题需要分解“Is Google Making Us Stoopid? 的扩展版 → 是哪本书 → 入围了什么奖”。模型没能把问题拆开，整句话扔进搜索，拿到无关 passage，然后在证据不足的情况下猜测。这暴露了一个常见失败模式：<strong>模型没学会主动做 query decomposition</strong>——如果 outcome reward 没能针对“分解不良的 trajectory”给出稳定的负信号，这类错误会一直存在。StepSearch、ParallelSearch 等后续工作正是针对这一点改进。
+        </p>
+
+        <div class="note-box text-sm mt-4">
+            <p><strong>失败模式总结：</strong>（1）即使 passage 已经包含答案，模型仍可能基于 heuristic 给出错误抽取（Weezer 案例）；（2）复杂多跳问题缺乏显式分解时，容易过度搜索或过早收敛；（3）面对对抗性或噪声检索，模型可能被误导（Hells Angel 案例里 BM25 返回了与问题无关的 Rolling Stones 条目）。</p>
+        </div>
+    </div>
+
+    <div class="card" id="engineering">
+        <h2>11. Engineering：veRL、检索服务与训练脚本</h2>
+        <p>
+            Search-R1 的实现建立在 <a href="https://github.com/volcengine/verl" class="text-[color:var(--accent)] underline">veRL</a> 之上。veRL 是火山引擎开源的 RL+LLM 训练框架，天然支持 PPO/GRPO 多 rollout、vllm 加速 generation、ray-based 分布式。Search-R1 的改造主要在两个层面：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>Rollout 侧：</strong>把生成过程改成“增量解码 + 外部环境调用”。当 vllm 生成到 <code>&lt;/search&gt;</code> 时停止，调用检索服务，把结果拼回 prompt tail，再继续生成。整个过程中保持 KV cache 可复用。</li>
+            <li><strong>Loss 侧：</strong>构造 token-level mask，让 PPO/GRPO 的 clip objective、advantage、KL 都按 mask 累加。这部分改动极轻，但对训练稳定性至关重要。</li>
+        </ul>
+        <p>
+            仓库里的 <code>retrieval_launch.sh</code> 启动一个独立的 retriever server（默认是 FastAPI + Faiss + E5），训练 RL 的脚本（<code>train_ppo.sh</code> / <code>train_grpo.sh</code>）通过 HTTP 调用它。这种“把搜索引擎当独立服务”的设计有三个好处：
+        </p>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-2">
+            <li>检索 GPU 和训练 GPU 可以物理分离，训练卡只跑 LLM，不被 Faiss 挤占显存。</li>
+            <li>可以在同一份代码上无缝切换本地稀疏（BM25/pyserini）、本地稠密（E5/Faiss，flat 或 HNSW）、在线搜索（Google/Bing API）。</li>
+            <li>便于做 §9.4 那种“训练时换引擎”的实验：只要换一下服务端点，训练代码不动。</li>
+        </ol>
+        <p>
+            Quick start 的四步也体现了这个结构：
+        </p>
+        <pre class="overflow-x-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100 mt-4"><code>{`# 1. 下载 Wikipedia 2018 的 jsonl + E5 索引
+python scripts/download.py --save_path $save_path
+cat $save_path/part_* > $save_path/e5_Flat.index
+
+# 2. 预处理 NQ 数据，变成 {prompt, ground_truth} 格式
+python scripts/data_process/nq_search.py
+
+# 3. 启动检索服务（独立进程 / 独立卡）
+bash retrieval_launch.sh
+
+# 4. 启动 PPO 训练（在另一张 / 一组卡上）
+bash train_ppo.sh`}</code></pre>
+        <p>
+            另一个细节是数据格式。每条样本大致是：
+        </p>
+        <pre class="overflow-x-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100 mt-4"><code>{`{
+  "data_source": "nq",
+  "prompt": [{"role": "user", "content": "<question>"}],
+  "ability": "fact-reasoning",
+  "reward_model": {"style": "rule", "ground_truth": "<answer>"},
+  "extra_info": {"split": "train", "index": 42}
+}`}</code></pre>
+        <p>
+            注意 reward 是 <code>rule</code> 风格，直接在训练器里用 EM 判断，不需要训额外的 reward model。这保留了 R1-Zero 的核心优点：<strong>整个 pipeline 只有一个 trainable module（policy LLM）加一个 optional critic</strong>，没有 reward model 要维护，大大简化了工程栈。
+        </p>
+    </div>
+
+    <div class="card" id="limits">
+        <h2>12. Limits &amp; Follow-ups：Search-R1 没解决的问题</h2>
+        <p>
+            Search-R1 不是终点。它暴露并留给后续工作的问题至少有几个方向：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>Query decomposition。</strong>当前模型遇到复杂问题时倾向于把整句扔进搜索；<a href="https://github.com/Zillwang/StepSearch" class="text-[color:var(--accent)] underline">StepSearch</a> 用 step-wise PPO 和 <a href="https://arxiv.org/abs/2508.09303" class="text-[color:var(--accent)] underline">ParallelSearch</a> 用显式 decomposition + 并行搜索尝试解决这一点。</li>
+            <li><strong>Evidence refinement。</strong>passage 很长时，模型会把噪声内容一起带进推理；<a href="https://www.arxiv.org/pdf/2505.11277" class="text-[color:var(--accent)] underline">AutoRefine</a>、<a href="https://arxiv.org/abs/2509.00877" class="text-[color:var(--accent)] underline">EviNote-RAG</a> 在“think 时同时提取证据”这个方向上扩展。</li>
+            <li><strong>Tool diversity。</strong>Search-R1 只有一个工具（搜索）；<a href="https://arxiv.org/pdf/2509.01055" class="text-[color:var(--accent)] underline">verl-tool</a>、<a href="https://arxiv.org/abs/2505.21668" class="text-[color:var(--accent)] underline">R1-Code-Interpreter</a>、<a href="https://arxiv.org/pdf/2507.21836" class="text-[color:var(--accent)] underline">AutoTIR</a> 把这套思路扩展到代码解释器、计算器、浏览器等多工具场景。</li>
+            <li><strong>Deep research vs single-turn QA。</strong>Search-R1 的目标是“答对 QA”，而 <a href="https://github.com/GAIR-NLP/DeepResearcher" class="text-[color:var(--accent)] underline">DeepResearcher</a>、<a href="https://arxiv.org/abs/2508.07976" class="text-[color:var(--accent)] underline">ASearcher</a> 想做的是长时间的研究型任务，奖励结构、工具栈和 trajectory 长度都要重新设计。</li>
+            <li><strong>Zero-search / internal-external synergy。</strong><a href="https://github.com/Alibaba-NLP/ZeroSearch" class="text-[color:var(--accent)] underline">ZeroSearch</a> 探索“不真的调搜索也能激发搜索能力”（用 LLM 模拟检索）；<a href="https://github.com/hzy312/knowledge-r1" class="text-[color:var(--accent)] underline">IKEA</a> 关心“什么时候用内部知识、什么时候用外部检索”。</li>
+            <li><strong>Reward hacking under weak retrievers。</strong>§9.4 的随机噪声实验展示了模型会学会“放弃搜索”；在生产场景下，如果搜索质量波动，agent 可能会出现同样的退化。</li>
+        </ul>
+
+        <div class="note-box text-sm mt-4">
+            <p><strong>一个更宏观的边界：</strong>Search-R1 预设 reward 可以 rule-based 计算（EM）。一旦任务是开放式写作、代码生成或需要 pointwise 判断的答案，outcome reward 就不再平凡——这时要么回到 RLHF 式的 learned reward model，要么像 DeepResearcher 那样用更细的 scaffold 来定义成功。</p>
+        </div>
+    </div>
+
+    <div class="card" id="practice">
+        <h2>13. Practice：如果今天我要训一个 search agent，怎么起手</h2>
+        <p>
+            把 Search-R1 的经验翻译成最小可执行指南，大致是：
+        </p>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-2">
+            <li><strong>基座模型选 base，不选 distill。</strong>Qwen2.5-7B-Base 是一个性价比点；14B-Base 在预算允许时更稳。instruct 不是不能用，但对 format reward 的收益明显低于 base。</li>
+            <li><strong>先把检索当独立服务。</strong>照 Search-R1 的做法，<code>retrieval_launch.sh</code> 风格起一个 HTTP server（E5+Faiss 或 BGE+HNSW）；训练器只负责发 HTTP、拿 passage。这让你能自由调引擎、调 top-k、换索引，而不用改训练代码。</li>
+            <li><strong>Rollout 格式先锁死。</strong><code>&lt;think&gt;</code>/<code>&lt;search&gt;</code>/<code>&lt;information&gt;</code>/<code>&lt;answer&gt;</code> 四个标签几乎已经是“社区标准”。max_turn 从 4 开始，不够再加。</li>
+            <li><strong>Reward 用 EM + format reward（λ<sub>f</sub>≈0.2）。</strong>先不加 intermediate retrieval reward；监控“崩溃曲线”，format reward 太大会过拟合格式。</li>
+            <li><strong>算法用 GRPO（如果没有强 critic 栈）或 PPO（如果已有一套 PPO 基础设施）。</strong>GRPO group size 从 5 起步；PPO 的 critic lr 一定要显著大于 policy lr（10×）。</li>
+            <li><strong>Loss masking 必上。</strong>没有它，训练基本跑不稳。</li>
+            <li><strong>数据量从 1k 条起步。</strong>10 条样本一定学不到搜索；1k 条已经能看到稳定的多轮搜索行为；10k 条能把多跳提升打满。</li>
+            <li><strong>评测用 in-domain + out-domain。</strong>只在 NQ/HotpotQA 上验证容易高估；加 2Wiki、Musique、Bamboogle 做 generalization check。</li>
+            <li><strong>观察 trajectory，不只是看指标。</strong>很多 reward 骗局（反复搜同一个 query、拿到 passage 却乱答）必须打开 case study 才能看到。</li>
+            <li><strong>把失败模式转化为后续优化方向。</strong>Query decomposition 弱 → 用 StepSearch / ParallelSearch 的思路；evidence extraction 弱 → 用 AutoRefine / EviNote-RAG；想扩工具 → verl-tool / AutoTIR。</li>
+        </ol>
+    </div>
+
+    <div class="card" id="figures">
+        <h2>14. Original Figures &amp; References</h2>
+        <p>整理一下论文的原始图与关键链接，便于快速对照：</p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/search-r1/main.png" alt="Search-R1 overview" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 1（原文）：Search-R1 的 PPO 与 GRPO 训练流程概览，包含检索交错 rollout 与 retrieved token masking。</figcaption>
+        </figure>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/search-r1/llama32-3b.png" alt="Llama-3.2-3B-Base learning search" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 2（原文）：Llama-3.2-3B-Base 在 Search-R1 下学会调搜索引擎并逐步提升下游 EM。</figcaption>
+        </figure>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/search-r1/multi-turn.png" alt="Qwen2.5-7B multi-turn search" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 3（原文）：Qwen2.5-7B-Base 在 Search-R1 下稳定学会多轮搜索 + 推理交替，并显著超过单轮 RAG baseline。</figcaption>
+        </figure>
+
+        <h3 class="text-lg font-semibold text-slate-700 mt-6">参考资料</h3>
+        <ul class="list-disc pl-6 text-gray-600 space-y-1">
+            <li>Jin, B., Zeng, H., Yue, Z., Yoon, J., Arık, S., Wang, D., Zamani, H., Han, J. <em>Search-R1: Training LLMs to Reason and Leverage Search Engines with Reinforcement Learning</em>. <a href="https://arxiv.org/abs/2503.09516" class="text-[color:var(--accent)] underline">arXiv:2503.09516</a>, 2025.</li>
+            <li>Jin, B., Yoon, J., Kargupta, P., Arık, S., Han, J. <em>An Empirical Study on Reinforcement Learning for Reasoning-Search Interleaved LLM Agents</em>. <a href="https://arxiv.org/abs/2505.15117" class="text-[color:var(--accent)] underline">arXiv:2505.15117</a>, 2025.</li>
+            <li>Code: <a href="https://github.com/PeterGriffinJin/Search-R1" class="text-[color:var(--accent)] underline">github.com/PeterGriffinJin/Search-R1</a>（Apache-2.0）。</li>
+            <li>veRL：<a href="https://github.com/volcengine/verl" class="text-[color:var(--accent)] underline">volcengine/verl</a>（Search-R1 的底层训练框架）。</li>
+            <li>DeepSeek-R1：<a href="https://github.com/deepseek-ai/DeepSeek-R1" class="text-[color:var(--accent)] underline">deepseek-ai/DeepSeek-R1</a>（outcome reward RL 的开山工作）。</li>
+            <li>Shao et al. <em>DeepSeekMath / GRPO</em>（group-relative baseline 的来源）。</li>
+            <li>Schulman et al. <em>PPO</em>（标准 clip objective）。</li>
+            <li>Yao et al. <em>ReAct</em>（think + act 的原始范式）。</li>
+            <li>Trivedi et al. <em>IRCoT</em>（prompt 版 interleaved retrieval CoT）。</li>
+            <li>Schick et al. <em>Toolformer</em>（SFT 版 tool-use）。</li>
+            <li>后续工作：<a href="https://github.com/GAIR-NLP/DeepResearcher" class="text-[color:var(--accent)] underline">DeepResearcher</a>、<a href="https://github.com/Alibaba-NLP/ZeroSearch" class="text-[color:var(--accent)] underline">ZeroSearch</a>、<a href="https://github.com/syr-cn/AutoRefine" class="text-[color:var(--accent)] underline">AutoRefine</a>、<a href="https://github.com/Zillwang/StepSearch" class="text-[color:var(--accent)] underline">StepSearch</a>、<a href="https://github.com/TIGER-AI-Lab/verl-tool" class="text-[color:var(--accent)] underline">verl-tool</a>、<a href="https://github.com/inclusionAI/ASearcher" class="text-[color:var(--accent)] underline">ASearcher</a>、<a href="https://github.com/AMAP-ML/Tree-GRPO" class="text-[color:var(--accent)] underline">Tree-GRPO</a>。</li>
+        </ul>
+    </div>
+</BaseLayout>
