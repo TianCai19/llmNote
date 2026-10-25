@@ -1,0 +1,472 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: 'Direct-OPD：把小模型 RL 学到的方向迁移给大模型',
+    description: '深入解读 Weak-to-Strong Generalization via Direct On-Policy Distillation：为什么不能直接模仿弱教师最终策略、policy shift 如何等价成隐式奖励，以及 Direct-OPD 如何在不重跑大模型 RL 的前提下复用弱模型的 RL 结果。',
+    tags: ['RLVR', 'Distillation', 'Reasoning', 'Post-Training'],
+    readTime: '39 min',
+    createdAt: '2026-07-08'
+};
+---
+
+<BaseLayout title="Direct-OPD：把小模型 RL 学到的方向迁移给大模型" description="从 weak-to-strong generalization 到 Direct On-Policy Distillation：系统理解 policy shift transfer、implicit reward、adaptive KL 与实验结论。">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">RLVR / Weak-to-Strong / Distillation / Reasoning</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Direct-OPD：把小模型 RL 学到的方向迁移给大模型</h1>
+        <p class="text-xl text-gray-500">不是去模仿弱教师的终态分布，而是把 RL 真正改变过的那部分行为偏移，作为强学生自己的 on-policy 密集监督</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt} • arXiv:2607.05394v1</p>
+    </header>
+
+    <div class="note-box text-sm">
+        <p><strong>论文信息：</strong><em>Weak-to-Strong Generalization via Direct On-Policy Distillation</em>，Shiyuan Feng、Huan-ang Gao、Haohan Chi、Hanlin Wu 等，Tsinghua AIR / ByteDance Seed / Tsinghua University / Peking University，2026 年 7 月发布。</p>
+        <p class="mt-2"><strong>一句话结论：</strong>这篇论文的关键不是“让大模型向小模型学习”，而是把 <strong>小模型经过 RL 后相对于自身基线发生的 policy shift</strong> 读出来，作为一种 <strong>dense implicit reward</strong>，再施加到大模型自己的 on-policy states 上。这样迁移的是 RL 学到的“方向”，而不是弱教师的能力上限。</p>
+    </div>
+
+    <nav class="toc mt-8" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#introduction">1. Introduction：这篇论文真正解决了什么问题</a></li>
+            <li><a href="#background">2. Background：为什么直接蒸馏弱教师会伤害强学生</a></li>
+            <li><a href="#intuition">3. Core Intuition：迁移终态策略，还是迁移 RL 学到的变化量</a></li>
+            <li><a href="#method">4. Method：Direct-OPD 的对象、公式与训练接口</a></li>
+            <li><a href="#adaptive-kl">5. Adaptive KL：为什么 KL 系数不能固定写死</a></li>
+            <li><a href="#experiments">6. Experiments：主要结果到底说明了什么</a></li>
+            <li><a href="#analysis">7. Analysis：不是 token overlap imitation，而是 direction transfer</a></li>
+            <li><a href="#engineering">8. 工程意义：什么时候它值得替代直接 RL</a></li>
+            <li><a href="#limits">9. Limitations：方法边界与风险点</a></li>
+            <li><a href="#figures">10. Original Figures &amp; References</a></li>
+        </ul>
+    </nav>
+
+    <div class="card" id="introduction">
+        <h2>1. Introduction：这篇论文真正解决了什么问题</h2>
+        <p>
+            在 reasoning 模型的后训练里，RLVR 已经证明自己很有效：如果 reward 可以自动验证，比如数学答案、代码测试结果或可程序检查的推理结果，强化学习就能把模型往更强的推理行为上推。
+            但它的代价也非常直观。每换一个更强、更大的目标模型，你都得重新跑一遍昂贵的 RL 训练，而 RL 的最重成本正是 rollout。
+            模型越大，rollout 越贵，后训练本身就越容易变成新的扩展瓶颈。
+        </p>
+        <p>
+            论文要挑战的就是这个默认假设：<span class="highlight">为什么每个强模型都必须重新亲自经历一次完整 RL 探索？</span>
+            如果一个更小的模型已经通过 RL 探索过某个任务分布，并且在这个过程中学到了某种“偏向更好答案的行为变化”，那么这部分信息能不能被更强模型复用？
+            这不是一个普通 distillation 问题，因为当学生已经比教师强时，直接去模仿教师往往会退化。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/direct-opd/x1.png" alt="Figure 1: Direct-OPD transfers the effect of small-model RL rather than imitating the small model" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 1. 论文的核心对比：vanilla OPD 试图把学生拉向 post-RL 弱教师本身，而 Direct-OPD 只转移“RL 让这个教师更偏好的那部分变化”。</figcaption>
+        </figure>
+
+        <div class="note-box text-sm mt-4">
+            <p><strong>原文摘录：</strong></p>
+            <p class="text-sm text-gray-600 italic">“Direct-OPD compares the post-RL teacher with its own pre-RL reference and treats their log-ratio as a dense implicit reward for the student.”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/abs/2607.05394" class="text-[color:var(--accent)] underline">arXiv Abstract</a></p>
+        </div>
+
+        <p class="mt-4">
+            这段话非常重要。它把“弱到强泛化”从“学生是否应该模仿教师”改写成了“学生是否应该复用 RL 诱导出的行为偏移”。
+            这相当于把 RL 结果拆成两部分看：一部分是教师模型自身容量、先验和表达能力的限制；另一部分是 RL 训练真正引入的方向性改变。
+            Direct-OPD 的贡献就在于，它试图保留后者、过滤前者。
+        </p>
+    </div>
+
+    <div class="card" id="background">
+        <h2>2. Background：为什么直接蒸馏弱教师会伤害强学生</h2>
+        <p>
+            在普通 on-policy distillation 里，学生会在自己的 rollout 状态上读取教师分布，然后最小化与教师的 KL 距离。
+            这个设计本来是合理的，因为它避免了离线 teacher forcing，而是让教师在学生真正访问到的 states 上提供监督。
+            问题是，当教师比学生小、或者已经比学生弱时，<strong>教师的最终策略本身不是一个干净的监督对象</strong>。
+        </p>
+        <p>
+            它既包含 RL 训练带来的有益偏移，也包含弱教师固有的错误偏好、能力瓶颈和较低的上限。
+            如果学生本来就已经高于教师终态，那么强行让学生靠近教师，只会把学生往更差的区域拉。
+            论文在 Figure 1(a) 里给了最直观的例子：R1-Distill-7B 初始 AIME 2024 准确率是 56.7，已经高于 post-RL JustRL-1.5B 教师的 51.3，但 vanilla OPD 仍然会把它拖到大约 50 左右。
+        </p>
+
+        <div class="overflow-x-auto mt-6">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">对象</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">它包含什么</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">风险</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Post-RL teacher policy</td>
+                        <td class="px-4 py-3">RL 带来的有益改进 + 弱教师本身的容量上限 + 原始偏差</td>
+                        <td class="px-4 py-3">学生会连同弱教师的限制一起学走，强学生容易被“拉低”</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Teacher policy shift</td>
+                        <td class="px-4 py-3">教师从 pre-RL 到 post-RL 的相对变化量</td>
+                        <td class="px-4 py-3">更接近 RL 真实引入的方向，但需要额外数学解释和尺度控制</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p class="mt-6">
+            这就是为什么论文反复强调：弱教师不是“更会做题的人”，而是“更便宜的 RL 探索载体”。
+            你不应该把它最终写出来的答案分布整个复制给强学生，而应该把 RL 在这个载体上发现的 improvement direction 抽出来，再施加到学生自己的分布上。
+        </p>
+    </div>
+
+    <div class="card" id="intuition">
+        <h2>3. Core Intuition：迁移终态策略，还是迁移 RL 学到的变化量</h2>
+        <p>
+            Direct-OPD 的直觉可以用一个简单类比来理解。假设你有一个基础较弱的学生，在做大量带答案校验的题目后，逐渐学会“遇到某种题型时更倾向于尝试某条思路，遇到另一类题型时更倾向于放弃某种错误分支”。
+            如果你只看它最后写出来的完整解答，你看到的是“这个人最后成了什么样”；如果你拿它训练前后做对比，你看到的是“训练到底改了它哪些偏好”。
+        </p>
+        <p>
+            论文选择迁移后者。因为后者更像 reward signal。
+            它告诉你：对于同一个 prompt 和同一个 prefix，哪些 token 是 RL 之后变得更该选的，哪些 token 是 RL 之后更该压低的。
+            这个信号即使来自一个较弱模型，也仍然可能对更强模型有用，因为它表达的是“方向”，而不是“终点”。
+        </p>
+        <p>
+            论文把这个对象记作 teacher policy shift：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\Delta_T(y \mid x)=\log \pi_T(y \mid x)-\log \pi_{T_{\mathrm{ref}}}(y \mid x)
+$$`}></div>
+        <p class="text-sm text-gray-600 mt-3">
+            其中 <span set:html={String.raw`$\pi_{T_{\mathrm{ref}}}$`}></span> 是教师的 pre-RL reference，<span set:html={String.raw`$\pi_T$`}></span> 是 post-RL teacher。
+            正值表示 RL 让某个响应更可能，负值表示 RL 抑制了这个响应。
+        </p>
+        <p>
+            注意这不是在问“教师最后最喜欢什么”，而是在问“RL 让教师相对于自己原来更喜欢什么”。这种相对量天然会消去教师原本就有的偏好一部分，因此更接近可迁移的 RL 诱导信号。
+        </p>
+    </div>
+
+    <div class="card" id="method">
+        <h2>4. Method：Direct-OPD 的对象、公式与训练接口</h2>
+        <p>
+            论文的数学结构分三步。第一步回顾 OPD：学生在自己的 on-policy rollouts 上读取教师分布。第二步证明 teacher/reference log-ratio 在 KL-regularized RL 条件下等价于 reward。第三步把这个奖励样式嵌回 student 的 on-policy top-k 训练接口里。
+            整个方法最大的工程优点是：<strong>它不改 on-policy distillation 的外壳，只改从 teacher 读出来的信号</strong>。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">4.1 普通 OPD 在做什么</h3>
+        <p>
+            对于 prompt <span set:html={String.raw`$x$`}></span> 和响应 <span set:html={String.raw`$y=(y_1,\ldots,y_T)$`}></span>，策略可以按 prefix 分解：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\log \pi(y \mid x)=\sum_{t=1}^{T}\log \pi(y_t \mid s_t), \qquad s_t=(x,y_{<t})
+$$`}></div>
+        <p>
+            普通 OPD 会让学生 <span set:html={String.raw`$\pi_\theta$`}></span> 在自己的 rollouts 上读取教师 <span set:html={String.raw`$\pi_T$`}></span> 的分布，并最小化序列级 KL：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{L}_{\mathrm{OPD}}(\theta)=\mathbb{E}_{x\sim\mathcal{D}}\Big[D_{\mathrm{KL}}\big(\pi_\theta(\cdot\mid x)\,\|\,\pi_T(\cdot\mid x)\big)\Big]
+$$`}></div>
+        <p>
+            进一步可精确分解成 dense per-token supervision：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{L}_{\mathrm{OPD}}(\theta)=\mathbb{E}_{x\sim\mathcal{D},\,\hat{y}\sim\pi_\theta}\Big[\sum_{t=1}^{T} D_{\mathrm{KL}}(p_t \,\|\, q_t)\Big]
+$$`}></div>
+        <p class="text-sm text-gray-600 mt-3">
+            其中 <span set:html={String.raw`$p_t(v)=\pi_\theta(v\mid s_t)$`}></span>，<span set:html={String.raw`$q_t(v)=\pi_T(v\mid s_t)$`}></span>。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">4.2 为什么 policy shift 等价于隐式奖励</h3>
+        <p>
+            论文的关键证明来自 KL-regularized RL 的标准最优形式。若教师在 external reward <span set:html={String.raw`$R_T$`}></span> 和 KL 系数 <span set:html={String.raw`$\beta_T$`}></span> 下训练，其最优策略满足：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\pi_T^*(y\mid x)\propto \pi_{T_{\mathrm{ref}}}(y\mid x)\exp\big(R_T(x,y)/\beta_T\big)
+$$`}></div>
+        <p>
+            取对数并整理后得到：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\log\frac{\pi_T(y\mid x)}{\pi_{T_{\mathrm{ref}}}(y\mid x)}=\frac{1}{\beta_T}R_T(x,y)-\log Z_T(x)
+$$`}></div>
+        <p>
+            也就是说，teacher/reference log-ratio 与 teacher 的 RL reward 只差一个正比例缩放和 prompt 级常数。
+            对同一个 prompt 来说，<span set:html={String.raw`$\log Z_T(x)$`}></span> 不影响响应之间的比较，因此这个 log-ratio 本质上就扮演了 reward 的角色。
+            这也是论文反复强调的“policy-as-reward identity”。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">4.3 Direct-OPD 如何接到学生自己的 on-policy states 上</h3>
+        <p>
+            因为语言模型策略是按 token 分解的，上面的 sequence-level shift 也可以读成 token-level rewards。
+            在实现上，论文保留了 OPD 的 on-policy top-k 接口：学生先 rollout，再在每个 visited prefix 上保留自己 top-k 支持集
+            <span set:html={String.raw`$S_t=\operatorname{TopK}_v p_t$`}></span>，随后只查询教师和 reference 在这些候选 token 上的 log-prob。
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\mathcal{L}^{\text{top-}k}_{\mathrm{OPD}}(\theta)=
+\mathbb{E}_{x\sim\mathcal{D},\,\hat{y}\sim\pi_\theta}\Big[\sum_{t=1}^{T} D_{\mathrm{KL}}\big(\bar{p}_t^{S_t}\,\|\,\bar{q}_t^{S_t}\big)\Big]
+$$`}></div>
+        <p>
+            Direct-OPD 与普通 OPD 的不同不在于这个 on-policy 外壳，而在于 <strong>监督信号不再是 teacher 的绝对分布，而是 teacher 相对 reference 的变化量</strong>。
+            论文最终得到的直觉式目标可以写成：学生在自己实际访问到的 prefix 上，根据 teacher shift 给候选 token 一个 advantage-like 权重，再加一个对学生初始 checkpoint 的 KL anchor。
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\nabla_{\theta}J_{\text{Direct-OPD}}
+\approx
+\mathbb{E}_{x\sim\mathcal{D},\,y\sim\pi_\theta}
+\Big[
+\sum_t \sum_{v\in S_t} A_t^{\mathrm{w}}(v)\,\nabla_\theta \log \pi_\theta(v\mid s_t)
+\Big]
+-\alpha \nabla_\theta D_{\mathrm{KL}}\big(\pi_\theta(\cdot\mid x)\,\|\,\pi_S(\cdot\mid x)\big)
+$$`}></div>
+        <p>
+            这里的关键是：学生从头到尾都训练在 <strong>自己的 states</strong> 上。
+            因此 Direct-OPD 不是“把小模型的回答抄给大模型”，而是“让大模型在自己会去的地方，读到弱模型 RL 给出的偏好方向”。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/direct-opd/x2.png" alt="Figure 2: Direct-OPD transfers across teacher pairs and student families" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 2. 不同 teacher pair、不同 student family 上都能提升，说明它迁移的是一种通用的 RL-induced direction，而不是某个单独模型族的行为习惯。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card" id="adaptive-kl">
+        <h2>5. Adaptive KL：为什么 KL 系数不能固定写死</h2>
+        <p>
+            论文在方法部分额外花了一节讲 <strong>Adaptive KL Control</strong>，这不是实现小细节，而是这个方法能不能稳定工作的核心之一。
+            原因很直接：教师 shift 的尺度不是学生能自己决定的。它来自教师当时 RL 的 reward 尺度和教师训练时使用的 KL 预算，而这两个量在 checkpoint pair 里都不会显式告诉你。
+        </p>
+        <p>
+            如果仍然用一个固定的学生端 KL 系数 <span set:html={String.raw`$\alpha$`}></span>，它就等于试图用一个常数去适配所有 teacher-student pair 的 signal scale。
+            但 teacher shift 的大小本质上处在教师自己的 reward units 里，而学生的 KL anchor 又处在学生分布的尺度里，两者没有先验可知的换算关系。
+        </p>
+        <p>
+            论文因此引入一个非常轻量的 controller，在每个训练 iteration 根据 batch 级 mean weighted shift 的符号调整 <span set:html={String.raw`$\alpha$`}></span>：
+        </p>
+        <div class="math-block" set:html={String.raw`$$
+\alpha_{m+1}=
+\operatorname{clip}\Big(
+\alpha_m\big(1+\epsilon\,\operatorname{sgn}(\bar{r}_m)\big),
+\alpha_{\min},
+\alpha_{\max}
+\Big)
+$$`}></div>
+        <p class="text-sm text-gray-600 mt-3">
+            默认超参数是 <span set:html={String.raw`$\epsilon=0.01$`}></span>，<span set:html={String.raw`$[\alpha_{\min},\alpha_{\max}]=[0.5,2.5]$`}></span>。
+        </p>
+        <p>
+            直观上讲，当学生当前访问到的 prefixes 上，teacher shift 平均为正时，说明这个 local signal 可能过强，controller 会抬高 <span set:html={String.raw`$\alpha$`}></span>，让 KL anchor 更强一些，防止过放大。
+            当平均 shift 为负时，controller 会下调 <span set:html={String.raw`$\alpha$`}></span>，减弱 anchor，让学生不要被过强地拴回初始化。
+            这不是寻找理论最优温度，而是在实践中维持“dense signal 与 student anchor 的平衡”。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/direct-opd/x9.png" alt="Figure 9: best KL coefficient is pair-dependent and adaptive KL stabilizes transfer" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 9. 最优 fixed KL 明显是 pair-dependent 的，而 adaptive KL 可以更稳地把学生约束在“teacher shift 仍然可信”的分布区域内。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card" id="experiments">
+        <h2>6. Experiments：主要结果到底说明了什么</h2>
+        <p>
+            论文的实验问题很清楚，可以概括成三个研究问句。
+            第一，小模型通过 RL 学到的 shift 能否提升更强学生。
+            第二，把 RL 放在小模型上再做转移，是否比直接对大模型跑 RL 更划算。
+            第三，多个独立学到的 policy shift 能否顺序叠加。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">6.1 弱教师的 shift 的确能提升更强学生</h3>
+        <p>
+            论文使用两组 teacher pair。第一组是 R1-Distill-1.5B 到 JustRL-1.5B；第二组是 Nemotron-1.5B 到 QuestA-Nemotron-1.5B。
+            被迁移的学生包括 R1-Distill-7B、Qwen3-1.7B 和 Qwen3-4B。
+            关键观察是：<strong>即便学生起点已经高于 post-RL teacher，Direct-OPD 仍然能继续提高它</strong>。这正是“转移的是方向而不是终态”的最强证据。
+        </p>
+
+        <div class="overflow-x-auto mt-6">
+            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">JustRL pair</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">AIME24</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">AIME25</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200 text-gray-600">
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Qwen3-1.7B</td>
+                        <td class="px-4 py-3">48.3</td>
+                        <td class="px-4 py-3">36.8</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Qwen3-1.7B + Direct-OPD</td>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">62.4 (+14.1)</td>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">46.3 (+9.5)</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Qwen3-4B</td>
+                        <td class="px-4 py-3">72.5</td>
+                        <td class="px-4 py-3">65.6</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">Qwen3-4B + Direct-OPD</td>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">77.6 (+5.1)</td>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">68.8 (+3.2)</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">R1-Distill-7B</td>
+                        <td class="px-4 py-3">56.7</td>
+                        <td class="px-4 py-3">40.5</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-slate-700">R1-Distill-7B + Direct-OPD</td>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">63.1 (+6.4)</td>
+                        <td class="px-4 py-3 font-semibold text-emerald-700">48.8 (+8.3)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p class="mt-6">
+            这里最值得记住的不是某个单一数字，而是结构性事实：Qwen3-4B 和 R1-Distill-7B 这样的学生，本来就已经强于 JustRL-1.5B 终态教师，但 Direct-OPD 仍然能给它们增益。
+            这几乎直接否定了“提升只是因为 teacher 更强”这一解释。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">6.2 弱到强路线在等计算下优于直接 RL</h3>
+        <p>
+            第二个实验更重要，因为它回答了“这是不是只是一种复用已有教师的技巧”。论文把两条路线放在等步数、等总 compute 的比较框架里：
+            一条是直接在 R1-Distill-7B 上跑 RL，另一条是先在更小的 R1-Distill-1.5B 上跑 RL，再把不同阶段 checkpoint 的 shift 转移到 R1-Distill-7B。
+        </p>
+        <p>
+            结果表明，<strong>在相同步数下，小模型更像一个高性价比的 RL direction finder</strong>。
+            小模型先找到有价值的改进方向，再通过 Direct-OPD 把方向传给大模型，整体比大模型亲自从头探索更划算。
+            论文给出的估算是：1500 step 的 R1-Distill-1.5B RL 约需要 32 张 A100 跑 160 小时，而 R1-Distill-7B 直接 RL 大约要 320 小时；后续 Direct-OPD transfer 阶段只额外增加约 8 张 A100 跑 4 小时。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/direct-opd/x4.png" alt="Figure 3: weak-to-strong route beats direct RL at equal compute" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 3. 等计算下，先在小模型上做 RL 再转移其 policy shift，优于直接在大模型上重做整轮 RL；这改变了小模型在后训练链路中的角色定位。</figcaption>
+        </figure>
+
+        <h3 class="text-teal-700 mt-8">6.3 多个独立 shift 可以顺序叠加</h3>
+        <p>
+            论文第三个实验测试 sequential composition。
+            先把 JustRL 那组 shift 迁到 Qwen3-1.7B 上，再继续叠加 QuestA 那组 shift。
+            这说明 policy shift 可以像“可组合的训练信号”那样被顺序施加，而不是只能做一次性的 teacher imitation。
+            这一点非常像把多个任务或多个 RL 过程各自产生的行为增量，当作一组可复用的 post-training components。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/direct-opd/x5.png" alt="Figure 4: sequential composition of policy shifts" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 4. Sequential policy-shift transfer 显示多个独立 teacher pair 学到的方向可以在同一学生上叠加，而不是互相抵消。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card" id="analysis">
+        <h2>7. Analysis：不是 token overlap imitation，而是 direction transfer</h2>
+        <p>
+            论文第四部分做了三个很有价值的分析，它们的共同作用是排除一些“看起来更简单”的解释。
+            最关键的一条是：Direct-OPD 的增益并不是因为学生越来越像教师的 token preference。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">7.1 提升不是因为 teacher-student top-k overlap 越来越高</h3>
+        <p>
+            Figure 5 直接测量了训练过程中 teacher 与 student 的 top-k overlap。
+            如果 Direct-OPD 本质上是 imitation，那么你应该看到性能提升与 overlap 升高高度对应。
+            但论文发现不是这样。性能增长并不能简单解释为“学生越来越像教师”。
+            这支持论文的中心论点：模型在利用 teacher shift 提供的方向性信号，而不是单纯地复制 teacher 行为模式。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/direct-opd/x6.png" alt="Figure 5: teacher-student top-k overlap during Direct-OPD training" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 5. top-k overlap 不是解释增益的主因，说明 Direct-OPD 更像在迁移 reward direction，而不是逼迫分布逐步重合。</figcaption>
+        </figure>
+
+        <h3 class="text-teal-700 mt-8">7.2 短视野训练会改变长 rollout 行为</h3>
+        <p>
+            论文还展示了一个容易被低估的现象：Direct-OPD 的 transfer stage 很短，但它可以显著改变更长 rollout 下的行为结构。
+            这意味着学生并不是只在局部 token 层面被轻微 nudged，而是在策略层面被重新倾斜。
+            也正因为如此，论文才认为 transfer stage 的成本很低却有效，它不需要像重新跑 RL 那样大规模再探索。
+        </p>
+
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/direct-opd/x8.png" alt="Figure 8: short-horizon Direct-OPD training changes longer-rollout behavior" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 8. 短程 Direct-OPD 训练会改变更长轨迹上的行为，这解释了为什么“只有几小时 transfer”仍然能带来明显的整体推理改善。</figcaption>
+        </figure>
+
+        <h3 class="text-teal-700 mt-8">7.3 KL 可靠性是 pair-dependent 的</h3>
+        <p>
+            Figure 9 进一步说明 fixed KL 不稳定的原因：不同 teacher-student pair 的最优 KL 系数不同，而且 mean reward 大并不自动意味着验证性能更好。
+            更准确地说，学生必须被约束在一个“teacher shift 仍然可靠”的区域中。
+            一旦学生漂得太远，teacher/reference log-ratio 可能仍然数值很大，但已经不再对应真正有价值的监督。
+        </p>
+    </div>
+
+    <div class="card" id="engineering">
+        <h2>8. 工程意义：什么时候它值得替代直接 RL</h2>
+        <p>
+            这篇论文最重要的工程启发，不是多了一个新的 distillation loss，而是改变了后训练流水线的基本划分方式。
+            在传统思路里，RL 和蒸馏是两件独立的事：RL 负责发现新行为，蒸馏负责把最终模型压缩或迁移。
+            Direct-OPD 则把它们接了起来：<strong>小模型负责更便宜地发现 RL direction，大模型负责在自己的分布上吸收这个 direction</strong>。
+        </p>
+        <p>
+            如果把这个视角推远一点，它意味着 future post-training pipeline 可以更模块化。
+            你不一定需要把每次 RL run 都看成“只产出一个终态模型”，而可以把它看成“产出一个可复用的 policy-shift artifact”。
+            之后不同学生模型可以按自己的初始化、自己的 rollout distribution 去读取这份 artifact。
+        </p>
+        <p>
+            从资源角度看，这对大模型团队尤其有吸引力。越大的模型，重新 RL 的边际代价越高；如果弱到强路线能保持大部分收益，就相当于把探索成本前移到更廉价的模型上。
+            当然，这不意味着大模型永远不需要直接 RL。更准确的说法是：当你怀疑“目标奖励方向在模型族内可迁移，但 rollout 成本在大模型上过高”时，Direct-OPD 非常值得先试。
+        </p>
+    </div>
+
+    <div class="card" id="limits">
+        <h2>9. Limitations：方法边界与风险点</h2>
+        <p>
+            论文最后一节的限制讨论非常克制，但信息量很高。它并没有声称只要有 teacher pair，任何强学生都能稳定受益。
+            相反，它明确承认这个信号是 <strong>conditional</strong> 的。
+        </p>
+        <ul class="list-disc pl-6 mt-4 space-y-2 text-gray-700">
+            <li>如果学生访问到的 states 与 teacher shift 真正有意义的区域差得太远，log-ratio 再大也未必是有用监督。</li>
+            <li>不同 teacher-student pair 的响应长度、最优 KL 强度、有效训练阶段都不一样，说明这不是一个完全免调参的黑盒配方。</li>
+            <li>方法默认 teacher RL 发现的改进方向在学生上仍然可表达、可利用；如果模型家族或 tokenizer、推理模式差异过大，迁移可能失效。</li>
+            <li>Direct-OPD 解决的是“复用 RL 结果”的问题，不是“替代一切 RL”的问题。它仍然依赖至少有一个便宜 teacher 能先跑出有价值的 RL shift。</li>
+        </ul>
+        <p class="mt-4">
+            换句话说，Direct-OPD 不是在宣布“teacher can teach anything to any stronger model”，而是在证明：
+            当 teacher shift 与 student rollout distribution 足够匹配时，<strong>RL 结果可以被复用成一种隐式奖励信号，而不必只作为最终模型被模仿</strong>。
+            这是一个比“蒸馏弱教师”强得多、也更精确的说法。
+        </p>
+    </div>
+
+    <div class="card" id="figures">
+        <h2>10. Original Figures &amp; References</h2>
+        <p>
+            这篇论文最值得反复看的原图主要集中在 1、2、3、4、5、8、9 号图：它们分别回答了“为什么不是 imitation”“为什么能跨 family 生效”“为什么等计算能赢 direct RL”“为什么可以 sequential composition”“为什么不是 overlap imitation”“为什么短 transfer 仍有全局效果”“为什么 KL 需要自适应”。
+        </p>
+
+        <h3 class="text-teal-700 mt-8">参考资料</h3>
+        <ul class="list-disc pl-6 mt-4 space-y-2 text-gray-700">
+            <li><a href="https://arxiv.org/abs/2607.05394" target="_blank" rel="noopener noreferrer" class="text-[color:var(--accent)] underline">arXiv Abstract: Weak-to-Strong Generalization via Direct On-Policy Distillation</a></li>
+            <li><a href="https://arxiv.org/html/2607.05394v1" target="_blank" rel="noopener noreferrer" class="text-[color:var(--accent)] underline">arXiv HTML version</a></li>
+            <li><a href="https://bytedtsinghua-sia.github.io/Direct-OPD/" target="_blank" rel="noopener noreferrer" class="text-[color:var(--accent)] underline">Project Page</a></li>
+            <li><a href="https://github.com/BytedTsinghua-SIA/Direct-OPD" target="_blank" rel="noopener noreferrer" class="text-[color:var(--accent)] underline">Official Code Repository</a></li>
+        </ul>
+
+        <h3 class="text-teal-700 mt-10">Original Figures</h3>
+        <div class="grid gap-6 mt-6">
+            {[
+                ['x1', 'Figure 1. Direct-OPD transfers the effect of small-model RL rather than imitating the small model.'],
+                ['x2', 'Figure 2 (left). Direct-OPD transfers RL-induced policy shifts across teacher pairs and student families.'],
+                ['x3', 'Figure 2 (right / table panel). Score summaries for different students and teacher pairs.'],
+                ['x4', 'Figure 3. Running RL on a small model and then transferring its policy shift beats running RL directly on the large target.'],
+                ['x5', 'Figure 4. Sequential policy-shift transfer into Qwen3-1.7B.'],
+                ['x6', 'Figure 5. Teacher-student top-k overlap during Direct-OPD training.'],
+                ['x7', 'Figure 6. Entropy diagnostics for JustRL-based transfer.'],
+                ['x8', 'Figure 8. Short-horizon Direct-OPD training changes behavior beyond the training horizon.'],
+                ['x9', 'Figure 9. The best KL coefficient is pair-dependent, and adaptive KL stabilizes transfer.'],
+                ['x10', 'Figure 10. Additional entropy diagnostics for QuestA transfer.'],
+                ['x11', 'Figure 11. Sequential policy-shift transfer into Qwen3-1.7B on AIME 2025.'],
+                ['x12', 'Figure 12. QuestA transfer curves on AIME 2025.'],
+                ['x13', 'Figure 13. Original paper figure from the appendix.'],
+                ['x14', 'Figure 14. Original paper figure from the appendix.']
+            ].map(([name, caption]) => (
+                <figure class="bg-white/70 border border-white/70 rounded-2xl p-4">
+                    <img src={`/notes/direct-opd/${name}.png`} alt={caption} class="w-full rounded-xl border border-white/70" loading="lazy" />
+                    <figcaption class="mt-3 text-sm text-gray-600">{caption}</figcaption>
+                </figure>
+            ))}
+        </div>
+    </div>
+</BaseLayout>
