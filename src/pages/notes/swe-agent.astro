@@ -1,0 +1,311 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: 'SWE-agent：为 LM 量身定做的计算机接口，如何让它修好 GitHub Issue',
+    description: '系统梳理 SWE-agent 与 Agent-Computer Interface（ACI）：从裸 shell 对 LM 的四类不友好、四条 ACI 设计原则、摘要式搜索、100 行文件查看器、带 lint 护栏的 edit 命令与 history processing，到 SWE-bench 主结果与逐项消融——同一个 GPT-4 Turbo，只换接口，解决率从 11% 到 18%。',
+    tags: ['Agent', 'ACI', 'SWE-bench', 'Coding Agent', 'Systems'],
+    readTime: '30 min',
+    createdAt: '2026-10-29'
+};
+---
+
+<BaseLayout title="SWE-agent：为 LM 量身定做的计算机接口" description="系统梳理 SWE-agent 与 Agent-Computer Interface：ACI 四原则、搜索/查看/编辑/上下文管理四大组件、SWE-bench 主结果与逐项消融，以及它对今天 coding agent 工具设计的持续影响。">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Agent / Coding Agent / Interface Design</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">SWE-agent：为 LM 量身定做的计算机接口，如何让它修好 GitHub Issue</h1>
+        <p class="text-xl text-gray-500">同一个模型、同一套权重，只把“它操作电脑的方式”从裸 shell 换成一套为 LM 设计的接口，修 bug 的成功率就能相对提升 64%</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <div class="note-box text-sm">
+        <p><strong>论文信息：</strong></p>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+            <li><em>SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering</em>（John Yang、Carlos E. Jimenez、Alexander Wettig、Kilian Lieret、Shunyu Yao、Karthik Narasimhan、Ofir Press，Princeton Language and Intelligence；arXiv:2405.15793，v1 2024-05，v3 2024-11；NeurIPS 2024）。</li>
+            <li>代码仓：<a href="https://github.com/SWE-agent/SWE-agent" class="text-[color:var(--accent)] underline">SWE-agent/SWE-agent</a>（早期位于 princeton-nlp/SWE-agent）；项目站与排行榜：<a href="https://swe-agent.com" class="text-[color:var(--accent)] underline">swe-agent.com</a>。</li>
+            <li>评测基准：<em>SWE-bench: Can Language Models Resolve Real-World GitHub Issues?</em>（Jimenez et al., arXiv:2310.06770），2,294 个来自 12 个流行 Python 仓库的真实 issue，每个任务都配有修改前失败、修改后通过的测试（FAIL_TO_PASS）。</li>
+            <li>核心定位：不改模型权重，只设计 <strong>Agent-Computer Interface（ACI）</strong>——一组为 LM 的能力和短板量身定做的命令与反馈格式——让 LM agent 能像工程师一样浏览仓库、定位代码、编辑文件、运行测试，自主修好真实 issue。</li>
+        </ul>
+    </div>
+
+    <div class="note-box text-sm mt-4">
+        <p><strong>先把几个术语说清（读这篇笔记前只需要知道这些）：</strong></p>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+            <li><strong>ACI（Agent-Computer Interface）</strong>：本文造的词，与 HCI（人机交互）/ UI 对应。UI 是给人用的图形界面，ACI 是给 LM agent 用的命令与反馈接口：它规定 agent 能发出哪些动作、每个动作的文档怎么写、执行结果以什么格式喂回模型。</li>
+            <li><strong>SWE-bench</strong>：真实 GitHub issue 修复基准。<strong>% Resolved（pass@1）</strong>指 agent 单次尝试后，提交的补丁能让目标测试全部通过的任务比例——不是“代码看起来对”，而是测试说了算。</li>
+            <li><strong>RAG baseline</strong>：非交互基线。先用 BM25 按 issue 文本检索出相关文件，再让模型一次性直接写出补丁，没有“边做边看反馈”的循环。</li>
+            <li><strong>Shell-only baseline</strong>：交互式基线（源自 InterCode 环境）。模型可以在 Linux shell 里自由敲命令，但没有 SWE-agent 的专用查看/编辑/搜索命令。消融里“SWE-agent vs Shell-only”的差距，衡量的正是 ACI 本身的价值。</li>
+            <li><strong>ReAct</strong>：agent 的基本循环格式——每一步先输出一段 thought（思考），再输出一个 action（命令），执行后把 observation（环境反馈）拼回上下文，如此往复。SWE-agent 沿用这个循环，ACI 决定的是 action 的集合与 observation 的长相。</li>
+            <li><strong>Trajectory（轨迹）</strong>：一条任务里 thought/action/observation 的完整序列。论文对 ACI 的很多改进，来自人工复盘轨迹里反复出现的失败动作。</li>
+        </ul>
+    </div>
+
+    <nav class="toc mt-8" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#intro">1. Introduction：模型之外，还有接口这件事</a></li>
+            <li><a href="#background">2. Background &amp; Motivation：裸 shell 对 LM 到底不友好在哪</a></li>
+            <li><a href="#principles">3. ACI 的四条设计原则</a></li>
+            <li><a href="#system">4. Method：SWE-agent 的系统结构</a></li>
+            <li><a href="#search">5. 搜索与导航：摘要式结果与 50 条上限</a></li>
+            <li><a href="#editor">6. 文件查看器与编辑器：100 行窗口、edit 与 lint 护栏</a></li>
+            <li><a href="#context">7. 上下文管理：history processing 与反馈模板</a></li>
+            <li><a href="#experiments">8. Experiments：SWE-bench 与 HumanEvalFix 主结果</a></li>
+            <li><a href="#ablation">9. ACI 消融：每个设计值多少个百分点</a></li>
+            <li><a href="#behavior">10. Agent 行为与失败模式</a></li>
+            <li><a href="#discussion">11. Discussion：从 SWE-agent 到今天的 coding agent</a></li>
+            <li><a href="#practice">12. Practice：自己实现 coding agent 时的 ACI 清单</a></li>
+            <li><a href="#figures">13. Original Figures &amp; References</a></li>
+        </ul>
+    </nav>
+
+    <div class="card" id="intro">
+        <h2>1. Introduction：模型之外，还有接口这件事</h2>
+        <p>
+            2024 年前后，让 LM agent 做软件工程最自然的做法，是把一个 Linux shell 交给它：反正工程师也是在终端里工作的，命令它都“见过”，剩下的就看模型聪不聪明。这个做法隐含了一个假设——<strong>瓶颈在模型，接口是透明的</strong>。SWE-agent 这篇论文要挑战的正是这个假设。作者的出发点来自 HCI（人机交互）研究：人类工程师之所以高效，一半靠自己的能力，另一半靠 VS Code、PyCharm 这类为人类认知特点打磨过的工具；换一位“新物种用户”——LM agent——它的感知方式、记忆成本、易错点都与人不同，却一直在被迫使用为人类（甚至为人类专家）设计的裸接口。
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>原文摘录：</strong></p>
+            <p class="text-sm text-gray-600 italic">“we posit that LM agents represent a new category of end users with their own needs and abilities, and would benefit from specially-built interfaces to the software they use.”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/abs/2405.15793" class="text-[color:var(--accent)] underline">arXiv:2405.15793</a> Abstract（论文为 CC BY 4.0 开放许可）</p>
+        </div>
+        <p class="mt-4">
+            论文给出的证据非常直接。在当时最强的两个模型 GPT-4 Turbo 与 Claude 3 Opus 上，配上 ACI 的 SWE-agent 在完整 SWE-bench 上分别解出 <strong>12.47%</strong> 与 <strong>10.46%</strong> 的任务，而此前非交互 RAG 系统的最好成绩只有 3.8%；在 300 题的 SWE-bench Lite 上，同样是 GPT-4 Turbo，只给裸 shell 的 Shell-only agent 解出 11.00%，换上 ACI 后是 18.00%——<span class="highlight">权重一个参数没动，接口贡献了 64% 的相对提升</span>。这组对照让“接口设计”从工程细节变成了可以被单独度量、单独优化的研究对象，也是这篇论文在今天的 coding agent 热潮里仍然被反复引用的原因：它第一次系统地证明了 harness / interface 这一层对 agent 上限的影响，可以与换模型同量级。
+        </p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/swe-agent/main.svg" alt="SWE-agent 与 ACI 总览" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 1. SWE-agent 的整体结构：LM agent 不直接碰终端和文件系统，而是通过 ACI 发出 LM-friendly 的命令（导航、搜索、查看、编辑），并接收 LM-friendly 的环境反馈。ACI 是夹在模型与计算机之间的一层“翻译 + 约束”。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card" id="background">
+        <h2>2. Background &amp; Motivation：裸 shell 对 LM 到底不友好在哪</h2>
+        <p>
+            要理解 ACI 的设计，先要理解裸 shell 在 LM 面前暴露的四类问题。第一类是<strong>动作太原子、组合成本太高</strong>：在 shell 里“看一个文件中间部分”要靠 <code>head</code>/<code>tail</code>/<code>sed</code> 拼，“改几行代码”要靠 here-doc 或 sed 的转义地狱，任何一个环节写错，模型都得花额外的轮次排查——轮次就是钱和上下文。第二类是<strong>反馈不可控</strong>：<code>grep</code> 一个常见词可能吐回几千行无关结果，人类可以一眼扫过忽略，但对 LM 来说，每一行都实打实占用上下文预算，还会把注意力带偏（论文引用了长上下文中无关信息损害表现的研究）。第三类是<strong>错误没有护栏</strong>：shell 对“把文件改成语法错误的状态”毫无意见，模型常常在不知情的情况下带着坏编辑继续往下走，等测试失败时已经分不清是哪一步引入的问题。第四类是<strong>状态不可见</strong>：当前打开的是哪个文件、光标在哪、刚才那条命令到底有没有产生输出，shell 都不会主动、结构化地告诉模型，模型只能靠自己在长轨迹里“记着”，而这恰恰是它最不擅长的事。
+        </p>
+        <p>
+            人与 LM 的差异决定了接口不能照搬。人类有视觉，可以直接操作带语法高亮、折叠、跳转定义的 GUI；这一代 LM 没有这种视觉理解能力，但 IDE 提供的很多能力——语法检查、快速导航、搜索——如果换一种文本化的呈现方式，对 LM 同样有用。反过来，人类可以灵活忽略无关信息，而 LM 的上下文是按 token 计费的硬预算，<strong>接口返回什么、以什么密度返回，本身就是一种能力设计</strong>。论文因此把 ACI 明确定义为一个完整表面：它同时规定 (1) agent 可以执行的命令集合及文档，(2) 环境状态如何被格式化为反馈，(3) 历史轨迹如何被管理和拼装进每一步的输入。三者中任何一处改动，都算 ACI 设计。
+        </p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/swe-agent/aci-vs-ui.svg" alt="ACI 与 UI 的类比" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 2. 论文的类比：IDE 之于人类工程师，正如 ACI 之于 LM agent。两类“用户”的能力结构不同，所以接口也应该不同——这不是给 shell 套个壳，而是按新用户的认知特点重新设计工具。</figcaption>
+        </figure>
+        <p class="mt-4">
+            作者打磨 ACI 的方法也值得单独记一笔：他们不是拍脑袋设计，而是在 SWE-bench 开发集上<strong>人工复盘 agent 的轨迹</strong>，找反复出现的困难（比如反复 <code>cd</code>/<code>ls</code>/<code>cat</code> 的低效探索链、搜出上千行结果后迷失），再针对性地改接口；剩下的超参数（窗口大小、历史处理方式、解码温度）则用网格搜索定。这种“看轨迹 → 改接口 → 再看轨迹”的迭代方式，后来几乎成了所有 agent harness 团队的标准工作流。
+        </p>
+    </div>
+
+    <div class="card" id="principles">
+        <h2>3. ACI 的四条设计原则</h2>
+        <p>
+            论文把从轨迹复盘和消融里学到的经验提炼成四条原则。它们看起来朴素，但每一条后面都站着至少一个对照实验（见第 9 节），这也是这篇论文最有复用价值的部分——后来几乎所有 coding agent 的工具层，都能在这四条里找到出处。
+        </p>
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">原则一：动作要简单易懂</h3>
+        <p>
+            很多 bash 命令自带几十个选项和冗长的 man 文档，模型要先学会“怎么调”才能开始“做事”。ACI 的命令应该参数少、文档短、语义单一，让模型不依赖演示或微调就能正确调用。SWE-agent 的全部专用命令（<code>open</code>、<code>goto</code>、<code>scroll_down</code>、<code>edit</code>、<code>search_dir</code> 等）都遵循这一点：一个命令只做一件明确的事。
+        </p>
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">原则二：动作要紧凑高效</h3>
+        <p>
+            重要操作应当尽量在<strong>一步之内</strong>完成，而不是让模型把许多小动作组合多轮才凑出一个高阶操作。典型例子是编辑：SWE-agent 的 <code>edit 起始行:结束行 + 新内容</code> 一步替换整段代码；如果换成逐行 sed，轮次、出错点和上下文消耗都会成倍增长。论文在搜索与编辑两处都用消融验证了这条原则（迭代式搜索 12.0% vs 摘要式搜索 18.0%；去掉 edit 命令 10.3%）。
+        </p>
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">原则三：反馈要信息充分但简洁</h3>
+        <p>
+            反馈要让 agent 清楚当前状态和自己上一步动作的效果，但不能夹带无关细节。比如编辑成功后，查看器自动展示更新后的文件内容，模型无需再发一条命令确认；搜索结果则只给“哪些文件命中”的摘要，而不是把每个命中点前后的代码都倒出来——论文发现给更多上下文反而让模型更困惑。
+        </p>
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">原则四：护栏能截断错误传播</h3>
+        <p>
+            LM 和人一样会犯错，区别是它对错误的察觉更迟钝。把守卫做进接口——比如编辑时自动跑 linter，语法不过就整条编辑作废并把错误位置和修改前后的代码片段一起退回——能让 agent 在错误发生的那一步就修正，而不是带着坏状态跑十几步后在测试失败里大海捞针。去掉 lint 护栏，Lite 解决率从 18.0% 掉到 15.0%。
+        </p>
+    </div>
+
+    <div class="card" id="system">
+        <h2>4. Method：SWE-agent 的系统结构</h2>
+        <p>
+            SWE-agent 本体由一个固定的 LM 加一层 ACI 构成，运行在普通 Linux shell 之上（专用命令之外，模型仍可使用常见 Linux 命令兜底）。每一轮，系统把指令、命令文档、issue 描述和处理后的历史拼成输入，模型按 ReAct 格式产出一段 thought 加一条命令；命令在环境中执行，输出经反馈模板格式化后成为下一轮的 observation。如此循环，直到模型发出 <code>submit</code>，或单任务的预算耗尽——论文设置每题成本上限 <strong>$4</strong>，超限时以当前代码状态自动提交。ACI 的组件可以拆成四块：搜索与导航、文件查看器、文件编辑器、上下文管理。下面三节逐块拆解。
+        </p>
+        <div class="overflow-x-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100 mt-4">
+            <pre>{`# 一条典型轨迹的骨架（示意，综合论文 Figure 3 / Figure 7 的动作序列）
+issue: <GitHub issue 描述>
+→ thought: 先定位相关代码            action: search_dir "diop_type" 
+← observation: 命中文件列表（仅文件名）
+→ thought: 打开最可疑的文件          action: open solvers/diophantine.py
+← observation: 文件查看器窗口（带行号，至多 100 行）
+→ thought: 写一个复现脚本            action: create repro.py + python repro.py
+← observation: 报错信息，确认 bug 可复现
+→ thought: 按定位结果修改 404-407 行 action: edit 404:407 ... end_of_edit
+← observation: linter 通过 + 更新后的文件窗口
+→ thought: 跑测试确认                action: pytest <相关测试>
+← observation: 测试通过
+→ action: submit`}</pre>
+        </div>
+        <p class="mt-4">
+            注意这条骨架里藏着论文 §5.2 的一个观察：<span class="highlight">轨迹的第一步几乎总是“复现”或“定位”</span>——要么先写复现脚本把 bug 坐实，要么先搜文件找可疑位置。这个顺序不是 prompt 硬编码出来的，而是接口让这两类动作足够便宜之后，模型自己稳定涌现出的工作习惯，和人类工程师的流程高度一致。
+        </p>
+    </div>
+
+    <div class="card" id="search">
+        <h2>5. 搜索与导航：摘要式结果与 50 条上限</h2>
+        <p>
+            在仓库里定位代码是修 bug 的第一道关。裸 shell 的典型探索链是反复 <code>cd</code>、<code>ls</code>、<code>cat</code>，效率极低；直接用 <code>grep</code>/<code>find</code> 又经常因为关键词太常见而返回成百上千行。SWE-agent 提供三个专用搜索命令：<code>find_file</code> 按文件名找文件，<code>search_file</code> 在单个文件里找字符串，<code>search_dir</code> 在目录范围内找字符串。关键设计不在“能搜”，而在<strong>结果的呈现密度</strong>：
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>只给摘要</strong>：结果以“每个查询至多 50 条”的摘要格式返回（例如只列出命中的文件与位置概要），不倾倒命中点周围的代码。论文专门对比过“迭代式搜索”（模型逐个翻看每条结果）和“摘要式搜索”：后者 18.0%，前者只有 12.0%。</li>
+            <li><strong>超限不返回</strong>：如果命中超过 50 条，接口干脆不给结果，而是提示 agent 把查询写得更具体。这相当于把“你的问题太宽泛”做成了接口层的硬反馈，逼模型在下一步收窄范围，而不是淹没在结果里。</li>
+            <li><strong>与查看器衔接</strong>：搜索只负责“定位到文件”，看内容是查看器的事。两个动作职责分开，模型的心智模型很简单：先搜到文件，再 <code>open</code>。</li>
+        </ul>
+        <p class="mt-4">
+            这一节的设计哲学和今天的工具生态完全同构：给模型的工具返回值做“信息节食”，宁可让它多问一步，也不要一次喂撑。后来很多 agent 框架里 <code>grep</code> 工具默认只回文件名、限制行数，源头都在这里。
+        </p>
+    </div>
+
+    <div class="card" id="editor">
+        <h2>6. 文件查看器与编辑器：100 行窗口、edit 与 lint 护栏</h2>
+        <p>
+            查看器用 <code>open &lt;文件路径&gt;</code> 打开文件，一次只显示<strong>至多 100 行</strong>的窗口，窗口内每行都带行号，同时显示文件全路径、总行数、以及窗口上下各省略了多少行；移动窗口用 <code>scroll_up</code>/<code>scroll_down</code>，跳行用 <code>goto &lt;行号&gt;</code>。这个“窗口大小”是个被认真调过的参数：消融里 30 行窗口是 14.3%，整文件全量展示是 12.7%，100 行是 18.0%。太小，模型频繁翻页、拼不起上下文；太大，无关代码挤占预算且容易看花眼——100 行大约是“一个函数到一个类”的尺度，刚好卡在当时模型的甜点上。
+        </p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/swe-agent/file-viewer-edit.svg" alt="文件查看器与 edit 命令" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 3. 查看器与编辑器是一体的：(a) 查看器以带行号的窗口展示文件（注意上下的“400 lines above / 2684 lines below”提示）；(b) 模型用一条 edit 命令替换 404–407 行，编辑后查看器自动刷新到新内容，效果立刻可见。</figcaption>
+        </figure>
+        <p class="mt-4">
+            编辑器提供 <code>create</code> 与 <code>edit</code> 等命令，其中 <code>edit</code> 与查看器绑定：参数是起始行、结束行和替换文本，一步完成整段替换。两个细节决定了它的可靠性。其一是<strong>编辑后自动回显</strong>：修改一生效，查看器立即展示更新后的窗口，模型不用额外发命令确认“改成了什么样”。其二是<strong>linter 护栏</strong>：edit 内置代码检查，若修改引入明显语法错误（缩进错位、多余括号等），这次编辑会被整条丢弃，并把 linter 挑出的错误、出错位置修改前后的代码片段一起返回给模型，让它当场重改。论文指出，一个突出的失败模式正是模型反复改同一段代码——根源往往就是某次编辑悄悄引入了语法错误而模型毫无察觉；护栏把这类错误的恢复成本从“几轮之后测试失败再倒查”压回到了“当步修复”。
+        </p>
+    </div>
+
+    <div class="card" id="context">
+        <h2>7. 上下文管理：history processing 与反馈模板</h2>
+        <p>
+            ACI 的第三个表面是“历史怎么进上下文”。轨迹越长，每一步的输入越贵，而且旧的文件内容会过期、会误导。SWE-agent 的处理方式简单粗暴但有效：<strong>只保留最近 5 条 observation 的全文，更早的每条 observation 都折叠成一行</strong>（保留动作与概要，删掉大段输出）。这样既留下了“我做过什么”的行动史，又把 token 还给了当前状态。消融显示，把全部历史原样保留反而更差（15.0% vs 18.0%）——更多上下文不是更好，过期信息是负资产。
+        </p>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li><strong>格式错误重试</strong>：模型若产出不符合 thought + action 格式的文本，系统返回一条错误 observation 要求重试，直到格式合法；历史里只保留第一条这类错误消息，其余删去，避免错误示范污染上下文。</li>
+            <li><strong>空输出显式化</strong>：命令成功但没有输出时，反馈模板会明确写出 “Your command ran successfully and did not produce any output.” ——对人类来说多余的一句，对模型却是“成功了，只是没东西”与“是不是卡住了”之间的关键区分。</li>
+            <li><strong>演示（demonstration）的作用</strong>：主配置带一条完整轨迹作为 few-shot 演示；去掉演示后 Lite 掉到 7.33%。这提醒我们当时的模型对新接口格式仍需要“看一遍例子”，而接口文档写得越简单，这条依赖就越弱——这也是原则一的由来。</li>
+        </ul>
+        <p class="mt-4">
+            把这三件事和今天的实践对照会很有意思：上下文折叠对应现在的 context compaction / 历史摘要，空输出显式化对应工具返回值的结构化设计，格式重试对应 tool-calling 的约束解码。SWE-agent 在 2024 年用 prompt 与模板手工实现的这套东西，如今大半已经沉淀成了 agent 框架的默认行为。
+        </p>
+    </div>
+
+    <div class="card" id="experiments">
+        <h2>8. Experiments：SWE-bench 与 HumanEvalFix 主结果</h2>
+        <p>
+            实验设置先交代清楚。主评测是完整 SWE-bench 测试集（2,294 个任务，12 个 Python 仓库），消融与分析在 SWE-bench Lite（300 个自包含的功能性 bug 修复任务）上做；另外用 HumanEvalFix（短代码调试基准）检验基础编辑能力。模型只有两个：GPT-4 Turbo（gpt-4-1106-preview，128k 上下文）与 Claude 3 Opus（200k 上下文）——作者试过 Llama 3、DeepSeek Coder 等开源模型，当时在 agent 设定下表现明显不行（Llama 3 的 8k 上下文连多轮交互都装不下，这个细节很能说明 2024 年的时代约束）。指标是 % Resolved（pass@1），成本是“平均每个<strong>成功</strong>任务的 API 推理花费”，每题预算上限 $4。
+        </p>
+        <table class="w-full text-sm text-gray-600 border-collapse">
+            <thead>
+                <tr>
+                    <th class="border border-slate-300 bg-white/60 px-3 py-2 text-left font-semibold text-slate-700">设置</th>
+                    <th class="border border-slate-300 bg-white/60 px-3 py-2 text-left font-semibold text-slate-700">SWE-bench（全集）% Resolved</th>
+                    <th class="border border-slate-300 bg-white/60 px-3 py-2 text-left font-semibold text-slate-700">平均成本 $</th>
+                    <th class="border border-slate-300 bg-white/60 px-3 py-2 text-left font-semibold text-slate-700">SWE-bench Lite % Resolved</th>
+                    <th class="border border-slate-300 bg-white/60 px-3 py-2 text-left font-semibold text-slate-700">平均成本 $</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td class="border border-slate-300 px-3 py-2">RAG + GPT-4 Turbo</td><td class="border border-slate-300 px-3 py-2">1.31</td><td class="border border-slate-300 px-3 py-2">0.13</td><td class="border border-slate-300 px-3 py-2">2.67</td><td class="border border-slate-300 px-3 py-2">0.13</td></tr>
+                <tr><td class="border border-slate-300 px-3 py-2">RAG + Claude 3 Opus</td><td class="border border-slate-300 px-3 py-2">3.79</td><td class="border border-slate-300 px-3 py-2">0.25</td><td class="border border-slate-300 px-3 py-2">4.33</td><td class="border border-slate-300 px-3 py-2">0.25</td></tr>
+                <tr><td class="border border-slate-300 px-3 py-2">Shell-only + GPT-4 Turbo</td><td class="border border-slate-300 px-3 py-2">—</td><td class="border border-slate-300 px-3 py-2">—</td><td class="border border-slate-300 px-3 py-2">11.00</td><td class="border border-slate-300 px-3 py-2">1.46</td></tr>
+                <tr><td class="border border-slate-300 px-3 py-2">SWE-agent（无演示）+ GPT-4 Turbo</td><td class="border border-slate-300 px-3 py-2">—</td><td class="border border-slate-300 px-3 py-2">—</td><td class="border border-slate-300 px-3 py-2">7.33</td><td class="border border-slate-300 px-3 py-2">0.79</td></tr>
+                <tr><td class="border border-slate-300 px-3 py-2"><strong>SWE-agent + GPT-4 Turbo</strong></td><td class="border border-slate-300 px-3 py-2"><strong>12.47</strong>（286/2,294）</td><td class="border border-slate-300 px-3 py-2">1.59</td><td class="border border-slate-300 px-3 py-2"><strong>18.00</strong>（54/300）</td><td class="border border-slate-300 px-3 py-2">1.67</td></tr>
+                <tr><td class="border border-slate-300 px-3 py-2"><strong>SWE-agent + Claude 3 Opus</strong></td><td class="border border-slate-300 px-3 py-2"><strong>10.46</strong></td><td class="border border-slate-300 px-3 py-2">2.59</td><td class="border border-slate-300 px-3 py-2"><strong>13.00</strong></td><td class="border border-slate-300 px-3 py-2">2.18</td></tr>
+            </tbody>
+        </table>
+        <p class="text-sm text-gray-500 mt-3">Table 1（数据来自论文 Table 1）。三个读法：其一，交互本身值钱——从 RAG 的一次性生成换成可交互的 Shell-only，Lite 从 2.67% 跳到 11.00%；其二，ACI 在交互之上再加一层——同为 GPT-4 Turbo，18.00% vs 11.00%，相对 +64%，而平均成本几乎没涨（$1.67 vs $1.46）；其三，ACI 的收益跨模型成立（Opus 从 RAG 的 4.33% 到 SWE-agent 的 13.00%），说明这不是对某个模型的过拟合。</p>
+        <p class="mt-4">
+            在 HumanEvalFix 上，SWE-agent 的 pass@1 达到 <strong>87.7%</strong>（摘要口径），说明这套接口不只是为 SWE-bench 的长任务调的，短程编辑调试同样受益。还有一个容易被忽略的数字：方差。论文 Figure 4 显示多次运行的平均表现方差不大，但<strong>单题层面</strong>的结果波动明显——同一个 issue 这次解出、下次解不出很常见，这也是后来 SWE-bench 评测普遍报告多次运行与置信区间的原因。
+        </p>
+        <div class="math-block">
+            % Resolved = 解出任务数 / 任务总数，其中“解出” = 补丁应用后 FAIL_TO_PASS 测试全过且 PASS_TO_PASS 测试不回退
+        </div>
+    </div>
+
+    <div class="card" id="ablation">
+        <h2>9. ACI 消融：每个设计值多少个百分点</h2>
+        <p>
+            这篇论文最硬的部分是 Table 3 的逐项消融：固定 GPT-4 Turbo，只改一个接口设计，量它值几个百分点。基线是完整 SWE-agent 在 Lite 上的 18.0%。
+        </p>
+        <table class="w-full text-sm text-gray-600 border-collapse">
+            <thead>
+                <tr><th class="border border-slate-300 bg-white/60 px-3 py-2 text-left font-semibold text-slate-700">改动</th><th class="border border-slate-300 bg-white/60 px-3 py-2 text-left font-semibold text-slate-700">Lite % Resolved</th><th class="border border-slate-300 bg-white/60 px-3 py-2 text-left font-semibold text-slate-700">相对完整版</th><th class="border border-slate-300 bg-white/60 px-3 py-2 text-left font-semibold text-slate-700">说明</th></tr>
+            </thead>
+            <tbody>
+                <tr><td class="border border-slate-300 px-3 py-2">完整 SWE-agent</td><td class="border border-slate-300 px-3 py-2">18.0</td><td class="border border-slate-300 px-3 py-2">—</td><td class="border border-slate-300 px-3 py-2">基线</td></tr>
+                <tr><td class="border border-slate-300 px-3 py-2">只给裸 shell（Shell-only）</td><td class="border border-slate-300 px-3 py-2">11.0</td><td class="border border-slate-300 px-3 py-2">−7.0</td><td class="border border-slate-300 px-3 py-2">ACI 整体的价值</td></tr>
+                <tr><td class="border border-slate-300 px-3 py-2">去掉 edit 命令</td><td class="border border-slate-300 px-3 py-2">10.3</td><td class="border border-slate-300 px-3 py-2">−7.7</td><td class="border border-slate-300 px-3 py-2">只能用 shell 侧方法改文件，反馈缺失、易错难恢复</td></tr>
+                <tr><td class="border border-slate-300 px-3 py-2">迭代式搜索（替换摘要式搜索）</td><td class="border border-slate-300 px-3 py-2">12.0</td><td class="border border-slate-300 px-3 py-2">−6.0</td><td class="border border-slate-300 px-3 py-2">逐条翻结果把模型带偏、耗轮次</td></tr>
+                <tr><td class="border border-slate-300 px-3 py-2">查看器窗口改为整文件</td><td class="border border-slate-300 px-3 py-2">12.7</td><td class="border border-slate-300 px-3 py-2">−5.3</td><td class="border border-slate-300 px-3 py-2">上下文被无关代码淹没</td></tr>
+                <tr><td class="border border-slate-300 px-3 py-2">查看器窗口改为 30 行</td><td class="border border-slate-300 px-3 py-2">14.3</td><td class="border border-slate-300 px-3 py-2">−3.7</td><td class="border border-slate-300 px-3 py-2">翻页过多、拼不起完整逻辑</td></tr>
+                <tr><td class="border border-slate-300 px-3 py-2">edit 去掉 lint 护栏</td><td class="border border-slate-300 px-3 py-2">15.0</td><td class="border border-slate-300 px-3 py-2">−3.0</td><td class="border border-slate-300 px-3 py-2">语法错误静默进入代码库</td></tr>
+                <tr><td class="border border-slate-300 px-3 py-2">历史全量保留（不折叠）</td><td class="border border-slate-300 px-3 py-2">15.0</td><td class="border border-slate-300 px-3 py-2">−3.0</td><td class="border border-slate-300 px-3 py-2">过期 observation 挤占上下文</td></tr>
+            </tbody>
+        </table>
+        <p class="text-sm text-gray-500 mt-3">Table 3（数据来自论文 Table 3 与 §5.1）。注意量级感：单个界面细节（窗口大小、搜索呈现方式）的价值在 3–6 个百分点，与“换一代模型”在同一时期的常见增益相当。</p>
+        <p class="mt-4">
+            消融还揭示了两个反直觉点。第一，<strong>给模型更多信息几乎总是更差</strong>：整文件不如 100 行窗口，逐条搜索结果不如摘要，全量历史不如折叠历史——在固定上下文预算下，信息的“信噪比”比“总量”重要。第二，<strong>最贵的不是单个动作，而是错误恢复</strong>：去掉 edit 命令的损失最大，不是因为模型不会用别的方法改文件，而是改完没有回显、错了没有护栏，恢复成本爆炸。这两点后来都成了 agent 工具设计的常识，但在这里它们第一次是以对照实验数字的形式出现的。
+        </p>
+    </div>
+
+    <div class="card" id="behavior">
+        <h2>10. Agent 行为与失败模式</h2>
+        <p>
+            论文 §5.2 对轨迹的分析回答了一个更深的问题：接口顺手之后，模型会自己长出什么样的工作习惯？成功轨迹呈现出稳定的三段式：<strong>复现/定位 → 编辑 → 验证</strong>。所有成功轨迹的第一步不是 create（写复现文件）就是 find_file/search_dir（定位）；定位时先用目录级关键词粗搜，再用 search_file 和 goto 逐步“变焦”到具体行；编辑之后跑 python/pytest 验证。动作频率图（论文 Figure 7）显示 search 类动作集中在前几轮，edit 与测试动作分布在中后段——这条曲线和人类工程师修 bug 的时间分配几乎同构，而且它没有被任何 prompt 显式规定，是接口 affordance（可供性） shaping 出来的行为。
+        </p>
+        <p>
+            失败模式（论文 Figure 8，用 LM 自动标注未解出轨迹）里占比最高的类别是“实现本身不对”（Incorrect Implementation）——定位对了、流程对了，但补丁逻辑错；其次包括找不到相关文件、编辑出错后恢复不了、找不到要改的位置、过早放弃、复现不了 bug、以及预算内没跑完（Ran Out of Time）。这个分布很有信息量：<span class="highlight">接口能解决的主要是“流程性失败”（找不到、改不动、恢复不了），剩下的大头是模型本身的推理与实现能力</span>。这也预告了后面两年的演进方向——接口层逐渐标准化之后，SWE-bench 的分数增长重新回到模型能力（以及在 agent 轨迹上做 RL 训练）这条主线上。
+        </p>
+    </div>
+
+    <div class="card" id="discussion">
+        <h2>11. Discussion：从 SWE-agent 到今天的 coding agent</h2>
+        <p>
+            SWE-agent 的历史位置可以这样概括：它是 <strong>ReAct 之后、工具调用（function calling）普及之前</strong>，第一个把“接口即变量”做成完整对照实验的工作。它留下的东西分三层。概念层：ACI 这个词本身——把 agent 的工具表面当作一个需要为“非人类用户”专门设计、并用实验迭代的对象，这一视角直接延续到今天的 harness engineering 与 loop engineering 讨论里（本站的 Harness Engineering、Loop Engineering 两篇笔记讲的正是这条线的后续）。方法层：看轨迹找失败模式、改一处接口量一次增益的迭代规程，成了 agent 团队的标准动作。实现层：它的具体设计——带行号的窗口查看、按行区间编辑、编辑前校验、搜索结果摘要化、轨迹折叠——几乎原样出现在后来主流 coding agent 的工具集里，今天任何一个带 read/edit/grep 工具的编程助手，都能看到这套 ACI 的影子。
+        </p>
+        <p>
+            也要看到它的时代局限。第一，成绩的绝对值（12.5%）放在今天（SWE-bench Verified 上头部系统已在 70% 以上）已经不高，但这不全是接口的差距：模型从 GPT-4 Turbo 换到了为 agent 场景专门训练的新一代模型，评测集也从全集转向 Verified 子集。第二，它的很多手工设计（50 条上限、100 行窗口、5 条历史）是针对 128k 上下文与当时模型注意力特点调的，参数本身会过期，原则不会。第三，它假设单 agent、单线程、无并行探索；多 agent 分工、搜索式（tree search）求解、以及用轨迹数据反过来训练模型（SWE-smith、SWE-Gym 等后续工作）都不在它的范围内。把这篇论文读成“接口设计的实验方法论”而不是“参数手册”，是它在今天仍然值得读的原因。
+        </p>
+        <p>
+            还有一条暗线值得点出来：SWE-agent 出自 Princeton 的 PLI 团队，与 SWE-bench 是同一批人——<strong>基准与 agent 同步演进</strong>解释了它为什么能这么快摸清任务的真实难点。后来这个团队的工作（SWE-smith 造训练数据、mini-SWE-agent 把接口极简到只剩 bash 仍能 work）不断在问同一个问题：接口的“必要复杂度”到底在哪。对想自己复刻一个 agent 系统的人来说，这条问题线比任何单个答案都值钱。
+        </p>
+    </div>
+
+    <div class="card" id="practice">
+        <h2>12. Practice：如果今天我要实现一个 coding agent，ACI 清单</h2>
+        <p>把论文的原则与消融翻译成一份可直接照着做的检查清单：</p>
+        <ol class="list-decimal pl-6 text-gray-600 space-y-2">
+            <li><strong>先定动作集，再写 prompt</strong>：查看（带行号、分页窗口）、编辑（按区间替换）、搜索（先回摘要）、执行（测试/命令）四类各给一个语义单一的命令，参数越少越好，文档一句话能说清。</li>
+            <li><strong>每个写操作都要带校验与回显</strong>：编辑前做语法/lint 检查，不过就整条驳回并附错误位置；编辑后自动回显新内容。这一条在消融里值 3 个百分点，在真实系统里值的是“不半夜炸库”。</li>
+            <li><strong>给一切返回值设上限</strong>：搜索条数、文件行数、命令输出长度都要有硬顶；超限时返回“太多了，请缩小范围”的结构化提示，而不是截断了事或全量倾倒。</li>
+            <li><strong>历史要做减法</strong>：近期 observation 留全文，远期折叠成一行摘要；格式错误、空输出都要有明确模板，别让模型猜。</li>
+            <li><strong>设单任务预算并自动收尾</strong>：步数或成本上限到达时，以当前状态提交（或回滚），不要无限循环——先有这个闸，再谈放开。</li>
+            <li><strong>留轨迹、看轨迹</strong>：每条轨迹可回放；迭代时先人工看 20 条失败轨迹再动接口，用小评测集量每处改动的增益。没有这一步，调接口就只是调感觉。</li>
+        </ol>
+        <p class="mt-4">
+            最后留一个判断标准：当你发现 agent 在某类任务上反复失败，先别急着换更大的模型，先翻轨迹——如果失败长得像“找不到、看不全、改不对、错了回不来”，那是接口的账，改 ACI 比换模型便宜一个数量级。这正是 SWE-agent 这篇论文在 2026 年还站得住的原因。
+        </p>
+    </div>
+
+    <div class="card" id="figures">
+        <h2>13. Original Figures &amp; References</h2>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/swe-agent/main.svg" alt="Figure 1 SWE-agent overview" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 1. SWE-agent 总览：LM agent 经 ACI 与计算机交互。</figcaption>
+        </figure>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/swe-agent/aci-vs-ui.svg" alt="Figure 2 ACI vs UI" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 2. ACI 与 UI 的类比：IDE 之于人，ACI 之于 LM agent。</figcaption>
+        </figure>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/swe-agent/file-viewer-edit.svg" alt="Figure 3 file viewer and edit" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 3. 文件查看器（a）与 edit 命令（b）的一体化设计。</figcaption>
+        </figure>
+        <h3 class="text-lg font-semibold text-slate-700 mt-4">References</h3>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li>Yang, J., Jimenez, C. E., Wettig, A., Lieret, K., Yao, S., Narasimhan, K., Press, O. <em>SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering</em>. NeurIPS 2024. <a href="https://arxiv.org/abs/2405.15793" class="text-[color:var(--accent)] underline">arXiv:2405.15793</a>（CC BY 4.0；本文 Figure 1–3 引自该论文）</li>
+            <li>Jimenez, C. E., Yang, J., et al. <em>SWE-bench: Can Language Models Resolve Real-World GitHub Issues?</em> ICLR 2024. <a href="https://arxiv.org/abs/2310.06770" class="text-[color:var(--accent)] underline">arXiv:2310.06770</a></li>
+            <li>Yao, S., et al. <em>ReAct: Synergizing Reasoning and Acting in Language Models</em>. <a href="https://arxiv.org/abs/2210.03629" class="text-[color:var(--accent)] underline">arXiv:2210.03629</a></li>
+            <li>SWE-agent 官方文档：Agent tools 与 ACI 说明，<a href="https://swe-agent.com/latest/background/aci/" class="text-[color:var(--accent)] underline">swe-agent.com/latest/background/aci</a>（linter 护栏、100 行查看器、摘要式搜索、空输出提示等实现细节的官方出处）</li>
+            <li>代码仓：<a href="https://github.com/SWE-agent/SWE-agent" class="text-[color:var(--accent)] underline">github.com/SWE-agent/SWE-agent</a></li>
+        </ul>
+    </div>
+</BaseLayout>
