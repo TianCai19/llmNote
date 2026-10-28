@@ -73,7 +73,7 @@ export const meta = {
             论文给出的证据非常直接。在当时最强的两个模型 GPT-4 Turbo 与 Claude 3 Opus 上，配上 ACI 的 SWE-agent 在完整 SWE-bench 上分别解出 <strong>12.47%</strong> 与 <strong>10.46%</strong> 的任务，而此前非交互 RAG 系统的最好成绩只有 3.8%；在 300 题的 SWE-bench Lite 上，同样是 GPT-4 Turbo，只给裸 shell 的 Shell-only agent 解出 11.00%，换上 ACI 后是 18.00%——<span class="highlight">权重一个参数没动，接口贡献了 64% 的相对提升</span>。这组对照让“接口设计”从工程细节变成了可以被单独度量、单独优化的研究对象，也是这篇论文在今天的 coding agent 热潮里仍然被反复引用的原因：它第一次系统地证明了 harness / interface 这一层对 agent 上限的影响，可以与换模型同量级。
         </p>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
-            <img src="/notes/swe-agent/main.png" alt="SWE-agent 与 ACI 总览" class="w-full rounded-xl" loading="lazy" />
+            <img src="/notes/swe-agent/main.svg" alt="SWE-agent 与 ACI 总览" class="w-full rounded-xl" loading="lazy" />
             <figcaption class="text-sm text-gray-500 mt-3">Figure 1. SWE-agent 的整体结构：LM agent 不直接碰终端和文件系统，而是通过 ACI 发出 LM-friendly 的命令（导航、搜索、查看、编辑），并接收 LM-friendly 的环境反馈。ACI 是夹在模型与计算机之间的一层“翻译 + 约束”。</figcaption>
         </figure>
     </div>
@@ -87,7 +87,7 @@ export const meta = {
             人与 LM 的差异决定了接口不能照搬。人类有视觉，可以直接操作带语法高亮、折叠、跳转定义的 GUI；这一代 LM 没有这种视觉理解能力，但 IDE 提供的很多能力——语法检查、快速导航、搜索——如果换一种文本化的呈现方式，对 LM 同样有用。反过来，人类可以灵活忽略无关信息，而 LM 的上下文是按 token 计费的硬预算，<strong>接口返回什么、以什么密度返回，本身就是一种能力设计</strong>。论文因此把 ACI 明确定义为一个完整表面：它同时规定 (1) agent 可以执行的命令集合及文档，(2) 环境状态如何被格式化为反馈，(3) 历史轨迹如何被管理和拼装进每一步的输入。三者中任何一处改动，都算 ACI 设计。
         </p>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
-            <img src="/notes/swe-agent/aci-vs-ui.png" alt="ACI 与 UI 的类比" class="w-full rounded-xl" loading="lazy" />
+            <img src="/notes/swe-agent/aci-vs-ui.svg" alt="ACI 与 UI 的类比" class="w-full rounded-xl" loading="lazy" />
             <figcaption class="text-sm text-gray-500 mt-3">Figure 2. 论文的类比：IDE 之于人类工程师，正如 ACI 之于 LM agent。两类“用户”的能力结构不同，所以接口也应该不同——这不是给 shell 套个壳，而是按新用户的认知特点重新设计工具。</figcaption>
         </figure>
         <p class="mt-4">
@@ -164,7 +164,7 @@ issue: <GitHub issue 描述>
             查看器用 <code>open &lt;文件路径&gt;</code> 打开文件，一次只显示<strong>至多 100 行</strong>的窗口，窗口内每行都带行号，同时显示文件全路径、总行数、以及窗口上下各省略了多少行；移动窗口用 <code>scroll_up</code>/<code>scroll_down</code>，跳行用 <code>goto &lt;行号&gt;</code>。这个“窗口大小”是个被认真调过的参数：消融里 30 行窗口是 14.3%，整文件全量展示是 12.7%，100 行是 18.0%。太小，模型频繁翻页、拼不起上下文；太大，无关代码挤占预算且容易看花眼——100 行大约是“一个函数到一个类”的尺度，刚好卡在当时模型的甜点上。
         </p>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
-            <img src="/notes/swe-agent/file-viewer-edit.png" alt="文件查看器与 edit 命令" class="w-full rounded-xl" loading="lazy" />
+            <img src="/notes/swe-agent/file-viewer-edit.svg" alt="文件查看器与 edit 命令" class="w-full rounded-xl" loading="lazy" />
             <figcaption class="text-sm text-gray-500 mt-3">Figure 3. 查看器与编辑器是一体的：(a) 查看器以带行号的窗口展示文件（注意上下的“400 lines above / 2684 lines below”提示）；(b) 模型用一条 edit 命令替换 404–407 行，编辑后查看器自动刷新到新内容，效果立刻可见。</figcaption>
         </figure>
         <p class="mt-4">
@@ -288,15 +288,15 @@ issue: <GitHub issue 描述>
     <div class="card" id="figures">
         <h2>13. Original Figures &amp; References</h2>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
-            <img src="/notes/swe-agent/main.png" alt="Figure 1 SWE-agent overview" class="w-full rounded-xl" loading="lazy" />
+            <img src="/notes/swe-agent/main.svg" alt="Figure 1 SWE-agent overview" class="w-full rounded-xl" loading="lazy" />
             <figcaption class="text-sm text-gray-500 mt-3">Figure 1. SWE-agent 总览：LM agent 经 ACI 与计算机交互。</figcaption>
         </figure>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
-            <img src="/notes/swe-agent/aci-vs-ui.png" alt="Figure 2 ACI vs UI" class="w-full rounded-xl" loading="lazy" />
+            <img src="/notes/swe-agent/aci-vs-ui.svg" alt="Figure 2 ACI vs UI" class="w-full rounded-xl" loading="lazy" />
             <figcaption class="text-sm text-gray-500 mt-3">Figure 2. ACI 与 UI 的类比：IDE 之于人，ACI 之于 LM agent。</figcaption>
         </figure>
         <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
-            <img src="/notes/swe-agent/file-viewer-edit.png" alt="Figure 3 file viewer and edit" class="w-full rounded-xl" loading="lazy" />
+            <img src="/notes/swe-agent/file-viewer-edit.svg" alt="Figure 3 file viewer and edit" class="w-full rounded-xl" loading="lazy" />
             <figcaption class="text-sm text-gray-500 mt-3">Figure 3. 文件查看器（a）与 edit 命令（b）的一体化设计。</figcaption>
         </figure>
         <h3 class="text-lg font-semibold text-slate-700 mt-4">References</h3>
