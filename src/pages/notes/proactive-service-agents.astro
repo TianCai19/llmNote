@@ -1,0 +1,362 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: 'Proactive Service Agents：把“主动”写成一个带沉默选项的决策问题',
+    description: '精读 2026 年综述《Proactive Service Agents: A Unified Decision Framework, Methods, and Evaluation》（arXiv:2609.03727）：用受授权与风险约束的 POMDP 统一定义主动服务，动作空间为沉默/提问/协助/自主行动四元组，推导等待的期权价值与提问的信息价值，沿“状态估计→干预门控→动作构造→反馈适应”流水线与四类策略机制梳理方法，并给出决策单元、时机、校准、净策略价值与反事实评测协议。',
+    tags: ['Agent', 'Proactive Agent', 'Survey', 'POMDP', 'Evaluation'],
+    readTime: '33 min',
+    createdAt: '2026-11-03'
+};
+---
+
+<BaseLayout title="Proactive Service Agents：把“主动”写成一个带沉默选项的决策问题" description="精读 2026 年主动服务智能体决策框架综述：四动作空间、受约束 POMDP、等待/提问的价值、决策流水线与四类机制、统一评测协议。">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Agent / Proactivity / Survey</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Proactive Service Agents：把“主动”写成一个带沉默选项的决策问题</h1>
+        <p class="text-xl text-gray-500">2026 年最系统的一篇主动 Agent 综述：沉默、提问、协助、自主行动是同一个结构化决策，时机、内容、交付方式一次决定</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <div class="note-box text-sm">
+        <p><strong>论文信息：</strong></p>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+            <li><em>Proactive Service Agents: A Unified Decision Framework, Methods, and Evaluation</em>（Yan Tang、Tingyu Cao、Yuanbo Tang、Huaze Tang、Keer Hu；arXiv:2609.03727，2026-09）。</li>
+            <li>定位：不是再做一篇“主动对话系统”的应用罗列，而是把跨模态（流式对话、屏幕、第一人称视频、软件工程、人机协作）的主动服务统一成<strong>一个决策对象</strong>，给出形式化定义、方法分类、评测协议和部署安全设计。</li>
+            <li>与本站前作的关系：上一篇 <a href="/notes/proactive-agent" class="text-[color:var(--accent)] underline">Proactive Agent / ProactiveBench</a> 是 2024 年的方向奠基“点”——如何把“要不要开口”训出来；这篇综述是 2026 年的“面”——整个决策空间如何形式化、方法如何归类、证据如何评测。两篇建议连读。</li>
+        </ul>
+    </div>
+
+    <div class="note-box text-sm mt-4">
+        <p><strong>先把几个术语说清（读这篇笔记前只需要知道这些）：</strong></p>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+            <li><strong>Initiative（主动权/发起性）</strong>：本文判定主动的核心。一个动作是否主动，看它引入的服务机会、触发时间、子目标或外部承诺是否<strong>超出了当前显式指令所蕴含的范围</strong>，而不是看模型多聪明、用了多少工具。</li>
+            <li><strong>四个干预模式</strong>：<code>silent</code>（沉默、继续观察）、<code>ask</code>（提问以消除不确定性）、<code>assist</code>（给可拒绝的信息/建议/草稿）、<code>act</code>（调工具、改外部状态）。它们不是一条固定的“自主程度阶梯”。</li>
+            <li><strong>POMDP（部分可观测马尔可夫决策过程）</strong>：在真实状态不可见、只能靠观测更新信念的环境里做序贯决策的标准数学框架。本文用它作“分析语言”，不要求每个真实系统都显式求解它。</li>
+            <li><strong>Permission ledger（许可账本）</strong>：一个与信念分离的协议状态，记录已授权的对象、目的、动作与有效期。“用户看起来会同意”不能替代真实授权——这是本文反复强调的硬约束。</li>
+            <li><strong>Intervention advantage（干预优势）</strong>：最佳非沉默动作的价值减去沉默的价值。只有它严格为正才开口，平票时保守地选沉默。</li>
+            <li><strong>Option value of waiting（等待的期权价值）</strong>：沉默不等于放弃，而是保留“观察更多、以后再介入”的选择权，在需求不确定、用户正忙、即将有新信息时这个选择权很值钱。</li>
+            <li><strong>R / C / H 证据轴</strong>：本文给每份基准资源打的三个独立标签——交互真实度（R0–R4）、是否有预设对照（C0/C1）、人类结果的时间尺度（无/短期/个体长期 H-NA/H-S/H-L）。</li>
+        </ul>
+    </div>
+
+    <nav class="toc mt-8" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#intro">1. Introduction：旧综述回答“怎么把话说好”，这篇回答“该不该说话”</a></li>
+            <li><a href="#definition">2. 什么才算“主动”：相对于一条指令的决策属性</a></li>
+            <li><a href="#formalization">3. 形式化：受授权与风险约束的 POMDP</a></li>
+            <li><a href="#advantage">4. 干预优势、等待的期权价值与提问的价值</a></li>
+            <li><a href="#actions">5. 四动作空间：silent / ask / assist / act</a></li>
+            <li><a href="#methods">6. 方法综合：一条决策流水线 × 四类策略机制</a></li>
+            <li><a href="#evaluation">7. 评测协议：从分类分到策略价值</a></li>
+            <li><a href="#resources">8. 13 个代表资源的证据矩阵：现有证据到了哪一步</a></li>
+            <li><a href="#deployment">9. 三种部署域与动作空间里的安全</a></li>
+            <li><a href="#questions">10. 四个可检验的开放问题与结论</a></li>
+            <li><a href="#takeaway">11. 怎么读这篇综述，以及它和工程实践的关系</a></li>
+            <li><a href="#figures">12. Original Figures &amp; References</a></li>
+        </ul>
+    </nav>
+
+    <div class="card" id="intro">
+        <h2>1. Introduction：旧综述回答“怎么把话说好”，这篇回答“该不该说话”</h2>
+        <p>
+            主动式系统并不是新话题。早在 LLM 之前，对话社区就有 proactive dialogue systems 的综述：Deng 等人 IJCAI 2023 的 <em>A Survey on Proactive Dialogue Systems</em> 按开放域/任务型/信息检索型对话组织话题，盘点话题规划、澄清、非合作谈判、偏好诱导；2025 年 ACM TOIS 的期刊扩展版 <em>Proactive Conversational AI</em> 用“预判—发起—规划”的框架整合方法与伦理；SIGIR 2024 的立场文章 <em>Towards Human-centered Proactive Conversational Agents</em>（本站在主动 Agent 调研中引过，arXiv:2404.12670）提出 Intelligence–Adaptivity–Civility 三维分类。相邻还有 Jannach 等人 2021 年的对话推荐系统综述。
+        </p>
+        <p>
+            这篇 2026 年的综述认为，上述工作留下了四个结构性缺口。<strong>第一，分析单位错了</strong>：旧工作以“对话轮次（dialogue turn）”为单位，默认系统已经拿到了发言轮；而主动服务面对的是一条开放的事件流，绝大多数时刻根本没有服务事件，真正的决策是“要不要打破沉默”。<strong>第二，分类维度混杂</strong>：按对话类型或设计维度组织，会把模型机制、任务、应用摊在同一层，无法在每个决策点上隔离信念、可行动作、后果与等待价值。<strong>第三，把主动当成能力而非受门控的选择</strong>：旧工作强调把对话引向目标，却欠定义“何时不介入”、等待与提问的价值，以及把授权当硬约束而非软惩罚。<strong>第四，评测与安全缺操作协议</strong>：旧综述把伦理与评测列为挑战，却给不出统一的决策单元、校准/时机/风险指标、反事实估计方法和动作空间安全模型，且基本早于屏幕、第一人称视频、可穿戴与软件工程 agent 的爆发。
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>原文摘录（核心主张）：</strong></p>
+            <p class="text-sm text-gray-600 italic">“Proactive service moves the decision upstream: an agent must infer service opportunities from incomplete environmental and user signals, choose among remaining silent, asking, assisting, and acting, and account for interruption, misunderstanding, overreach, and privacy costs.”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/abs/2609.03727" class="text-[color:var(--accent)] underline">arXiv:2609.03727</a> Abstract</p>
+        </div>
+        <p class="mt-4">
+            相应地，这篇综述用四样东西替换旧框架：用<strong>与模态无关的决策对象</strong>替换对话轮次；用“决策流水线 × 策略构造机制”的双轴分类替换应用目录；用“相对于指令、以沉默为门控的不确定决策”替换能力式定义；用具体的决策单元、时机/校准/价值指标、证据标签和基于授权与可恢复性的安全模型替换泛泛的评测呼吁。Figure 1 给出了这个统一循环的全景。
+        </p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-service-agents/unified_loop.png" alt="受约束的主动服务决策循环" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 1. Constrained proactive-service loop：可观测的任务说明 ι<sub>t</sub> 与已验证的许可账本 κ̄<sub>t</sub> 独立于潜在信念 b<sub>t</sub>；agent 将“最佳非沉默可行动作”与沉默比较，输出结构化动作 a<sub>t</sub>=(m<sub>t</sub>, z<sub>t</sub>, ℓ<sub>t</sub>)；一般反馈只更新信念，只有被验证的授权事件才更新账本。</figcaption>
+        </figure>
+    </div>
+
+    <div class="card" id="definition">
+        <h2>2. 什么才算“主动”：相对于一条指令的决策属性</h2>
+        <p>
+            综述先做概念清理，因为“proactive”在文献里被用得太滥。在时刻 <em>t</em>，记 h<sub>t</sub> 为可得历史、ι<sub>t</sub> 为来自显式请求或预设自动化规则的可观测任务说明、κ̄<sub>t</sub> 为独立维护的已验证许可账本。一个非沉默动作 a<sub>t</sub> 被称为<strong>相对于 ι<sub>t</sub> 的主动服务干预</strong>，当且仅当四个条件同时成立：
+        </p>
+        <ol class="list-decimal pl-6 mt-2 space-y-2 text-gray-700">
+            <li><strong>自主增量（autonomous addition）</strong>：系统引入了一个不被 ι<sub>t</sub> 蕴含的服务机会、触发时间、子目标、信息获取动作或外部行动承诺；</li>
+            <li><strong>真实备选项（genuine alternative）</strong>：协议允许它选择沉默、直接完成指定任务，或另一个可行动作——没有“沉默权”就谈不上主动；</li>
+            <li><strong>基于信念的选择（belief-based choice）</strong>：动作是依据对用户目标、环境与可能后果的信念选出的；</li>
+            <li><strong>受益目的（beneficial purpose）</strong>：目标包含用户认可的收益或共同任务收益。</li>
+        </ol>
+        <p class="mt-4">
+            据此，一系列常见误判被排除：仅仅替已被请求的内容换个措辞、选条检索路径或决定实现细节，<strong>不算</strong>主动；用户设定的闹钟、定时任务、固定工作流即使“先开口”，也只是预设自动化（preset automation），因为触发与动作事先已定，没有在线的沉默决策；复杂规划、长期记忆、持续感知和工具调用能增强能力，但<strong>都不是主动性的必要条件</strong>。
+        </p>
+        <p>
+            综述在 Table I 里划清了相邻范式的边界，这里有三条尤其值得记住。其一是<strong>自主性（autonomy）与发起性（initiative）正交</strong>：一个 agent 可以只主动建议而不执行（有发起性、无自主执行），也可以把明确交代的任务全自动办完（有自主性、无发起性）——Meta Muse 这类“给目标就办”的产品强在后者，本文讨论的主动性是前者。其二是<strong>歧义澄清（clarification）是有条件的主动</strong>：面对欠定义请求，agent 可以提问、带假设执行或拒绝；只有当提问确实会改变后续决策、且不是强制流程时，它才在认识论意义上是主动的——这也解释了为什么 Ask-before-Plan 这类工作处在边界上。其三是 <strong>JITAI（just-in-time adaptive intervention，即时自适应干预）</strong>：决策点与候选动作预定义，但“此刻是否干预”由上下文决定，是一种被框定的、半结构化的主动。
+        </p>
+    </div>
+
+    <div class="card" id="formalization">
+        <h2>3. 形式化：受授权与风险约束的 POMDP</h2>
+        <p>
+            综述把主动服务写成一个受约束的部分可观测序贯决策问题。元组为
+        </p>
+        <div class="math-block" set:html={String.raw`$$\mathcal{M}=\langle \mathcal{S},\mathcal{O},\mathcal{A},T,Z,r,\mathbf{c},\gamma,b_0\rangle\,,$$`}></div>
+        <p>
+            其中 T(s′|s,a) 是状态转移核，Z(o,f|s′,a,κ̄) 是观测与反馈核，r 是单步收益，c=(c<sub>1</sub>,…,c<sub>J</sub>) 是单步成本向量，γ 是折扣因子（它的实际含义取决于“一步”代表多长的真实时长），b<sub>0</sub> 是初始信念。
+        </p>
+        <p><strong>潜在状态</strong>被拆成五个有明确语义的分量：</p>
+        <div class="math-block" set:html={String.raw`$$s_t=(x_t,\;g_t,\;n_t,\;w_t,\;e_t)\,,$$`}></div>
+        <ul class="list-disc pl-6 mt-2 space-y-1 text-gray-700">
+            <li>x<sub>t</sub>：环境与任务进度；g<sub>t</sub>：用户目标与偏好；n<sub>t</sub>：潜在需求与紧迫度；</li>
+            <li>w<sub>t</sub>：用户的注意力、工作负荷与<strong>可打断性（interruptibility）</strong>；e<sub>t</sub>：用户认可的长期结果或关系质量。</li>
+        </ul>
+        <p class="mt-4">
+            历史 h<sub>t</sub> 包含观测、任务说明、许可账本、动作与反馈的完整序列，信念 b<sub>t</sub>(s)=P(s<sub>t</sub>=s|h<sub>t</sub>) 是对潜在状态的后验。这里有一个关键的架构纪律：<strong>许可账本 κ̄ 是协议状态，不是信念</strong>。用户“可能愿意授权”的心理状态可以作为不确定性放在 g<sub>t</sub> 里，但永远不能替代账本里的真实授权；账本只由被验证的同意、范围变更或撤销事件更新：
+        </p>
+        <div class="math-block" set:html={String.raw`$$\bar\kappa_{t+1}=K(\bar\kappa_t,a_t,f_t^{\mathrm{perm}})\,.$$`}></div>
+        <p>
+            普通的“接受/拒绝/已读不回”等行为线索<strong>不构成授权</strong>。信念更新则是标准的贝叶斯滤波：
+        </p>
+        <div class="math-block" set:html={String.raw`$$b_{t+1}(s')\propto Z(o_{t+1},f_t\mid s',a_t,\bar\kappa_{t+1})\sum_s T(s'\mid s,a_t)\,b_t(s)\,.$$`}></div>
+        <p class="mt-4"><strong>单步效用</strong>把“帮忙的收益”和四类打扰/风险成本摆在同一个式子里：</p>
+        <div class="math-block" set:html={String.raw`$$r_t=B_t^{\mathrm{task}}+\beta B_t^{\mathrm{user,long}}-\lambda_I C_t^{\mathrm{int}}-\lambda_Q C_t^{\mathrm{ask}}-\lambda_E C_t^{\mathrm{exec}}-\lambda_P C_t^{\mathrm{priv}}\,.$$`}></div>
+        <p>
+            六项依次是：即时任务收益、用户长期收益（权重 β）、打扰成本、提问成本、错误执行/回滚成本、隐私成本。综述特别提醒：接受率、参与度、信任这些量应被当作<strong>需要解读的观测，而不是可以直接最大化的奖励</strong>——否则系统会学会“只挑用户最容易点头的时刻刷接受率”，而不是在真正有价值时介入。成本权重要么预先注册（preregister），要么把各成本分开报告。
+        </p>
+        <p class="mt-4"><strong>授权与严重风险构成硬可行约束</strong>。记 A<sub>perm</sub>(κ̄<sub>t</sub>) 为账本允许的动作集（沉默恒在其中），L<sub>R</sub>(s,a) 为严重风险损失，H 为不可接受损失阈值，ε 为可容忍的尾概率，则可容许动作集为</p>
+        <div class="math-block" set:html={String.raw`$$\mathcal{A}_{\mathrm{adm}}(b_t,\bar\kappa_t)=\left\{a:\ a\in\mathcal{A}_{\mathrm{perm}}(\bar\kappa_t),\ \Pr_{s\sim b_t}[L_R(s,a)>H]\le\epsilon\right\}.$$`}></div>
+        <p>
+            授权不明时，外部执行（act）不可容许，但“请求授权的提问（ask）”可以；主动门控只在沉默本身可容许时才适用。最终策略在成本预算 B<sub>j</sub> 下最大化折扣回报：
+        </p>
+        <div class="math-block" set:html={String.raw`$$\pi^*=\arg\max_\pi\mathbb{E}_\pi\!\left[\sum_t\gamma^t r_t\right]\quad\text{s.t.}\quad \mathbb{E}_\pi\!\left[\sum_t\gamma^t c_{j,t}\right]\le B_j,\ \ a_t\in\mathcal{A}_{\mathrm{adm}}\ \ \text{a.s.}$$`}></div>
+        <p>
+            实务上用拉格朗日松弛 r<sub>η,t</sub>=r<sub>t</sub>−η<sup>⊤</sup>c<sub>t</sub> 处理多个预算，但综述提醒：若对偶性或可行性条件不满足，松弛策略只是候选，必须单独核查它的预算违反情况。这套形式化的价值不在于让工程师真的去解 POMDP，而在于<strong>它强制你把“他可能同意”与“他已授权”分开、把“帮忙收益”与“打扰/隐私/回滚成本”放在同一标尺、把沉默当作一个价值可计算的动作</strong>。
+        </p>
+    </div>
+
+    <div class="card" id="advantage">
+        <h2>4. 干预优势、等待的期权价值与提问的价值</h2>
+        <p>
+            有了形式化，“要不要开口”就变成一个可计算的差值。记非沉默可容许动作集为 A<sup>+</sup><sub>t</sub>，<strong>增量干预价值</strong>定义为
+        </p>
+        <div class="math-block" set:html={String.raw`$$\Delta_{\boldsymbol\eta}(b_t,\bar\kappa_t)=\max_{a\in\mathcal{A}_t^{+}}Q^*_{\boldsymbol\eta}(b_t,\bar\kappa_t,a)-Q^*_{\boldsymbol\eta}(b_t,\bar\kappa_t,\mathsf{silent})\,.$$`}></div>
+        <p>
+            若 A<sup>+</sup><sub>t</sub> 为空，最大值取 −∞。在保守平局规则下，Δ≤0 就沉默，只有<strong>严格为正</strong>才介入。这一条直接给了工程上的门控准则：不要问“用户需不需要帮助”，而要问“现在最好的帮助，相对再等等，净增益是否为正”。论文还形式化了首次干预时刻 T<sub>int</sub><sup>π</sup>=inf&#123;t : m(a<sub>t</sub>)≠silent&#125;，把“时机”变成策略的随机变量。
+        </p>
+        <p>
+            为什么沉默会有价值？因为 Q*(·, silent) 里包含“继续观察、稍后再介入”的机会。<strong>等待的期权价值</strong>在六种情形下升高：需求尚不确定；用户当前可打断性低；更好的信息马上到来；候选动作质量差；执行风险或隐私成本高；授权不完整。这解释了一个反直觉现象：<span class="highlight">同样的需求概率，可能因为动作质量、风险、时机、权限不同而导向完全不同的决策</span>——所以只训练一个“需求分类器”、按固定阈值触发，在理论上就是不够的。综述还给出二值需求 N∈&#123;0,1&#125;、候选效用对概率呈仿射 U<sub>i</sub>(p)=u<sub>i0</sub>+p·d<sub>i</sub> 时的阈值特例：两个候选只在上包络的交点 p<sub>ij</sub>=(u<sub>i0</sub>−u<sub>j0</sub>)/(d<sub>j</sub>−d<sub>i</sub>) 处切换，而 ask/assist/act 之间没有固定排序。
+        </p>
+        <p>
+            提问也有严格的价值公式。对问题 q 与可能回答 y：
+        </p>
+        <div class="math-block" set:html={String.raw`$$Q^*(\mathsf{ask}(q))=\mathbb{E}_{y}\Big[r_{\boldsymbol\eta}(\mathsf{ask}(q),y)+\gamma V^*(b^{q,y},\bar\kappa^{q,y})\Big]\,.$$`}></div>
+        <p>
+            一个问题的总价值含三部分：即时交互效应（负担、礼貌、承诺感）、回答改变信念与后续动作的下游效应、以及仅当回答构成被验证的授权事件时才存在的授权效应。扣除直接提问成本 C<sub>Q</sub>(q) 后，<strong>纯信息价值</strong>为 E<sub>y</sub>[V<sub>0</sub>(b<sup>q,y</sup>)]−V<sub>0</sub>(b)−C<sub>Q</sub>(q)；如果回答既不改变信念、也不改变授权或后续动作价值，它就不可能为正。这给“澄清式提问”提供了判据：好的问题必须能改变决策，而不是缓解系统自身的不确定感而已。
+        </p>
+    </div>
+
+    <div class="card" id="actions">
+        <h2>5. 四动作空间：silent / ask / assist / act</h2>
+        <p>
+            综述把每个动作统一为三元组 a<sub>t</sub>=(m<sub>t</sub>, z<sub>t</sub>, ℓ<sub>t</sub>)：m<sub>t</sub> 是干预模式，z<sub>t</sub> 是具体的问题/建议/计划/工具动作，ℓ<sub>t</sub> 是渠道、模态与解释方式；沉默时 z=ℓ=∅。这意味着<strong>何时介入（when）、说什么/做什么（what）、怎么交付（how）是同一个决策的属性</strong>，而不是三个串联模块。
+        </p>
+        <div class="overflow-x-auto mt-4">
+            <table class="w-full text-sm border-collapse">
+                <thead>
+                    <tr class="bg-white/60">
+                        <th class="border border-gray-200 px-3 py-2 text-left">模式</th>
+                        <th class="border border-gray-200 px-3 py-2 text-left">含义</th>
+                        <th class="border border-gray-200 px-3 py-2 text-left">收益</th>
+                        <th class="border border-gray-200 px-3 py-2 text-left">代价 / 风险</th>
+                    </tr>
+                </thead>
+                <tbody class="text-gray-700">
+                    <tr><td class="border border-gray-200 px-3 py-2 font-semibold">silent</td><td class="border border-gray-200 px-3 py-2">当前无可见动作，继续观察并保留后续介入权</td><td class="border border-gray-200 px-3 py-2">零打扰、保留等待期权</td><td class="border border-gray-200 px-3 py-2">可能漏掉有时效的需求</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2 font-semibold">ask</td><td class="border border-gray-200 px-3 py-2">询问目标、证据、偏好或授权</td><td class="border border-gray-200 px-3 py-2">降低不确定性，可能兼有社交效果</td><td class="border border-gray-200 px-3 py-2">提问与认知负担；问得无增量就是纯打扰</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2 font-semibold">assist</td><td class="border border-gray-200 px-3 py-2">给可拒绝的信息、推荐、建议或草稿</td><td class="border border-gray-200 px-3 py-2">保留用户控制权</td><td class="border border-gray-200 px-3 py-2">选择架构误导、过度依赖、打断</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2 font-semibold">act</td><td class="border border-gray-200 px-3 py-2">调工具、投入资源、改变外部状态</td><td class="border border-gray-200 px-3 py-2">最省事、可闭环</td><td class="border border-gray-200 px-3 py-2">可能不可逆，需要更强授权与可恢复性</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">表：四种干预模式的代价—收益对照（据论文 §II 与 §V-B 整理）。四者不构成固定的自主程度阶梯。</p>
+        <p class="mt-4">
+            强调“不是线性阶梯”有实际意义：很多产品把主动等级做成“沉默→提示→建议→自动执行”的单轴滑块，但同一个状态下，最优动作可能是 ask 而非 assist（授权缺失时），也可能是 assist 而非 act（动作可逆性差时）。规划或树搜索方法必须把<strong>沉默和当前可行的授权级别放进根候选</strong>，否则它优化的只是内容，根本没优化主动权。
+        </p>
+    </div>
+
+    <div class="card" id="methods">
+        <h2>6. 方法综合：一条决策流水线 × 四类策略机制</h2>
+        <p>
+            综述用两个正交的轴组织所有方法。<strong>功能轴</strong>是四阶段决策流水线（Figure 2），<strong>机制轴</strong>是四种非互斥的策略构造方式，一个真实系统往往在不同模块上叠用多种机制。
+        </p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-service-agents/mechanisms.png" alt="决策功能轴与四类策略机制" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 2. 决策中心的功能轴（历史→信念、门控、结构化动作、反馈适应）与四类可跨模块组合的策略机制（prescribed / predictive / model-based / return-optimizing）。许可与严重风险定义硬可行性；打扰、提问、隐私与回滚进入成本或预算。</figcaption>
+        </figure>
+        <p class="mt-4"><strong>阶段一：从观测到“可决策的信念状态”。</strong>系统要先把屏幕、视频、传感器或对话流切分成决策机会，并且必须保留<strong>完整的“负样本流”</strong>（那些不该介入的片段）；需求检测不能偷看未来信息（非因果）；要输出的是需求、紧迫度、目标、偏好、可打断性的校准概率，而不只是意图标签——尾风险与等待价值的计算都依赖不确定性表达。综述在此为“长期记忆”祛魅：它只是构造 b<sub>t</sub> 的一种可选手段。即时危险警报无需记忆也可以主动；指令之后翻旧历史也可能仍是被动。记忆还带来陈旧、主体错配、来源、留存与隐私问题。</p>
+        <p><strong>阶段二：干预门控（gating）。</strong>决定是否以及何时从沉默转到非沉默：把候选限制在可容许集、把权限与意愿分开验证、把最佳非沉默动作与沉默正面对决、权衡紧迫度/打扰/风险/隐私/未来信息，增量价值非正就保持沉默。</p>
+        <p><strong>阶段三：动作构造。</strong>决定 z<sub>t</sub>（问题、建议、草稿、计划、工具操作）与 ℓ<sub>t</sub>（渠道、模态、解释）。一个高质量内容在错误时机或无授权下交付，净价值仍可能为负。因此评测必须把“给定参考触发条件下的内容质量”和“系统自己门控的端到端质量”分开。</p>
+        <p><strong>阶段四：反馈适应。</strong>反馈在三个时间尺度起作用：即时的回答/拒绝/撤销更新当前信念；任务级结果更新内容或执行的价值；跨会话的接受、信任与负担更新长期用户模型。这里藏着一个选择偏差：<strong>沉默之后你永远观察不到“如果帮忙会不会被接受”</strong>，只拿可见的接受率当奖励，会让策略偏向“只在容易被接受时出手”。安全适应需要版本化回归集、保留授权边界、记录行为策略概率，以及有足够支撑度的反事实/离策略方法。</p>
+        <div class="overflow-x-auto mt-4">
+            <table class="w-full text-sm border-collapse">
+                <thead>
+                    <tr class="bg-white/60">
+                        <th class="border border-gray-200 px-3 py-2 text-left">机制</th>
+                        <th class="border border-gray-200 px-3 py-2 text-left">做法与信号</th>
+                        <th class="border border-gray-200 px-3 py-2 text-left">强项</th>
+                        <th class="border border-gray-200 px-3 py-2 text-left">典型失败</th>
+                    </tr>
+                </thead>
+                <tbody class="text-gray-700">
+                    <tr><td class="border border-gray-200 px-3 py-2 font-semibold">Prescribed（规则式）</td><td class="border border-gray-200 px-3 py-2">专家规则、阈值、prompt、SOP 直接规定信念→动作映射</td><td class="border border-gray-200 px-3 py-2">透明、便宜，权限/风险可枚举时可靠</td><td class="border border-gray-200 px-3 py-2">阈值跨用户迁移差，长程效应隐含不显</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2 font-semibold">Predictive（预测式）</td><td class="border border-gray-200 px-3 py-2">监督模型 f<sub>θ</sub> 估计需求/门控/动作标签或分数；信号为人工或模型标签、偏好对</td><td class="border border-gray-200 px-3 py-2">适合固定协议、可大规模离线测试</td><td class="border border-gray-200 px-3 py-2">标签把效用压缩成一个点，分布漂移时校准崩</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2 font-semibold">Model-based（模型式）</td><td class="border border-gray-200 px-3 py-2">显式建模 T/Z/r、贝叶斯更新、POMDP/BDI、模拟器或搜索</td><td class="border border-gray-200 px-3 py-2">能比较等待、提问与未来效应，假设可解释</td><td class="border border-gray-200 px-3 py-2">模型失配、规划成本高</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2 font-semibold">Return-optimizing（收益优化式）</td><td class="border border-gray-200 px-3 py-2">bandit、RL、离策略学习、偏好优化直接最大化折扣累计回报</td><td class="border border-gray-200 px-3 py-2">处理延迟结果与动作耦合</td><td class="border border-gray-200 px-3 py-2">奖励误设、模拟器偏差、离策略支撑不足</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">表：四类策略构造机制（Table II）。标签可叠加——离线 RL + 树搜索同时是 return-optimizing 与 model-based；但如果动作空间里没有 silent，它再强也没有主动门控。</p>
+        <p class="mt-4">
+            拿本站前作对照：Proactive Agent / ProactiveBench 的方案是典型的 <strong>predictive 为主</strong>——人工标注接受/拒绝、训练奖励模型、SFT 出触发策略，强在规模化离线评测，弱在标签把“价值”压成了二分类点、且无真实长期结果；而这篇综述正是指出，下一步需要 model-based 对等待/提问的比较、return-optimizing 对延迟价值的处理，以及 prescribed 层对授权与风险的硬编码。
+        </p>
+    </div>
+
+    <div class="card" id="evaluation">
+        <h2>7. 评测协议：从分类分到策略价值</h2>
+        <p>
+            综述认为现有评测最大的问题是<strong>评测单位错了</strong>：很多基准只收集“应该介入”的正样本，于是模型对一条稀疏事件流全程报警也能拿高准确率。一个可比较的决策单元必须是<strong>预定义的完整决策机会流</strong>，最小记录包含：会话/用户/时间、可见观测与历史窗口、当前请求状态、服务机会与有效时间窗、可容许动作、授权与风险、所选动作与置信度、行为策略概率、用户是否看到/接受/拒绝/忽略/撤销、任务与长期结果、以及标签来源。
+        </p>
+        <p><strong>触发与校准。</strong>设需求正例率为 ρ，因为“永远沉默”在稀疏流上能骗到高准确率，评测必须同时报 precision、recall、F1 或 PR-AUC、balanced accuracy，以及每小时误干预次数</p>
+        <div class="math-block" set:html={String.raw`$$\mathrm{FAH}=\frac{\#\{\text{false interventions}\}}{\text{observed hours}}\,;$$`}></div>
+        <p>若输出概率 p̂<sub>i</sub>，还要用 Brier 分数 N<sup>−1</sup>Σ(p̂<sub>i</sub>−y<sub>i</sub>)<sup>2</sup>、校准曲线和带置信区间的期望校准误差（ECE）评估概率质量——这呼应了 HALO 等 2026 基准发现的“过度主动”问题：没有校准指标，模型靠低门槛刷 recall 的毛病根本看不见。</p>
+        <p class="mt-4"><strong>事件级时机。</strong>参考事件记为 E=&#123;([l<sub>j</sub>,u<sub>j</sub>], t*<sub>j</sub>)&#125;，其中 [l,u] 是有效窗、t* 是理想时刻；预测与事件按<strong>最大基数一对一匹配</strong>（再以时机误差最小打破平局），由此算时机的 precision/recall/F1；对匹配上的预测，符号误差 e<sub>j</sub>=t̂<sub>j</sub>−t*<sub>j</sub> 为负表示过早、为正表示过晚；同一事件的重复提醒只计一次。这把 PITCH 一类工作里“早了/晚了”的直觉正式化了。</p>
+        <p class="mt-4"><strong>净策略价值</strong>才是部署关心的量。对目标策略 π 与基线 π<sub>0</sub>：</p>
+        <div class="math-block" set:html={String.raw`$$\Delta V(\pi,\pi_0)=\mathbb{E}[Y^\pi-Y^{\pi_0}]-\boldsymbol\lambda^\top\mathbb{E}[\mathbf{C}^\pi-\mathbf{C}^{\pi_0}]\,.$$`}></div>
+        <p class="mt-2">为正，才说明介入带来的增量收益盖过了新增的负担、隐私与风险。当只能拿到历史日志时，综述给出两套离策略估计：上下文 bandit 的逆倾向得分 IPS，以及序贯决策的逐步重要性采样 PDIS</p>
+        <div class="math-block" set:html={String.raw`$$\widehat V_{\mathrm{PDIS}}(\pi)=\frac1N\sum_i\sum_{t=0}^{T_i}\gamma^t\Big(\prod_{k=0}^{t}\frac{\pi(a_{i,k}\mid h_{i,k})}{\mu(a_{i,k}\mid h_{i,k})}\Big)r_{i,t}\,,$$`}></div>
+        <p>它们要求完整日志、支撑集重叠、无未记录的序贯混杂；确定性日志策略没覆盖到的动作，重要性权重根本无法识别。再配合覆盖—风险曲线 Cov(τ)=Pr(c≥τ)、Risk(τ)=E[L|c≥τ]（应报整条曲线而非单个阈值），评测才算闭环。<strong>核心方法论结论一句话：离线分类性能再好，也不能预测部署收益</strong>——这是全文对学界最直接的警告。</p>
+    </div>
+
+    <div class="card" id="resources">
+        <h2>8. 13 个代表资源的证据矩阵：现有证据到了哪一步</h2>
+        <p>
+            综述没有罗列几百篇论文，而是挑了 13 个代表性资源/研究，给每个打三个独立证据标签（Figure 3）：交互真实度 R0–R4、有无预设对照 C0/C1、人类结果时间尺度 H-NA/H-S/H-L。这种做法比“有没有用真人”更细——一个真人参与的短期研究，和一个有个体级长期结果的部署，证据强度天差地别。
+        </p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-service-agents/evidence_matrix.png" alt="13 个代表资源的证据矩阵" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 3. Table III 中 13 个代表资源的逐资源证据矩阵（R 真实度 / C 对照 / H 人类结果）。图中只统计这份样本的边际数量，不代表整个领域的分布；真实度更高或有对照标签，都不自动推出因果或长期收益。</figcaption>
+        </figure>
+        <div class="overflow-x-auto mt-4">
+            <table class="w-full text-xs border-collapse">
+                <thead>
+                    <tr class="bg-white/60">
+                        <th class="border border-gray-200 px-2 py-2 text-left">资源</th>
+                        <th class="border border-gray-200 px-2 py-2 text-left">模态/设定</th>
+                        <th class="border border-gray-200 px-2 py-2 text-left">考察的动作与要点</th>
+                        <th class="border border-gray-200 px-2 py-2">证据</th>
+                    </tr>
+                </thead>
+                <tbody class="text-gray-700">
+                    <tr><td class="border border-gray-200 px-2 py-2">ClariQ</td><td class="border border-gray-200 px-2 py-2">信息检索澄清对话</td><td class="border border-gray-200 px-2 py-2">silent/ask；静态需求分类、问题排序</td><td class="border border-gray-200 px-2 py-2 text-center">R0/C0/H-NA</td></tr>
+                    <tr><td class="border border-gray-200 px-2 py-2 font-semibold">ProactiveBench</td><td class="border border-gray-200 px-2 py-2">文本 agent 事件</td><td class="border border-gray-200 px-2 py-2">silent/assist；正负分类、P/R/F1、RM 接受代理（即本站前作）</td><td class="border border-gray-200 px-2 py-2 text-center">R0/C0/H-NA</td></tr>
+                    <tr><td class="border border-gray-200 px-2 py-2">PROBE</td><td class="border border-gray-200 px-2 py-2">长文档专业场景</td><td class="border border-gray-200 px-2 py-2">assist；每例注入瓶颈，考检索与计划</td><td class="border border-gray-200 px-2 py-2 text-center">R0/C0/H-NA</td></tr>
+                    <tr><td class="border border-gray-200 px-2 py-2">Ambig-SWE</td><td class="border border-gray-200 px-2 py-2">软件工程</td><td class="border border-gray-200 px-2 py-2">ask/act；欠规约检测、问题质量、解决率</td><td class="border border-gray-200 px-2 py-2 text-center">R2/C1/H-NA</td></tr>
+                    <tr><td class="border border-gray-200 px-2 py-2">ESTP-Bench</td><td class="border border-gray-200 px-2 py-2">第一人称流式视频</td><td class="border border-gray-200 px-2 py-2">silent/assist；连续帧、回答窗、ESTP-F1/延迟/吞吐</td><td class="border border-gray-200 px-2 py-2 text-center">R1/C0/H-NA</td></tr>
+                    <tr><td class="border border-gray-200 px-2 py-2">PIRA-Bench</td><td class="border border-gray-200 px-2 py-2">GUI 截图 / 屏幕 agent</td><td class="border border-gray-200 px-2 py-2">silent/assist；含注入片段与纯噪声片段的完整离线流</td><td class="border border-gray-200 px-2 py-2 text-center">R1/C0/H-NA</td></tr>
+                    <tr><td class="border border-gray-200 px-2 py-2">LatentNeeds-Bench</td><td class="border border-gray-200 px-2 py-2">多轮对话转写</td><td class="border border-gray-200 px-2 py-2">silent/assist；隐式需求二分类、延迟</td><td class="border border-gray-200 px-2 py-2 text-center">R1/C0/H-NA</td></tr>
+                    <tr><td class="border border-gray-200 px-2 py-2">ProAgentBench</td><td class="border border-gray-200 px-2 py-2">一个月电脑日志</td><td class="border border-gray-200 px-2 py-2">silent/assist；匹配的“不调用”负样本、时机、意图</td><td class="border border-gray-200 px-2 py-2 text-center">R1/C0/H-NA</td></tr>
+                    <tr><td class="border border-gray-200 px-2 py-2">ProactiveEval</td><td class="border border-gray-200 px-2 py-2">模拟多轮文本</td><td class="border border-gray-200 px-2 py-2">ask/assist；分阶段交互、规划、引导评分</td><td class="border border-gray-200 px-2 py-2 text-center">R2/C0/H-NA</td></tr>
+                    <tr><td class="border border-gray-200 px-2 py-2">ProactBench</td><td class="border border-gray-200 px-2 py-2">Planner 生成的对话史</td><td class="border border-gray-200 px-2 py-2">assist；固定触发轮，<strong>没有沉默门控</strong></td><td class="border border-gray-200 px-2 py-2 text-center">R0/C0/H-NA</td></tr>
+                    <tr><td class="border border-gray-200 px-2 py-2">When Not to Help</td><td class="border border-gray-200 px-2 py-2">简化 POMDP 人机协作</td><td class="border border-gray-200 px-2 py-2">silent/assist；长程用户模型中比较三种策略</td><td class="border border-gray-200 px-2 py-2 text-center">R2/C1/H-NA</td></tr>
+                    <tr><td class="border border-gray-200 px-2 py-2">ProMemAssist</td><td class="border border-gray-200 px-2 py-2">可穿戴/具身真人研究</td><td class="border border-gray-200 px-2 py-2">silent/assist；12 人约 60 分钟、负担量表</td><td class="border border-gray-200 px-2 py-2 text-center">R3/C1/H-S</td></tr>
+                    <tr><td class="border border-gray-200 px-2 py-2">SCALA</td><td class="border border-gray-200 px-2 py-2">教育真实部署</td><td class="border border-gray-200 px-2 py-2">assist；一学期课堂辅导，1,508 学生 / 2,608 会话</td><td class="border border-gray-200 px-2 py-2 text-center">R4/C0/H-S</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">表：13 个代表资源（据 Table III 整理）。即便真实度最高的 SCALA（R4）也没有打通个体级长期结果；13 个资源里没有一个因果地识别出长期增量干预价值。</p>
+        <p class="mt-4">
+            这张表本身就是这篇综述最重要的经验发现：<strong>现有证据几乎全堆在 R0–R2 的离线重放与短模拟、且 H-NA（无人类结果）一栏</strong>。像 ProactBench 这种有影响力的基准，触发轮是固定的，压根测不了沉默门控；而真正上了真人的 ProMemAssist、SCALA 又样本小、无个体长期追踪。这为接下来的研究画了一张很清楚的空白地图。
+        </p>
+    </div>
+
+    <div class="card" id="deployment">
+        <h2>9. 三种部署域与动作空间里的安全</h2>
+        <p>
+            综述不按应用行业罗列，而是按决策变量的差异把部署归为三种 regime：<strong>数字工作台</strong>（屏幕、文档、代码、跨应用事件，时间尺度秒到天，主要矛盾是交错意图、账号权限、副作用与回滚）；<strong>情境/具身环境</strong>（第一人称视频、可穿戴、机器人，主要矛盾是感知延迟、旁观者隐私、物理安全、工作负荷）；<strong>高风险人类服务</strong>（医疗、教育、心理支持，尺度从多轮至数月，主要矛盾是职业边界、知情同意、弱势群体、公平与延迟结果）。
+        </p>
+        <p>
+            安全不是部署后再加的过滤器，而要<strong>编码进动作空间与交互设计</strong>，综述给了一组可直接落地的机制：
+        </p>
+        <ul class="list-disc pl-6 mt-2 space-y-2 text-gray-700">
+            <li><strong>分层权限</strong>：读取 → 起草草稿 → 可逆修改 → 对外通信 → 不可逆承诺，五级逐级抬升；授权绑定对象、目的与有效期。</li>
+            <li><strong>渐进自主</strong>：不确定性或风险升高时，自动从 act 降级到 assist 或 ask，而不是硬执行。</li>
+            <li><strong>可恢复性</strong>：预览、影响范围评估、幂等设计、撤销日志、人类接管（human takeover）。</li>
+            <li><strong>可审计</strong>：留存触发证据、不确定性与权限检查记录。</li>
+            <li><strong>数据最小化</strong>：来源追踪与用户删除权。</li>
+        </ul>
+        <p class="mt-4">
+            这些机制会反过来改变决策本身：可逆性降低执行成本，明确授权扩大可容许动作集，端侧处理可降低隐私成本，而反复确认会提高提问成本——安全设计与策略优化因此是同一个问题，不是两个团队的事。
+        </p>
+    </div>
+
+    <div class="card" id="questions">
+        <h2>10. 四个可检验的开放问题与结论</h2>
+        <p>综述在 §V-C 留下四个可以直接变成研究课题的问题：</p>
+        <ol class="list-decimal pl-6 space-y-2 text-gray-700">
+            <li><strong>如何学到反事实的干预价值？</strong>现有门控预测的是“现在是否需要帮助”，部署要问的是“介入相对沉默改变了什么”。在伦理与安全护栏允许时，可用微随机实验（micro-randomized trial）、鼓励设计或保守式探索，并记录行为策略概率、测量用户认可的净效用与长期结果；离线 AUROC 只是中间诊断。</li>
+            <li><strong>如何联合校准需求、内容与授权？</strong>同一状态下不同候选动作的收益—成本曲线与切换阈值不同。未来基准应在同一状态标注多个候选动作，对比“需求分类器+固定动作”与联合动作价值模型，并报告校准、覆盖—风险与越界率。</li>
+            <li><strong>偏好漂移下如何安全适应？</strong>接受/拒绝由旧策略选择性地产生，记忆可能保留过期目标。评测要按时间和用户切分，测漂移检测、策略更新、遗忘旧偏好与安全回归，而不仅是记忆问答准确率。</li>
+            <li><strong>如何让统一协议跨 regime 又不抹掉各自约束？</strong>共享协议应包含决策机会记录、四模式混淆矩阵、事件匹配与策略价值，同时单独报告真实度、对照设计与人类结果尺度，保留各域特定比较，拒绝用一张总榜掩盖差异。</li>
+        </ol>
+        <p class="mt-4">
+            结论部分有五个判断值得记住：主动服务<strong>不是“生成一句没人问的话”的能力</strong>，而是在不确定性下、在真实沉默备选项面前的自主选择；POMDP 形式化把时机、内容与交付统一为一个结构化动作；等待具有期权价值，澄清只有在回答改变信念/授权/后续动作时才有正的信息价值；现有证据集中在构造样例、离线重放与短模拟，更好的触发 F1、更流畅的建议或更长的记忆都不能单独证明部署收益。可靠的主动服务需要四样东西，这也是全文被引用最多的一句话：
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p class="text-sm text-gray-700 italic">“Reliable proactive service instead requires <strong>calibrated incremental intervention value, verifiable authorization, recoverable execution, and counterfactual evidence.</strong>”（校准的增量干预价值、可验证的授权、可恢复的执行，以及反事实证据。）</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/abs/2609.03727" class="text-[color:var(--accent)] underline">arXiv:2609.03727</a> Abstract / Conclusion</p>
+        </div>
+        <p class="mt-4">一个值得信赖的系统应当：在证据不足时可靠地等待、介入时确实提升净效用、并为每个决策留下可审计的依据。</p>
+    </div>
+
+    <div class="card" id="takeaway">
+        <h2>11. 怎么读这篇综述，以及它和工程实践的关系</h2>
+        <p>
+            这篇综述的正确读法不是“又一张论文清单”，而是<strong>一套检查清单和一套共同语言</strong>。如果你在设计或评估一个主动助手，可以顺着它的决策循环自查：我的动作空间里有没有真正的 silent？沉默的价值是被算出来的还是被默认跳过的？授权是账本还是我从用户行为里猜的？单步效用里打扰、提问、回滚、隐私这四项成本各是多少、权重谁定、有没有预注册？我的评测集里负样本流（不该出手的时刻）占多少？报的是 F1 还是净策略价值？反馈数据里沉默反事实的选择偏差怎么处理？
+        </p>
+        <p>
+            它也帮我们给 2024–2026 的具体工作重新定位：ProactiveBench 是 predictive 机制在“触发分类”上的开山之作，但按本文的标尺，它只有 R0/C0/H-NA 证据、且把价值压成了二分类；HALO、PITCH 这类 2026 工作补上了时机校准与真人判定，却仍少有长期净效用；ProactMem 这类记忆工作回答的是信念状态怎么构造，而本文提醒记忆既非主动的必要条件、也不解决门控；Muse 一类产品强在 autonomy 轴，initiative 轴上的“沉默—提问—协助—行动”联合决策仍是开放问题。换句话说，这篇综述给这个热闹的方向提供了一张坐标系：<strong>每出现一个新系统，你都能在“流水线四阶段 × 机制四类型 × R/C/H 证据等级”的格子里指出它占了哪格、空了哪格</strong>。
+        </p>
+        <p>
+            局限也要看到。作为 2026 年 9 月的综述，它的 13 个代表资源样本偏小，证据矩阵是“样本统计”而非领域普查；POMDP 形式化在真实大模型系统里几乎不会被精确求解，τ（一步时长）、成本权重、风险阈值都缺统一标定方法；反事实评测所需的微随机实验在多数消费场景难以合规开展。但恰恰是这些“给不出标准答案”的地方，构成了未来两三年这个方向真正的研究增量——从“会抢答的模型”走向“知道何时不必说话的助手”。
+        </p>
+    </div>
+
+    <div class="card" id="figures">
+        <h2>12. Original Figures &amp; References</h2>
+        <p class="text-sm text-gray-500">以下为论文全部 3 张原图（图片引自 arXiv:2609.03727，版权归原作者所有）。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-service-agents/unified_loop.png" alt="Figure 1" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 1. 受约束的主动服务决策循环（Constrained proactive-service loop）。</figcaption>
+        </figure>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-service-agents/mechanisms.png" alt="Figure 2" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 2. 决策中心功能轴与四类非互斥策略构造机制。</figcaption>
+        </figure>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-service-agents/evidence_matrix.png" alt="Figure 3" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 3. 13 个代表资源的 R/C/H 证据矩阵（Table III 样本）。</figcaption>
+        </figure>
+        <h3 class="text-lg font-semibold text-slate-700 mt-6">References</h3>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li>Tang, Y., Cao, T., Tang, Y., Tang, H., Hu, K. <em>Proactive Service Agents: A Unified Decision Framework, Methods, and Evaluation</em>. arXiv:2609.03727, 2026. <a href="https://arxiv.org/abs/2609.03727" class="text-[color:var(--accent)] underline">arxiv.org/abs/2609.03727</a>（本文核心来源，公式、Table I–III 与 Figure 1–3）</li>
+            <li>Lu, Y., et al. <em>Proactive Agent: Shifting LLM Agents from Reactive Responses to Active Assistance</em>. arXiv:2410.12361, 2024. <a href="https://arxiv.org/abs/2410.12361" class="text-[color:var(--accent)] underline">arXiv:2410.12361</a>（本站<a href="/notes/proactive-agent" class="text-[color:var(--accent)] underline">对应笔记</a>；本文中的 ProactiveBench 资源）</li>
+            <li>Deng, Y., Liao, L., et al. <em>Towards Human-centered Proactive Conversational Agents</em>. SIGIR 2024. <a href="https://arxiv.org/abs/2404.12670" class="text-[color:var(--accent)] underline">arXiv:2404.12670</a>（Intelligence–Adaptivity–Civility 旧框架）</li>
+            <li>Deng, Y., et al. <em>A Survey on Proactive Dialogue Systems: Problems, Methods, and Prospects</em>. IJCAI 2023；及 <em>Proactive Conversational AI</em>, ACM TOIS 2025（本文对标的早期对话综述）</li>
+            <li>延伸证据（2026）：<a href="https://arxiv.org/abs/2610.39086" class="text-[color:var(--accent)] underline">HALO 2610.39086</a>（过度主动的人因证据）· <a href="https://arxiv.org/abs/2610.25896" class="text-[color:var(--accent)] underline">PITCH 2610.25896</a>（插话时机）· <a href="https://arxiv.org/abs/2609.37267" class="text-[color:var(--accent)] underline">Foundations of Proactive Agents 2609.37267</a>（3T 原则，姊妹框架）</li>
+        </ul>
+    </div>
+</BaseLayout>
