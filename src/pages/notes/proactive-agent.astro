@@ -1,0 +1,370 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export const meta = {
+    title: 'Proactive Agent：让 LLM 从“等指令”变成“自己找活干”',
+    description: '精读方向奠基作 Proactive Agent（arXiv:2410.12361）：基于真实电脑活动采集、LLM 环境 gym、人工 accept/reject 标注与奖励模型，构建 6,790 事件的 ProactiveBench，并把“何时开口、何时沉默”变成可训练、可评测的问题；微调 7B 模型 F1 66.47% 反超 GPT-4o，而失败几乎全部来自过度主动（false alarm）。',
+    tags: ['Agent', 'Proactive Agent', 'Benchmark', 'Reward Model', 'SFT'],
+    readTime: '34 min',
+    createdAt: '2026-11-03'
+};
+---
+
+<BaseLayout title="Proactive Agent：让 LLM 从“等指令”变成“自己找活干”" description="精读方向奠基作 Proactive Agent 与 ProactiveBench：真实活动采集、LLM 环境 gym、人工标注奖励模型，把“何时主动帮忙”变成可训练可评测的问题。">
+    <header class="text-center mb-12">
+        <p class="text-xs uppercase tracking-[0.3em] text-[color:var(--muted)]">Agent / Proactivity / Benchmark</p>
+        <h1 class="text-4xl font-bold mb-4 gradient-text">Proactive Agent：让 LLM 从“等指令”变成“自己找活干”</h1>
+        <p class="text-xl text-gray-500">第一个把“模型该不该主动开口”做成数据驱动闭环的工作：真实活动采集 → LLM 环境 gym → 人工标注 → 奖励模型 → 6,790 事件的 ProactiveBench</p>
+        <p class="mt-4 text-sm uppercase tracking-[0.2em] text-[color:var(--muted)]">添加时间 {meta.createdAt}</p>
+    </header>
+
+    <div class="note-box text-sm">
+        <p><strong>论文信息：</strong></p>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+            <li><em>Proactive Agent: Shifting LLM Agents from Reactive Responses to Active Assistance</em>（Yaxi Lu、Shenzhi Yang、Cheng Qian、Guirong Chen、Qinyu Luo、Yesai Wu、Huadong Wang、Xin Cong、Zhong Zhang、Yankai Lin、Weiwen Liu、Yasheng Wang、Zhiyuan Liu、Maosong Sun、Fangming Liu，清华 THUNLP 等；arXiv:2410.12361，v1 2024-10，v3 2024-12）。</li>
+            <li>代码与数据：<a href="https://github.com/thunlp/ProactiveAgent" class="text-[color:var(--accent)] underline">github.com/thunlp/ProactiveAgent</a>。</li>
+            <li>核心定位：在<strong>没有明确用户指令</strong>的前提下，让 agent 通过观察用户的电脑活动与环境事件，预判用户可能需要的任务并主动提出；同时必须学会在不需要帮助时保持沉默。论文为此给出形式化定义、一整套数据生成管线、人工标注的奖励模型、评测基准 ProactiveBench，以及微调后的开源模型。</li>
+            <li>一句话结果：在 233 个真实用户事件上，未微调的强模型普遍“几乎每个需求都能检测到、但不该帮忙时也乱帮忙”（误报率 50%+）；用 ProactiveBench 微调后的 Qwen2-7B-Proactive 取得 <strong>66.47% F1</strong>，超过 GPT-4o 的 64.60%。</li>
+        </ul>
+    </div>
+
+    <div class="note-box text-sm mt-4">
+        <p><strong>先把几个术语说清（读这篇笔记前只需要知道这些）：</strong></p>
+        <ul class="list-disc pl-6 mt-2 space-y-1">
+            <li><strong>Reactive agent（被动/响应式智能体）</strong>：只在用户发出明确指令（query）之后才动作的 agent，也是 ChatGPT 类产品的默认范式。</li>
+            <li><strong>Proactive agent（主动智能体）</strong>：在用户没有开口的情况下，主动监测环境、预判潜在需求并发起协助的 agent。注意它不是“自作主张直接执行”，而是<strong>先提出任务、经用户接受后再执行</strong>。</li>
+            <li><strong>False alarm（误报/虚警）</strong>：用户其实不需要帮助，agent 却提出了任务。这是本文最重要的失败类型，对应 precision 低；与之相对的是 <strong>miss（漏报）</strong>，即用户需要帮助时 agent 沉默。</li>
+            <li><strong>Reward model（奖励模型，RM）</strong>：本文用三个人类标注员的 accept/reject 判定微调一个 LLaMA-3.1-8B，让它模拟“人类会不会接受这个主动提议”，从而替代昂贵的人工判断，用于大规模数据的自动标注。它与 RLHF 里的奖励模型同源，但这里做的是二分类。</li>
+            <li><strong>Medoid（中心点候选）</strong>：数据构造时让 9 个语言模型各出一个候选任务，再选“与其他候选余弦距离之和最小”的 5 个送去标注——即用数据里真实存在的候选做代表，而非取一个不可用的向量平均点。</li>
+            <li><strong>pred@k</strong>：允许 agent 一次提出至多 k 个候选任务；pred@3 时只要有一个候选被接受，该事件就算检测成功，用来降低“猜错具体任务”的负担。</li>
+            <li><strong>ActivityWatch</strong>：一个开源的个人活动记录软件（记录窗口、键盘鼠标、浏览器等），本文在它基础上采集真实活动轨迹。</li>
+            <li><strong>Gym（环境）</strong>：借自强化学习的叫法，这里指一个由 LLM 驱动的、可生成事件并维护状态的模拟操作系统（应用、文件、网页、时间等）。</li>
+        </ul>
+    </div>
+
+    <nav class="toc mt-8" aria-label="目录">
+        <h2>目录</h2>
+        <ul>
+            <li><a href="#intro">1. Introduction：一封 John 的邮件，两种 agent</a></li>
+            <li><a href="#background">2. Background：主动为什么难，以及前人走到了哪</a></li>
+            <li><a href="#formalization">3. 问题形式化：把“要不要开口”写成一个预测问题</a></li>
+            <li><a href="#framework">4. 主动 Agent 框架：记忆、JSON 输出与执行循环</a></li>
+            <li><a href="#collection">5. 真实活动采集：从 ActivityWatch 到自然语言事件</a></li>
+            <li><a href="#gym">6. 数据生成三件套：环境 gym、主动 agent、用户 agent</a></li>
+            <li><a href="#annotation">7. 人工标注与奖励模型：用 1,760 条判定训一个“人类替身”</a></li>
+            <li><a href="#benchmark">8. ProactiveBench：6,790 个事件长什么样</a></li>
+            <li><a href="#experiments">9. Experiments：强模型全在“过度主动”上翻车</a></li>
+            <li><a href="#analysis">10. 深入分析：多候选、奖励模型反馈与两类失败</a></li>
+            <li><a href="#discussion">11. Discussion：局限、信任代价与隐私</a></li>
+            <li><a href="#today">12. 放到 2026 年看：这篇奠基作的位置</a></li>
+            <li><a href="#figures">13. Original Figures &amp; References</a></li>
+        </ul>
+    </nav>
+
+    <div class="card" id="intro">
+        <h2>1. Introduction：一封 John 的邮件，两种 agent</h2>
+        <p>
+            论文用一个极简的对照把问题讲透了。假设你正在电脑前工作，邮箱里收到一封 John 发来的、关于某个会议的邮件。<strong>响应式（reactive）agent</strong> 会一直安静地待在那里，直到你明确输入“给我看看未读邮件”或者“帮我安排个会”，它才开始动作；而<strong>主动（proactive）agent</strong> 注意到了这封邮件的到达（环境事件）、结合你最近的活动（比如你刚在日历上查过 John 的空档），在你开口之前就弹出一句：“收到 John 关于会议的邮件，需要我帮你把日程安排好吗？”
+        </p>
+        <p>
+            差别不在于后者会不会调日历工具——今天几乎所有 agent 都会——而在于<strong>动作的起点</strong>：reactive agent 的起点是用户的显式指令，proactive agent 的起点是它自己对“用户可能需要什么”的判断。论文把当前主流系统概括为“predominantly work in the reactive paradigm”，在没有指令时它们“remain dormant”（保持休眠）。作者主张，真正的助手应当能从环境里推断潜在任务、自己发起协助，从而“reduce the cognitive burden on the user”，并发现那些“latent needs not explicitly articulated by humans”（用户没有明确说出口的潜在需求）。
+        </p>
+        <div class="note-box text-sm mt-4">
+            <p><strong>原文摘录：</strong></p>
+            <p class="text-sm text-gray-600 italic">“We tackle the challenge of developing proactive agents capable of anticipating and initiating tasks without explicit human instructions.”</p>
+            <p class="text-xs text-gray-500 mt-2">来源：<a href="https://arxiv.org/abs/2410.12361" class="text-[color:var(--accent)] underline">arXiv:2410.12361</a> Abstract</p>
+        </div>
+        <p class="mt-4">
+            这个设定立刻带出一个比“检测需求”更微妙的问题：主动是一把双刃剑。该帮忙时沉默，是失职；不该帮忙时插话，则是打扰——用户正在专注写代码，agent 因为他“切换了一下窗口”就跳出来提一堆“建议”，只会制造噪音。所以这篇论文真正要解的是一个<strong>双边问题</strong>：既要检测到真实需求（recall），又要在不需要帮助时忍住不动（precision / 低 false alarm）。后文的实验会显示，2024 年的所有强模型——包括 GPT-4o——全都倒在第二边上。这也是为什么这篇工作在 2024 年 10 月出现后，被后续整个 proactive agent 方向当作奠基性引用：它第一次把“什么时候该闭嘴”提升为与“能不能完成任务”同等重要的研究目标。
+        </p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-agent/fig1.png" alt="Reactive agent 与 Proactive agent 的交互对比" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 1. 两种交互范式：响应式 agent（上）被动接收用户 query 后才响应；主动 agent（下）持续观察环境事件与用户活动，在没有 query 的情况下推断任务并主动提出帮助。</figcaption>
+        </figure>
+        <p class="mt-4">论文给出的六项贡献可以归成三组：<strong>定义</strong>——基于用户活动、环境事件与环境状态的形式化主动 agent 设定；<strong>数据</strong>——真实活动采集、LLM 驱动的环境 gym，以及包含 6,790 个训练事件与 233 个真实测试事件的 ProactiveBench；<strong>模型</strong>——人工标注训练的奖励模型，以及在 LLaMA-3.1-8B 与 Qwen2-7B 上微调得到的 Proactive 版 agent。</p>
+    </div>
+
+    <div class="card" id="background">
+        <h2>2. Background：主动为什么难，以及前人走到了哪</h2>
+        <p>
+            “主动”在对话系统里并不是新词。传统的 proactive dialogue systems（论文引用了综述 <em>A Survey on Proactive Dialogue Systems</em>）研究过客服里主动追问、对话推荐里主动提问、情感陪伴里主动发起对话等问题，代表性系统包括 UIST 2024 的 ComPeer（主动同伴支持）。但论文指出，这些工作的“主动”基本发生在<strong>一段已经开始的对话内部</strong>——目标是让回复更有帮助、更会引导话题，启动这段交互的仍然是用户的第一句话。它们回答的是“对话中要不要多问一句”，而不是“在用户根本没打开对话框时，要不要因为一封邮件而发起对话”。
+        </p>
+        <p>
+            另一类相邻工作研究<strong>歧义澄清</strong>。Ask-before-Plan（EMNLP 2024 Findings，本站在主动 Agent 调研中也推荐过）让 agent 在规划前识别模糊指令、调用工具补信息、必要时反问用户；还有面向 text-to-SQL 的“何时该请求用户帮助”的研究（提出 AUDBC 指标）、协作写作中的 teammate agent、以及研究隐式意图理解的 “Tell Me More!”。这些工作教会 agent “不确定就问”，但触发条件依然是用户已经下达了一个不完整的指令。论文据此划清边界：<span class="highlight">已有系统把主动性用在“更好地服务一个已经存在的请求”，而本文要的是“在请求出现之前就发起服务”</span>——信号来源从“用户说了什么”变成了“环境里发生了什么”。
+        </p>
+        <p>
+            这就带来了三个此前没有被正面解决的难题。第一是<strong>信号稀疏且嘈杂</strong>：用户的大部分电脑操作（切窗口、滚动页面、敲几个字又删掉）并不隐含任何任务，agent 必须从连续的低层事件流里区分“有意义的意图信号”和“无意义的噪声动作”。第二是<strong>标签从哪来</strong>：传统任务有明确的 query 和可验证的完成结果，而“此刻用户需不需要帮助”是一个只有用户自己知道、且高度情境化的主观判断，不存在天然标签。第三是<strong>评测悖论</strong>：要评测主动性，就得有一个会继续活动、会接受/拒绝提议的“用户”和一个会变化的“世界”，否则 agent 提出任务之后无事可做。本文的方法设计（真实采集 + LLM gym + 用户 agent + 人工标注奖励模型）正是冲着这三个难题去的，理解了这三个难点，后面的每个模块为什么存在就都顺理成章了。
+        </p>
+    </div>
+
+    <div class="card" id="formalization">
+        <h2>3. 问题形式化：把“要不要开口”写成一个预测问题</h2>
+        <p>
+            在每个时刻 <em>t</em>，agent 能拿到三类输入。<strong>用户活动 A<sub>t</sub></strong>（user activities）：键盘、鼠标操作以及与 agent 的对话等用户主动行为；<strong>环境事件 E<sub>t</sub></strong>（environmental events）：发生在环境中、未必由用户直接引起的事，比如收到一封邮件、一个应用被关闭；<strong>环境状态 S<sub>t</sub></strong>（environmental state）：当前世界的快照，比如文件系统内容、打开的网页。agent 要输出的预测为
+        </p>
+        <div class="math-block" set:html={String.raw`$$P_t = f_\theta(E_t, A_t, S_t)$$`}></div>
+        <p>
+            其中 P<sub>t</sub> 要么是一个<strong>具体的主动任务描述</strong>，要么是空集符号 ∅——表示“此刻不该开口”。注意 ∅ 是一个和具体任务地位平等的、需要模型主动选择的输出，这正是形式化里最关键的一笔：沉默不是默认动作，而是一个需要被预测正确的决策。
+        </p>
+        <p>
+            光预测出任务还不算对。论文引入辅助变量 <strong>N<sub>t</sub></strong> 表示用户此刻是否真的需要帮助（N<sub>t</sub>=1 需要，N<sub>t</sub>=0 不需要），并用一个用户决策函数刻画提议的命运：
+        </p>
+        <div class="math-block" set:html={String.raw`$$R_t = g(P_t, A_t, S_t)$$`}></div>
+        <p>
+            一次预测被判定为<strong>接受（accepted）</strong>有两种情况：P<sub>t</sub> ≠ ∅ 且用户接受了这个任务；或者 P<sub>t</sub> = ∅ 且用户本来就不需要帮助（N<sub>t</sub>=0）——也就是说，<strong>在正确的时刻保持沉默同样算对</strong>。反之，用户需要时沉默（漏报）、或不需要时提议（误报）都是拒绝。训练目标于是非常朴素：最大化用户接受的期望，
+        </p>
+        <div class="math-block" set:html={String.raw`$$\max_\theta\; \mathbb{E}[R_t]$$`}></div>
+        <p>
+            这个目标函数看似简单，却把“帮忙”和“克制”统一进了同一个标量。评测层面，论文把预测结果映射成经典的四类：<strong>TP</strong> 提出任务且被接受；<strong>FP</strong> 提出任务但被拒绝（误报）；<strong>TN</strong> 不提议且确实不需要帮助；<strong>FN</strong> 不提议但其实需要帮助（漏报）。据此计算 Recall、Precision、Accuracy 与 F1：
+        </p>
+        <div class="math-block" set:html={String.raw`$$\text{Recall}=\frac{TP}{TP+FN},\qquad \text{Precision}=\frac{TP}{TP+FP},\qquad F_1=2\cdot\frac{\text{Recall}\cdot\text{Precision}}{\text{Recall}+\text{Precision}}$$`}></div>
+        <p>
+            此外论文单列了 <strong>False-Alarm</strong> 指标（不需要帮助却提议的比率，越低越好），用来专门盯住“过度主动”。这个指标在后面会成为区分模型优劣的胜负手：因为几乎所有模型的 recall 都接近满分，真正拉开差距的是谁更能忍住不乱提议。
+        </p>
+    </div>
+
+    <div class="card" id="framework">
+        <h2>4. 主动 Agent 框架：记忆、JSON 输出与执行循环</h2>
+        <p>
+            Figure 3 给出了 agent 的工作结构。它本质上是一个围绕事件流运转的循环：每当环境产生一个新事件，agent 先<strong>更新记忆（memory）</strong>，把新事件与历史事件、此前的对话以及用户特征（user characteristics）整合，再据此决定提出任务还是保持沉默；如果提出的任务被用户接受，就通过调用环境里的工具多轮执行，任务完成或被用户打断后回到监听状态。
+        </p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-agent/fig2.png" alt="Proactive Agent 框架总览" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 3. 主动 agent 框架：监测新事件 → 更新记忆（结合事件历史、对话历史与用户特征）→ 预测潜在任务；被接受的任务进入多轮工具执行，执行产生的新事件又回流到环境中。</figcaption>
+        </figure>
+        <p class="mt-4">
+            有两点值得展开，因为它们决定了这个框架“轻”在哪。第一，论文<strong>没有设计任何专门的神经记忆结构</strong>——没有向量库、没有嵌入检索、没有独立的记忆编码器。事件与状态在采集阶段就被语言模型转写成了自然语言轨迹（形如带 time 与 event 字段的 JSON 记录），所谓“记忆更新”就是把这些文本轨迹按时间拼进 prompt。这反映了 2024 年这类工作的典型取舍：在验证“主动性是否可学”这一阶段，优先让信号以 LLM 最容易消费的文本形态存在，把架构复杂度留到以后。第二，agent 的预测被约束为一段结构化 JSON，包含四个字段：<code>Purpose</code>（用户上一个动作的目的）、<code>Thoughts</code>（对用户行为的分析）、<code>Proactive Task</code>（提议的任务，或填 null 表示沉默）、<code>Response</code>（面向用户的话术）。前两个字段强制模型先做意图归因再决定动作，与 ReAct 里“先 thought 后 action”的思路一致；把 null 显式写进取值空间，则是为了让“沉默”成为可学习、可标注的一等输出。
+        </p>
+        <p>
+            系统提示给 agent 的角色是 “a helpful assistant that provides proactive suggestions to the user”，并附带几条关键纪律：只在完全理解用户行为时才提议（“Only propose assistance when you fully understand the user's actions”）；要检查任务在当前可用操作下是否可行；关注<strong>事件的时机</strong>；只在必要时帮忙；从事件历史推断；没有可帮的就输出 null。这套指令把前面形式化里的双边目标翻译成了模型能执行的行为规范。执行阶段，agent 的每个工具动作都会让 gym 生成一个新事件并更新状态；如果操作在当前状态下不成立，gym 会“raise an error and explain the issue”；如果提议被拒绝，gym 就当什么都没发生，继续自行生成事件——这保证了“被拒绝”不会污染世界状态。
+        </p>
+    </div>
+
+    <div class="card" id="collection">
+        <h2>5. 真实活动采集：从 ActivityWatch 到自然语言事件</h2>
+        <p>
+            数据管线的起点是真实世界，而不是让 LLM 凭空想象人类怎么用电脑——这是本文数据质量观的第一个关键决定。作者在开源活动记录软件 <a href="https://github.com/ActivityWatch/activitywatch" class="text-[color:var(--accent)] underline">ActivityWatch</a> 的基础上开发了监控程序，采集的信息包括：键盘操作、鼠标操作、剪贴板内容、浏览器活动、访问过的网页、使用过的开发工具以及其他与系统的交互。
+        </p>
+        <p>
+            原始记录是低层、碎片化且高度冗余的（一次鼠标移动可能产生多条日志），无法直接喂给 agent。处理分两步：先把原始记录<strong>合并成语义连贯的片段（segments）</strong>，再用语言模型把每个片段<strong>转写成自然语言事件描述</strong>。论文给出的真实样例很能说明问题：一类是“打开浏览器、访问某网页、切换标签页”这样的有目的动作链；另一类则是“切换到 Code.exe 但没有任何后续操作”——后者正是典型的无意义噪声，agent 必须学会对它保持沉默。这批真实轨迹之后有两个用途：既直接构成 233 个真实测试事件的来源，也作为<strong>范例（example events）</strong>注入到合成数据生成中，用来约束 LLM 生成事件的颗粒度，让模拟世界的事件长得像真实操作，而不是像剧本梗概。
+        </p>
+        <p>
+            这一步看似只是“数据预处理”，实则是整个工作可信度的地基。后续所有训练事件都由 LLM 模拟生成，如果没有真实轨迹锚定事件的粒度与分布，gym 很容易生成过于戏剧化、每个事件都明显隐含需求的数据——在那种数据上训出的 agent，到了真实环境里必然疯狂误报。用真实片段做 few-shot 范例，等于给合成器装上了一个“现实校准器”。
+        </p>
+    </div>
+
+    <div class="card" id="gym">
+        <h2>6. 数据生成三件套：环境 gym、主动 agent、用户 agent</h2>
+        <p>
+            要大规模造出“主动协助”的训练数据，需要一个会自己演进的世界和一个会做反应的用户。论文用三个互相博弈的 LLM 角色搭起了这套生成器（Figure 2）：<strong>环境 gym</strong>、<strong>主动 agent</strong> 与<strong>用户 agent</strong>。
+        </p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-agent/fig4.png" alt="数据生成流程总览" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 2. 数据生成流程（以日常生活场景为例）：初始场景与任务设定 → 事件生成 → 主动任务预测 → 用户判定（接受/拒绝）→ 动作执行，执行结果再驱动后续事件。</figcaption>
+        </figure>
+        <p class="mt-4"><strong>环境 gym</strong> 承担两个职能。其一是<em>事件生成</em>：为一个场景产出合乎情理的事件序列；其二是<em>状态维护</em>：更新其中实体（浏览器、软件、文件、工具、时间等）的属性。它没有用任何形式化的状态向量或数据库，状态就是一段随时间改写的自然语言描述（应用版本、浏览器名称、文件内容都以文本表示），由 GPT-4o 依据“上一状态 + 最新事件”推演新状态。可用工具也按场景动态生成，论文里出现过的具体例子包括浏览器与网页、开发工具与 Code.exe、文件系统工具、智能灯开关等——横跨编程、写作与日常生活。</p>
+        <p>
+            <strong>场景（scenario）生成</strong>遵循一条自顶向下的链路：先由人工标注员提供少量种子任务（seed jobs），再让 GPT-4o 据此扩写出三个领域（coding、writing、daily life）里大量真实可信的任务；随后为每个任务生成相关实体，补充实体状态、日期、时间等情境细节，并挂上从真实采集里随机抽样的范例事件来控制粒度与多样性。最终一共构造了 136 个场景。
+        </p>
+        <p>
+            <strong>事件生成</strong>则是自底向上、逐拍滚动的：用户 agent 先描述“为了完成当前任务，我打算做哪些活动”；gym 收到活动描述后，随机抽取该场景的范例事件，以历史与当前状态为条件，<strong>一次只生成一个事件</strong>，随后更新实体状态与模拟时钟；如此往复，直到给定活动不再产生新事件。为了拟真，gym 还被明确要求保持事件之间逻辑连贯、客观、与历史一致，并“偶尔引入失败或意外事件”。单步生成而非一镜到底，是为了让主动 agent 能在每一个事件点上做决策——主动性评测需要的恰恰是这种逐拍的决策切片。
+        </p>
+        <p>
+            <strong>用户 agent</strong> 由 GPT-4o 扮演，做两件事：模拟用户活动，以及对主动 agent 的提议给出接受/拒绝判定并演绎接受或拒绝之后的行为。它的 prompt 通过 <code># User Info</code> 注入预定义的用户特征（身份、偏好等），并被要求表现得像真人、不要过度可预测。不过论文并没有给出正式的用户画像 schema 或偏好模型，persona 是文本化、轻量的。在大规模自动生成阶段，昂贵的“人类判定”这一环会被第 7 节训出的奖励模型替代，GPT-4o 则主要负责生成活动与判定理由（rationale）。
+        </p>
+        <p>
+            这三个角色形成一个闭环：gym 出事件 → 主动 agent 预测任务 → 用户 agent 判定 → 若接受则 agent 调工具执行，执行又让 gym 产生新事件；若拒绝或沉默，gym 继续自行推进。整条流水线把“主动协助”这种本来无法自然产生监督信号的行为，变成了可以批量生成的（事件轨迹，提议，接受/拒绝）三元组。
+        </p>
+    </div>
+
+    <div class="card" id="annotation">
+        <h2>7. 人工标注与奖励模型：用 1,760 条判定训一个“人类替身”</h2>
+        <p>
+            直接让 GPT-4o 当裁判有个根本隐患：论文随后会用实验证明，强模型在“该不该主动”这件事上本身就不可靠（它们倾向于什么忙都帮）。因此作者没有把判定权完全交给 LLM，而是先花人工标注一批“金标准”，再蒸馏出一个奖励模型。
+        </p>
+        <p>
+            标注样本的构造很讲究。对每一个事件，先让 <strong>9 个语言模型</strong>各自生成多样化的候选任务；然后计算候选两两的余弦距离，选出“与其他候选总距离最小”的 <strong>5 个代表候选</strong>送去标注。这是 medoid 思想：不取向量空间的平均点（那通常不是一个合法任务），而是从真实候选里选最居中心的若干个，既压缩标注量又保留多样性。三位独立标注员对每条候选给出三选一判定：<strong>accept</strong>（该提议可接受）、<strong>reject</strong>（此刻有需求但这个提议不对）、<strong>reject all</strong>（这些事件根本不隐含任何任务，对应 N<sub>t</sub>=0）。只要有一个候选被接受，该事件就标记为 N<sub>t</sub>=1；最终标签由<strong>多数投票</strong>决定。
+        </p>
+        <p>
+            标注集共 <strong>1,760 条</strong>（1,640 训练 / 120 测试），每条包含事件轨迹、候选任务与三位标注员的决定。作为标注质量的上界，三位人类标注员在测试集上的一致率为 <strong>91.67%</strong>——这也说明“此刻需不需要主动帮忙”虽然主观，但在多数情况下存在共识，任务是可标注的。判定准则被写进了奖励模型的 prompt：没有任务需求时应接受 ∅，有需求时拒绝 ∅，并强调“Minimize interruptions from the assistant by only accepting tasks that are valuable”（只接受真正有价值的任务，把打扰降到最低）。
+        </p>
+        <p>
+            奖励模型从 <strong>LLaMA-3.1-8B-Instruct</strong> 微调，做“提议被接受 vs 被拒绝”的二分类，超参为 batch size 32、学习率 1e-5、Adam、warm-up 比例 0.01、8×A100 训练约 1.5 小时、3 个 epoch（附录口径；正文渲染出现“33 epochs”的笔误，应以附录为准）。它在 120 条测试上的表现如下表，评判单位是四种与人类投票的一致类别：
+        </p>
+        <div class="overflow-x-auto mt-4">
+            <table class="w-full text-sm border-collapse">
+                <thead>
+                    <tr class="bg-white/60">
+                        <th class="border border-gray-200 px-3 py-2 text-left">评判模型</th>
+                        <th class="border border-gray-200 px-3 py-2">MN 漏需沉默 ↑</th>
+                        <th class="border border-gray-200 px-3 py-2">NR 无需沉默 ↑</th>
+                        <th class="border border-gray-200 px-3 py-2">CD 正确检测 ↑</th>
+                        <th class="border border-gray-200 px-3 py-2">FD 错误检测 ↑</th>
+                        <th class="border border-gray-200 px-3 py-2">F1 ↑</th>
+                    </tr>
+                </thead>
+                <tbody class="text-gray-700">
+                    <tr><td class="border border-gray-200 px-3 py-2">GPT-4o</td><td class="border border-gray-200 px-3 py-2 text-center">3.33</td><td class="border border-gray-200 px-3 py-2 text-center">100.00</td><td class="border border-gray-200 px-3 py-2 text-center">100.00</td><td class="border border-gray-200 px-3 py-2 text-center">0.00</td><td class="border border-gray-200 px-3 py-2 text-center">67.04</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2">GPT-4o-mini</td><td class="border border-gray-200 px-3 py-2 text-center">56.67</td><td class="border border-gray-200 px-3 py-2 text-center">56.67</td><td class="border border-gray-200 px-3 py-2 text-center">86.67</td><td class="border border-gray-200 px-3 py-2 text-center">33.33</td><td class="border border-gray-200 px-3 py-2 text-center">63.24</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2">LLaMA-3.1-70B</td><td class="border border-gray-200 px-3 py-2 text-center">33.33</td><td class="border border-gray-200 px-3 py-2 text-center">83.33</td><td class="border border-gray-200 px-3 py-2 text-center">100.00</td><td class="border border-gray-200 px-3 py-2 text-center">6.67</td><td class="border border-gray-200 px-3 py-2 text-center">67.48</td></tr>
+                    <tr class="bg-[color:var(--accent)]/10 font-semibold"><td class="border border-gray-200 px-3 py-2">Ours（微调 RM）</td><td class="border border-gray-200 px-3 py-2 text-center">80.00</td><td class="border border-gray-200 px-3 py-2 text-center">86.67</td><td class="border border-gray-200 px-3 py-2 text-center">100.00</td><td class="border border-gray-200 px-3 py-2 text-center">100.00</td><td class="border border-gray-200 px-3 py-2 text-center">91.80</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">表：奖励模型与强模型在“是否接受主动提议”判定上对人类投票的一致率（%，节选 Table 2）。MN=该帮却沉默、NR=不该帮且沉默、CD=提议正确、FD=不该帮却提议。</p>
+        <p class="mt-4">
+            表里藏着全文最尖锐的一个发现：<strong>GPT-4o 作为裁判时，FD（无需求却提议的误报）一致率是 0.00%</strong>——人类认为不该帮的场合，GPT-4o 几乎照单全收。换句话说，强模型天然带着“尽量帮忙”的讨好倾向，让它们自评主动性相当于让考生自己判卷。微调奖励模型最大的增益恰恰在 FD 上做到 100% 一致，整体 F1 91.80%、准确率 91.67%，这才获得了一个可以放大到数万事件上的、克制的“人类替身”。
+        </p>
+    </div>
+
+    <div class="card" id="benchmark">
+        <h2>8. ProactiveBench：6,790 个事件长什么样</h2>
+        <p>
+            用上面的闭环大规模生成、并用奖励模型替代人工判定后，作者得到了 <strong>ProactiveBench</strong>。它由两部分组成，刻意区分了“合成训练”与“真实测试”，避免评测被生成分布污染：
+        </p>
+        <div class="overflow-x-auto mt-4">
+            <table class="w-full text-sm border-collapse">
+                <thead>
+                    <tr class="bg-white/60">
+                        <th class="border border-gray-200 px-3 py-2 text-left">子集</th>
+                        <th class="border border-gray-200 px-3 py-2">场景数</th>
+                        <th class="border border-gray-200 px-3 py-2">事件数</th>
+                    </tr>
+                </thead>
+                <tbody class="text-gray-700">
+                    <tr><td class="border border-gray-200 px-3 py-2">Coding（编程）</td><td class="border border-gray-200 px-3 py-2 text-center">46</td><td class="border border-gray-200 px-3 py-2 text-center">2,275</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2">Writing（写作）</td><td class="border border-gray-200 px-3 py-2 text-center">46</td><td class="border border-gray-200 px-3 py-2 text-center">2,354</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2">Daily Life（日常生活）</td><td class="border border-gray-200 px-3 py-2 text-center">44</td><td class="border border-gray-200 px-3 py-2 text-center">2,161</td></tr>
+                    <tr class="font-semibold bg-[color:var(--accent)]/10"><td class="border border-gray-200 px-3 py-2">训练集合计</td><td class="border border-gray-200 px-3 py-2 text-center">136</td><td class="border border-gray-200 px-3 py-2 text-center">6,790</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2">真实测试集</td><td class="border border-gray-200 px-3 py-2 text-center">12</td><td class="border border-gray-200 px-3 py-2 text-center">233</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2">奖励模型数据</td><td class="border border-gray-200 px-3 py-2 text-center">—</td><td class="border border-gray-200 px-3 py-2 text-center">1,640 训练 / 120 测试</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">表：ProactiveBench 的构成（Table 1）。三类训练事件 2,275+2,354+2,161 恰为 6,790；233 个测试事件来自 12 个真实用户场景。</p>
+        <p class="mt-4">
+            三个领域的选择覆盖了两种信号来源：编程与写作主要依赖<strong>应用内的活动与状态</strong>（在哪个文件里、用了什么开发工具、文档写到哪了），日常生活则更依赖<strong>外部环境事件</strong>（邮件、日程、智能家居）。训练用合成事件、测试用 233 个从真人 ActivityWatch 轨迹整理出的事件，这种“train synthetic / test real”的设计是早期 agent 基准的常见且务实的选择——它把规模化与真实性分别放在两端。
+        </p>
+        <p>
+            微调在 LLaMA-3.1-8B-Instruct 与 Qwen2-7B-Instruct 两个开源底座上进行，超参与奖励模型一致（batch size 32、lr 1e-5、Adam、warm-up 0.01、3 epoch、8×A100 约 2 小时），测试时 temperature 取 0 以消除采样随机性，得到两个 “-Proactive” 模型。
+        </p>
+    </div>
+
+    <div class="card" id="experiments">
+        <h2>9. Experiments：强模型全在“过度主动”上翻车</h2>
+        <p>
+            主实验在 233 个真实事件上对比了 6 个现成模型（Claude-3-Sonnet、Claude-3.5-Sonnet、GPT-4o-mini、GPT-4o、两个开源底座）与 2 个微调模型。结果如下：
+        </p>
+        <div class="overflow-x-auto mt-4">
+            <table class="w-full text-sm border-collapse">
+                <thead>
+                    <tr class="bg-white/60">
+                        <th class="border border-gray-200 px-3 py-2 text-left">模型</th>
+                        <th class="border border-gray-200 px-3 py-2">Recall ↑</th>
+                        <th class="border border-gray-200 px-3 py-2">Precision ↑</th>
+                        <th class="border border-gray-200 px-3 py-2">Accuracy ↑</th>
+                        <th class="border border-gray-200 px-3 py-2">False-Alarm ↓</th>
+                        <th class="border border-gray-200 px-3 py-2">F1 ↑</th>
+                    </tr>
+                </thead>
+                <tbody class="text-gray-700">
+                    <tr><td class="border border-gray-200 px-3 py-2">Claude-3-Sonnet</td><td class="border border-gray-200 px-3 py-2 text-center">27.47</td><td class="border border-gray-200 px-3 py-2 text-center">37.31</td><td class="border border-gray-200 px-3 py-2 text-center">52.42</td><td class="border border-gray-200 px-3 py-2 text-center">62.69</td><td class="border border-gray-200 px-3 py-2 text-center">31.65</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2">Claude-3.5-Sonnet</td><td class="border border-gray-200 px-3 py-2 text-center">97.89</td><td class="border border-gray-200 px-3 py-2 text-center">45.37</td><td class="border border-gray-200 px-3 py-2 text-center">49.78</td><td class="border border-gray-200 px-3 py-2 text-center">54.63</td><td class="border border-gray-200 px-3 py-2 text-center">62.00</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2">GPT-4o-mini</td><td class="border border-gray-200 px-3 py-2 text-center">100.00</td><td class="border border-gray-200 px-3 py-2 text-center">35.28</td><td class="border border-gray-200 px-3 py-2 text-center">36.12</td><td class="border border-gray-200 px-3 py-2 text-center">64.73</td><td class="border border-gray-200 px-3 py-2 text-center">52.15</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2">GPT-4o</td><td class="border border-gray-200 px-3 py-2 text-center">98.11</td><td class="border border-gray-200 px-3 py-2 text-center">48.15</td><td class="border border-gray-200 px-3 py-2 text-center">49.78</td><td class="border border-gray-200 px-3 py-2 text-center">51.85</td><td class="border border-gray-200 px-3 py-2 text-center">64.60</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2">LLaMA-3.1-8B</td><td class="border border-gray-200 px-3 py-2 text-center">98.86</td><td class="border border-gray-200 px-3 py-2 text-center">38.16</td><td class="border border-gray-200 px-3 py-2 text-center">39.06</td><td class="border border-gray-200 px-3 py-2 text-center">61.84</td><td class="border border-gray-200 px-3 py-2 text-center">55.06</td></tr>
+                    <tr class="bg-white/50"><td class="border border-gray-200 px-3 py-2">LLaMA-3.1-8B-Proactive</td><td class="border border-gray-200 px-3 py-2 text-center">99.06</td><td class="border border-gray-200 px-3 py-2 text-center">49.76</td><td class="border border-gray-200 px-3 py-2 text-center">52.86</td><td class="border border-gray-200 px-3 py-2 text-center">50.24</td><td class="border border-gray-200 px-3 py-2 text-center">66.25</td></tr>
+                    <tr><td class="border border-gray-200 px-3 py-2">Qwen2-7B</td><td class="border border-gray-200 px-3 py-2 text-center">98.02</td><td class="border border-gray-200 px-3 py-2 text-center">44.00</td><td class="border border-gray-200 px-3 py-2 text-center">43.61</td><td class="border border-gray-200 px-3 py-2 text-center">56.00</td><td class="border border-gray-200 px-3 py-2 text-center">60.74</td></tr>
+                    <tr class="bg-[color:var(--accent)]/10 font-semibold"><td class="border border-gray-200 px-3 py-2">Qwen2-7B-Proactive</td><td class="border border-gray-200 px-3 py-2 text-center">100.00</td><td class="border border-gray-200 px-3 py-2 text-center">49.78</td><td class="border border-gray-200 px-3 py-2 text-center">50.66</td><td class="border border-gray-200 px-3 py-2 text-center">50.22</td><td class="border border-gray-200 px-3 py-2 text-center">66.47</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">表：ProactiveBench 真实测试集主结果（Table 3，单位 %）。False-Alarm 越低越好，其余越高越好。</p>
+        <p class="mt-4">
+            读这张表的正确姿势是先看 Recall 列：除了偏保守的 Claude-3-Sonnet（27.47%），其余所有模型的 recall 都在 97% 以上，GPT-4o-mini 与微调后的 Qwen2 更是 100%。<strong>“检测到需求”根本不是瓶颈</strong>——模型几乎从不漏掉该帮的场合。再看 Precision 与 False-Alarm，画风突变：GPT-4o-mini 的 precision 只有 35.28%、误报率 64.73%，意味着它提的三次忙里有两次是用户不需要的；即便是 GPT-4o，误报率也高达 51.85%。论文把这个现象概括为：模型能在需要时帮忙，却“fail to stay silent when the user does not require any assistance”（在用户不需要时无法保持沉默）。
+        </p>
+        <p>
+            微调带来的增益几乎全部落在 precision 一侧。LLaMA-3.1-8B 的 F1 从 55.06% 升到 66.25%，误报率从 61.84% 压到 50.24%；Qwen2-7B 从 60.74% 升到 <strong>66.47%</strong>，误报率从 56.00% 压到 50.22%，并以约 1.9 个点的 F1 优势超过 GPT-4o（64.60%）——一个 7B 开源模型，靠 6,790 条针对性数据，在“主动性拿捏”这个维度上反超了当时最强的闭源模型。这正是数据驱动范式最有说服力的证据：<span class="highlight">主动性不是模型靠 scale 自然获得的属性，而是一种需要显式监督信号去校准的行为</span>。当然也要清醒看到，即便微调后误报率仍在 50% 一线，离“可以常驻后台不烦人”的产品标准还差得很远，论文自己也在结论里承认了这一点。
+        </p>
+        <p>
+            作者进一步用案例归因了误报的来源：对“只是切换了一下应用”这类无意义动作也做出响应；在还读不出明确意图时过早帮忙；提议过于抽象、没有可执行价值。其本质是模型被训练成了“有求必应、甚至无求也应”的讨好型助手，而 ProactiveBench 提供的接受/拒绝标签，第一次系统性地惩罚了这种倾向。
+        </p>
+    </div>
+
+    <div class="card" id="analysis">
+        <h2>10. 深入分析：多候选、奖励模型反馈与两类失败</h2>
+        <p>
+            论文接着问：有没有不重训模型就能缓解误报的办法？实验了两种推理期手段。<strong>其一是多候选 pred@3</strong>：允许 agent 一次提最多三个任务，只要一个被接受就算成功。这显著降低了“猜到了有需求、但猜错具体任务”的代价——GPT-4o-mini 的 F1 从 52.15% 跃升到 78.80%，误报率从 64.73% 降到 34.68%；GPT-4o 从 64.60% 升到 77.72%。<strong>其二是奖励模型反馈（w/ RM）</strong>：让模型先出草稿，交给奖励模型批评，再据此修改。但单独使用它效果很微妙甚至负面：模型一旦收到 RM 的负反馈就倾向于全面沉默，recall 大幅下滑（GPT-4o 的 F1 反而从 64.60% 掉到 56.00%）。把两者结合（pred@3 + RM）通常最稳：GPT-4o-mini 79.05%、GPT-4o 77.53%、LLaMA 74.76%。
+        </p>
+        <p>
+            这组消融有一个超出本文范围的普遍启示：<strong>对一个既可能“过度”又可能“不及”的行为，简单加一道负反馈闸门，容易把系统从“乱帮忙”直接推向“不帮忙”</strong>。真正有效的是同时放宽候选空间（保证 recall）再让裁判约束（提升 precision）。这个“多发候选 + 独立裁判”的组合，与后来推理模型的 best-of-N、以及 agent 系统里 generator-critic 架构是同一个思路。
+        </p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-agent/fig3.png" alt="两类失败案例：漏检需求与不合时宜的提议" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 4. 两类对称的失败。左：用户正在接入支付 API、明明需要教程，GPT-4o 却保持沉默（漏报）；微调后的 LLaMA 模型则检测到需求并主动提供帮助。右：并无可见需求时，GPT-4o-mini 仍提出动作（误报）。主动性的难点正在于同时压低这两类错误。</figcaption>
+        </figure>
+        <p class="mt-4">
+            Figure 4 的两个案例把双边问题具象化了。左边是<strong>漏报</strong>：用户正在接入支付接口，这是一个高成本、有明确学习需求的动作，GPT-4o 却选择沉默，微调模型能主动提供教程；右边是<strong>不合时宜的误报</strong>：没有可见需求，GPT-4o-mini 仍然插话。论文据此指出，多候选能救“猜错任务”，却救不了“根本没读懂需求”——LLaMA 在用户需求不清晰时仍会冒出意料之外的提议，这个问题“can not be improved by providing multiple candidates”。这把改进方向重新指回了对用户行为与上下文的理解本身，而不是解码策略。
+        </p>
+    </div>
+
+    <div class="card" id="discussion">
+        <h2>11. Discussion：局限、信任代价与隐私</h2>
+        <p>
+            论文在结论里相当诚实地列出了开放问题，可以归纳为四条。<strong>环境覆盖有限</strong>：136 个合成场景加 12 个真实测试场景，主要集中在编程、写作与桌面/家居日常，是否能泛化到更开放的专业领域尚未验证。<strong>误报率依然偏高</strong>：即使最好的模型，false alarm 仍在 50% 左右，“models still exhibit a relatively high ratio of false alarms”。<strong>信任与效率代价</strong>：误报不只是指标不好看，它会触发不必要甚至错误的动作，“reduce user trust”——一次莽撞的主动操作（比如未经确认就发邮件、改文件）对信任的损害，可能需要十次正确帮助才能补回。<strong>主动性强度需要随情境动态调节</strong>：用户专注时应更克制、明确遇到障碍时应更积极，这种 “dynamic adjustment of the proactiveness” 论文只点了题，没有解。
+        </p>
+        <p>
+            此外还有两个论文没有展开、但今天回头看非常关键的缺口。其一是<strong>隐私</strong>：主动助手的前提是持续监控键盘、鼠标、剪贴板、浏览记录，这些数据极其敏感，论文把“负责任地处理用户数据、透明合规”列为未来工作，但整个训练-推理管线都建立在深度监控之上。其二是<strong>评测的模拟依赖</strong>：接受/拒绝判定来自合成用户或奖励模型，与真实用户在长期使用中的接受度未必一致——一个在 233 个事件上 F1 66% 的模型，真实部署后可能因几次打扰就被用户永久关闭。论文自己的 future work 也把“大规模真实用户研究（user-centric evaluation）”放在了突出位置。
+        </p>
+        <p>
+            尽管如此，这篇工作的历史地位不取决于这些数字是否漂亮，而取决于它<strong>第一次把问题问对了</strong>：主动性 = 在正确的时机、对正确的需求、以正确的强度介入，并且把“沉默”定义为需要被学习的正确答案。在此之前，“agent 主不主动”只是一个产品口号；在此之后，它成了一个有形式化定义、有数据、有标签、有指标、有可复现开源实现的研究问题。
+        </p>
+    </div>
+
+    <div class="card" id="today">
+        <h2>12. 放到 2026 年看：这篇奠基作的位置</h2>
+        <p>
+            距离这篇论文发表约两年，主动 Agent 已经从一个数据集发展成一条完整的研究线，而它当年观察到的“过度主动”现象，被 2026 年的多个独立基准以更严格的方式反复确认，这条脉络值得在读完本文后接着看：
+        </p>
+        <ul class="list-disc pl-6 mt-2 space-y-2 text-gray-700">
+            <li><strong>过度主动成为头号失败模式</strong>：HALO（arXiv:2610.39086）用 8,000 条响应、20 位专家标注发现，<strong>61.2% 的被拒回复源于“时机过早”或“介入强度过大”</strong>，最好的模型可接受率也只有 72.9%；PITCH（arXiv:2610.25896）研究群聊插话时机，模型边听边决策时最佳插话点准确率只有 19.0%，近一半插在所有人的可接受窗口之前。这与本文 false alarm 50%+ 的发现完全同向，说明问题没有随模型规模消失。</li>
+            <li><strong>理论框架成型</strong>：<em>Foundations of Proactive Agents</em>（arXiv:2609.37267）提出 3T 原则——Task（有用的工作）、Temporal（时机与算力分配）、Trust（信任）——并用人体实验证明：即便事情做对了，只要介入时机错位，用户信任就会断崖下跌。这恰好为本文“误报损害信任”的直觉提供了量化证据。</li>
+            <li><strong>从“监控桌面”扩展到全模态与长程生活</strong>：ContextAgent（NeurIPS 2025，arXiv:2505.14668）把信号源从桌面活动扩展到可穿戴音视频；VibeLifeBench（arXiv:2608.10875）用跨越多周、世界自行变化的任务考察 agent 能否自己决定何时动、何时问、何时闭嘴；ProactBench（arXiv:2605.09228）则把隐含需求细分为 Emergent / Critical / Recovery 三类，发现任务结束后的前瞻复盘（Recovery）最难。</li>
+            <li><strong>工程化的新解法</strong>：ProAct（arXiv:2605.25971）利用对话间隙的闲置算力提前补证据、填知识缺口，把“主动准备”做成可降本 11.7%、降幻觉 28.1% 的系统能力；也有工作（arXiv:2605.30152）尝试用小型时序图模型替代 LLM 来做“何时触发”，单次判定仅 11 毫秒，顺带解决了持续监听的推理成本。</li>
+            <li><strong>工业界走到门口</strong>：以 Meta Muse（2026-09 发布）为代表的个人 agent，已经具备强自主执行力，但主交互仍是“给目标、去执行”，真正无指令的需求预判与择时沉默还未成为旗舰闭环——本文讨论的触发时机与克制度，正是这类产品下一阶段要补的课。</li>
+        </ul>
+        <p class="mt-4">
+            因此，今天读这篇论文的正确方式不是把 66.47% 当成一个性能数字，而是把它当成一张研究地图的原点：<strong>真实采集锚定现实 → 合成环境放大规模 → 人类偏好蒸馏成裁判 → 针对性监督校准行为 → 用独立真实集验证</strong>，这条方法论管线被后续绝大多数 proactive agent 工作以不同形式继承。它最有生命力的一句话甚至不在结论里，而在问题定义里——把 ∅（沉默）列为与具体任务平等的预测输出。两年后所有关于“插话时机”“介入强度”“信任损耗”的研究，本质上都还在优化这个 ∅ 的预测质量。
+        </p>
+    </div>
+
+    <div class="card" id="figures">
+        <h2>13. Original Figures &amp; References</h2>
+        <p class="text-sm text-gray-500">以下为论文全部 4 张原图（图号沿用原论文；图片引自 arXiv:2410.12361，版权归原作者所有）。</p>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-agent/fig1.png" alt="Figure 1" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 1. Reactive agent 与 proactive agent 的交互对比。</figcaption>
+        </figure>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-agent/fig2.png" alt="Figure 3" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 3. Proactive agent 框架：事件监测、记忆更新与任务预测。</figcaption>
+        </figure>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-agent/fig4.png" alt="Figure 2" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 2. 数据生成流程：场景/任务设定 → 事件生成 → 主动预测 → 用户判定 → 执行。</figcaption>
+        </figure>
+        <figure class="mt-6 bg-white/70 border border-white/70 rounded-2xl p-4">
+            <img src="/notes/proactive-agent/fig3.png" alt="Figure 4" class="w-full rounded-xl" loading="lazy" />
+            <figcaption class="text-sm text-gray-500 mt-3">Figure 4. 两类失败案例：漏检真实需求（左）与不合时宜的提议（右）。</figcaption>
+        </figure>
+        <h3 class="text-lg font-semibold text-slate-700 mt-6">References</h3>
+        <ul class="list-disc pl-6 text-gray-600 space-y-2">
+            <li>Lu, Y., Yang, S., Qian, C., et al. <em>Proactive Agent: Shifting LLM Agents from Reactive Responses to Active Assistance</em>. arXiv:2410.12361, 2024. <a href="https://arxiv.org/abs/2410.12361" class="text-[color:var(--accent)] underline">arxiv.org/abs/2410.12361</a>（本文核心来源，Figure 1–4 与所有实验数字）</li>
+            <li>官方代码与数据：<a href="https://github.com/thunlp/ProactiveAgent" class="text-[color:var(--accent)] underline">github.com/thunlp/ProactiveAgent</a>（THUNLP）</li>
+            <li>ActivityWatch 开源活动记录器：<a href="https://github.com/ActivityWatch/activitywatch" class="text-[color:var(--accent)] underline">github.com/ActivityWatch/activitywatch</a>（真实活动采集工具的出处）</li>
+            <li>Zhang, X., Deng, Y., et al. <em>Ask-before-Plan: Proactive Language Agents for Real-World Planning</em>. EMNLP 2024 Findings. <a href="https://arxiv.org/abs/2406.12639" class="text-[color:var(--accent)] underline">arXiv:2406.12639</a>（相邻的歧义澄清路线）</li>
+            <li>Deng, Y., Liao, L., et al. <em>Towards Human-centered Proactive Conversational Agents</em>. SIGIR 2024 Perspectives. <a href="https://arxiv.org/abs/2404.12670" class="text-[color:var(--accent)] underline">arXiv:2404.12670</a>（以人为本的主动对话分类法）</li>
+            <li>延伸阅读（2026，本文第 12 节引用）：<a href="https://arxiv.org/abs/2610.39086" class="text-[color:var(--accent)] underline">HALO 2610.39086</a> · <a href="https://arxiv.org/abs/2610.25896" class="text-[color:var(--accent)] underline">PITCH 2610.25896</a> · <a href="https://arxiv.org/abs/2609.37267" class="text-[color:var(--accent)] underline">Foundations of Proactive Agents 2609.37267</a> · <a href="https://arxiv.org/abs/2505.14668" class="text-[color:var(--accent)] underline">ContextAgent 2505.14668</a> · <a href="https://arxiv.org/abs/2605.25971" class="text-[color:var(--accent)] underline">ProAct 2605.25971</a></li>
+        </ul>
+    </div>
+</BaseLayout>
